@@ -1,4 +1,4 @@
-# Compila Coucou para Windows en .\publish (todo queda dentro de la carpeta del proyecto).
+# Compila Agent Manager Notch en .\publish (todo queda dentro de la carpeta del proyecto).
 #   .\publish.ps1                 -> requiere .NET 10 Desktop Runtime en el equipo destino (~1 MB)
 #   .\publish.ps1 -SelfContained  -> un único .exe autónomo, no requiere nada instalado (~70 MB)
 param([switch]$SelfContained)
@@ -6,9 +6,9 @@ param([switch]$SelfContained)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 $out = Join-Path $PSScriptRoot "publish"
-Get-Process CoucouWin -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process AgentManagerNotch -ErrorAction SilentlyContinue | Stop-Process -Force
 
-$common = @("publish", "CoucouWin.csproj", "-c", "Release", "-r", "win-x64", "-o", $out)
+$common = @("publish", "AgentManagerNotch.csproj", "-c", "Release", "-r", "win-x64", "-o", $out)
 if ($SelfContained) {
     dotnet @common --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 } else {
@@ -16,4 +16,4 @@ if ($SelfContained) {
 }
 if ($LASTEXITCODE -ne 0) { throw "La compilación falló" }
 Write-Host ""
-Write-Host "Listo: $out\CoucouWin.exe" -ForegroundColor Green
+Write-Host "Listo: $out\AgentManagerNotch.exe" -ForegroundColor Green

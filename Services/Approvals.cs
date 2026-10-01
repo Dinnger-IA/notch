@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     public enum ApprovalDecision { Allow, Deny, AllowAlways }
 
@@ -27,7 +27,7 @@ namespace CoucouWin.Services
     /// </summary>
     public class ApprovalServer
     {
-        public string PipeName { get; } = $"coucouwin-{Environment.ProcessId}";
+        public string PipeName { get; } = $"agentmanagernotch-{Environment.ProcessId}";
         private readonly CancellationTokenSource _cts = new();
 
         /// <summary>Se invoca en un hilo de fondo. Debe devolver la decisión (puede tardar).</summary>
@@ -100,9 +100,9 @@ namespace CoucouWin.Services
     }
 
     /// <summary>
-    /// Modo hook: Claude Code ejecuta «CoucouWin.exe --hook» antes de cada herramienta.
-    /// Lee el JSON de stdin, pregunta al Coucou que lanzó la sesión y responde por stdout.
-    /// Si Coucou no responde, no bloquea: sale sin decidir.
+    /// Modo hook: Claude Code ejecuta «AgentManagerNotch.exe --hook» antes de cada herramienta.
+    /// Lee el JSON de stdin, pregunta al Agent Manager Notch que lanzó la sesión y responde por stdout.
+    /// Si Agent Manager Notch no responde, no bloquea: sale sin decidir.
     /// </summary>
     public static class HookBridge
     {
@@ -137,7 +137,7 @@ namespace CoucouWin.Services
                 var root = doc.RootElement;
                 var tool = root.TryGetProperty("tool_name", out var tn) ? tn.GetString() ?? "" : "";
                 if (tool == "" || ReadOnlyTools.Contains(tool)) return 0;
-                if (mode == "AcceptEdits" && EditTools.Contains(tool)) return Emit("allow", "Edición aceptada automáticamente por Coucou");
+                if (mode == "AcceptEdits" && EditTools.Contains(tool)) return Emit("allow", "Edición aceptada automáticamente por Agent Manager Notch");
 
                 string detail = "";
                 if (root.TryGetProperty("tool_input", out var ti))
@@ -146,7 +146,7 @@ namespace CoucouWin.Services
                 }
 
                 using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-                try { client.Connect(1500); } catch { return 0; } // Coucou no está: no bloqueamos
+                try { client.Connect(1500); } catch { return 0; } // Agent Manager Notch no está: no bloqueamos
 
                 var req = JsonSerializer.Serialize(new { agentId, tool, detail }) + "\n";
                 var bytes = Encoding.UTF8.GetBytes(req);
@@ -159,8 +159,8 @@ namespace CoucouWin.Services
                 using var resp = JsonDocument.Parse(line);
                 var decision = resp.RootElement.GetProperty("decision").GetString();
                 return decision == "allow"
-                    ? Emit("allow", "Aprobado por el usuario en Coucou")
-                    : Emit("deny", "El usuario rechazó esta acción desde Coucou. No la reintentes; pregunta qué prefiere hacer.");
+                    ? Emit("allow", "Aprobado por el usuario en Agent Manager Notch")
+                    : Emit("deny", "El usuario rechazó esta acción desde Agent Manager Notch. No la reintentes; pregunta qué prefiere hacer.");
             }
             catch (Exception ex)
             {
@@ -214,7 +214,7 @@ namespace CoucouWin.Services
         /// <summary>Escribe el settings.json que se pasa a Claude Code con --settings.</summary>
         public static string WriteClaudeHookSettings()
         {
-            var exe = (Environment.ProcessPath ?? "CoucouWin.exe").Replace('\\', '/');
+            var exe = (Environment.ProcessPath ?? "AgentManagerNotch.exe").Replace('\\', '/');
             var settings = new
             {
                 hooks = new

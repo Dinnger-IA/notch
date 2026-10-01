@@ -1,4 +1,4 @@
-<Window x:Class="CoucouWin.Views.RemindersWindow"
+<Window x:Class="AgentManagerNotch.Views.RemindersWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Recordatorios y tareas" Width="680" Height="620" MinWidth="560" MinHeight="420"

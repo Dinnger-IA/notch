@@ -1,11 +1,11 @@
-<Window x:Class="CoucouWin.Views.NotchWindow"
+<Window x:Class="AgentManagerNotch.Views.NotchWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:c="clr-namespace:CoucouWin.Controls"
-        xmlns:v="clr-namespace:CoucouWin.Views"
-        xmlns:m="clr-namespace:CoucouWin.Models"
-        xmlns:s="clr-namespace:CoucouWin.Services"
-        Title="Coucou" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        xmlns:c="clr-namespace:AgentManagerNotch.Controls"
+        xmlns:v="clr-namespace:AgentManagerNotch.Views"
+        xmlns:m="clr-namespace:AgentManagerNotch.Models"
+        xmlns:s="clr-namespace:AgentManagerNotch.Services"
+        Title="Agent Manager Notch" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
         Width="860" Height="700" FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True">
@@ -277,7 +277,7 @@
 
     <Grid>
         <Border x:Name="Shell" VerticalAlignment="Top" HorizontalAlignment="Center"
-                Width="150" Height="34" CornerRadius="0,0,18,18"
+                Width="150" Height="34" CornerRadius="0,0,10,10"
                 Background="{StaticResource NotchBg}" BorderBrush="{StaticResource NotchBorder}" BorderThickness="1,0,1,1"
                 AllowDrop="True" MouseEnter="Shell_MouseEnter" MouseLeave="Shell_MouseLeave"
                 DragEnter="Shell_DragEnter" DragLeave="Shell_DragLeave" Drop="Shell_Drop">
@@ -287,8 +287,10 @@
             <Grid ClipToBounds="True">
 
                 <!-- ============ Píldora ============ -->
-                <Grid x:Name="CollapsedView" Margin="12,0,12,2" MouseLeftButtonUp="Collapsed_Click">
-                    <StackPanel x:Name="CollapsedContent" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid x:Name="CollapsedView" Margin="12,0,12,0" MouseLeftButtonUp="Collapsed_Click">
+                    <!-- Los personajes se dibujan "apoyados" abajo en su recuadro: se suben un poco para que se vean centrados -->
+                    <StackPanel x:Name="CollapsedContent" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Margin="0,-6,0,0">
                         <StackPanel x:Name="CollapsedAgents" Orientation="Horizontal" VerticalAlignment="Center"/>
                         <TextBlock x:Name="CollapsedStatus" Margin="10,0,0,0" VerticalAlignment="Center" MaxWidth="240"
                                    FontSize="12" Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>

@@ -1,4 +1,4 @@
-# Coucou para Windows
+# Agent Manager Notch
 
 Una réplica nativa para Windows de [coucou](https://louis-cfm.github.io/coucou/): pequeños personajes "mochi"
 que viven en el borde superior de la pantalla, con los que **conversas**, que **te avisan cuando terminan**,
@@ -10,14 +10,14 @@ Claude Code, Codex, Gemini CLI o cualquier comando que imprima texto (ollama, ai
 - **100 % nativo**: WPF sobre .NET 10 con el tema Fluent de Windows 11, icono en la bandeja del sistema,
   notificaciones de Windows, named pipes y atajo global. **Sin dependencias externas** (ni NuGet ni npm).
 - Todo lo que instala o compila se queda en esta carpeta (`nuget.config` apunta a `.nuget/` local).
-  Tus datos (agentes, historial, recordatorios) viven en `%APPDATA%\CoucouWin`.
+  Tus datos (agentes, historial, recordatorios) viven en `%APPDATA%\AgentManagerNotch`.
 
 ## Arrancar
 
 ```powershell
-cd D:\Proyectos\JAVASCRIPT\CoucouWin
+cd D:\Proyectos\JAVASCRIPT\agent-manager-notch
 dotnet run                 # desarrollo
-.\publish.ps1              # genera .\publish\CoucouWin.exe
+.\publish.ps1              # genera .\publish\AgentManagerNotch.exe
 .\publish.ps1 -SelfContained   # un solo .exe que no necesita .NET instalado
 ```
 
@@ -37,7 +37,7 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
 - **Píldora** (modo pequeño), en dos lados: a la izquierda el **principal**; a la derecha **todos los demás
   agrupados** en un bloque 2×2 del mismo alto (máximo 4 visibles; si hay más, un indicador «+N»).
 - Al abrir el notch siempre hay una **barra superior**: 🏠 *Inicio* a la izquierda y, a la derecha, 📌 fijar,
-  📅 **tareas programadas** y ⚙ **configuración** (ajustes del agente, nuevos agentes y opciones de Coucou:
+  📅 **tareas programadas** y ⚙ **configuración** (ajustes del agente, nuevos agentes y opciones de Agent Manager Notch:
   sonidos, avisos, abrir al pasar el ratón, avisos de Claude Code, iniciar con Windows, salir).
 - **Cierre del panel** (⚙ → *Accesibilidad*): por defecto **solo se cierra al hacer clic fuera** del recuadro
   (o con Esc / Ctrl+Alt+Espacio); sacar el ratón no lo cierra. Alternativa: *Cerrar al sacar el ratón*.
@@ -73,11 +73,11 @@ a la derecha**.
 - **Código**: en lugar de «+» aparecen las **pestañas de workspace** (carpeta + estado: ▶ activa, ✓ terminó,
   ✗ falló, ! permiso) y el botón **Nuevo workspace**. La carpeta de una pestaña **no se puede cambiar**: se cierra
   (×) y se abre otra. Arrastrar una carpeta sobre el notch abre un workspace nuevo. Desde un script:
-  `CoucouWin.exe --code D:\mi\proyecto` (si ya hay una pestaña para esa carpeta, la abre).
+  `AgentManagerNotch.exe --code D:\mi\proyecto` (si ya hay una pestaña para esa carpeta, la abre).
 - El **personaje** está arriba a la izquierda, a la altura de las pestañas, y debajo su **lista de tareas**
   (hasta media altura, siempre mostrando lo más reciente, con desplazamiento y lo que no cabe difuminado), mínima: un listado con iconos (✓ hecha, ! fallida, × detenida,
   ▶ en curso, ○ pendiente) y los pasos de la tarea en curso. Cada mensaje es una tarea; si escribes mientras
-  trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Coucou pide al agente (se oculta del chat)
+  trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Agent Manager Notch pide al agente (se oculta del chat)
   o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
 
 ### Ejemplo: agente del clima
@@ -113,7 +113,7 @@ Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 Comandos del chat: `/nuevo`, `/recordar <cuándo> <texto>`, `/tarea <cuándo> <instrucción>`, `/ayuda`.
 Formatos de tiempo: `10m`, `1h30m`, `2 horas`, `15:30`, `mañana 9:00`, `2026-10-02 09:00`.
 
-Los agentes también crean recordatorios solos: Coucou les indica que escriban
+Los agentes también crean recordatorios solos: Agent Manager Notch les indica que escriban
 `[[reminder: 10m | texto]]` o `[[task: 2026-10-02T09:00 | instrucción]]`; la etiqueta se elimina del chat y
 queda programada (con repetición diaria, semanal, de lunes a viernes, etc. desde la ventana ⏰).
 
@@ -146,22 +146,22 @@ Modos de permiso por agente: *Preguntar* (recomendado), *Editar solo / preguntar
 
 ### Cómo funcionan las aprobaciones con Claude Code
 
-Coucou lanza `claude` con `--settings %APPDATA%\CoucouWin\claude-hook-settings.json`, que registra
-`CoucouWin.exe --hook` como hook `PreToolUse`. Ese mismo ejecutable, en modo hook, lee la petición por stdin,
+Agent Manager Notch lanza `claude` con `--settings %APPDATA%\AgentManagerNotch\claude-hook-settings.json`, que registra
+`AgentManagerNotch.exe --hook` como hook `PreToolUse`. Ese mismo ejecutable, en modo hook, lee la petición por stdin,
 la envía por un *named pipe* a la instancia abierta y espera tu decisión. Las herramientas de solo lectura
-(Read, Grep, Glob…) pasan sin preguntar. Si Coucou no está abierto, el hook sale al instante y **nunca
+(Read, Grep, Glob…) pasan sin preguntar. Si Agent Manager Notch no está abierto, el hook sale al instante y **nunca
 bloquea** a Claude Code.
 
 ## Notificaciones desde fuera (scripts, builds, otras apps)
 
 ```powershell
-CoucouWin.exe --notify "Build terminado" "npm run build OK" --agent Codi   # aviso en el notch + toast
-CoucouWin.exe --ask Nube "Resume mi día"                                   # le habla a un agente
-CoucouWin.exe --code D:\proyecto                                         # agente de código para esa carpeta
-CoucouWin.exe --show | --new-agent | --reminders
+AgentManagerNotch.exe --notify "Build terminado" "npm run build OK" --agent Codi   # aviso en el notch + toast
+AgentManagerNotch.exe --ask Nube "Resume mi día"                                   # le habla a un agente
+AgentManagerNotch.exe --code D:\proyecto                                         # agente de código para esa carpeta
+AgentManagerNotch.exe --show | --new-agent | --reminders
 ```
 
-Ejemplo: `npm run build; CoucouWin.exe --notify "Build" "Terminó con código $LASTEXITCODE"`.
+Ejemplo: `npm run build; AgentManagerNotch.exe --notify "Build" "Terminó con código $LASTEXITCODE"`.
 
 ### Avisos de tus sesiones normales de Claude Code
 
@@ -194,4 +194,4 @@ Views/Markdown.cs          Markdown ligero en las burbujas
 - El panel no roba el foco al aparecer por hover; solo al hacer clic o usar el atajo.
 - Gemini CLI se implementó según su formato `stream-json` documentado, pero no estaba instalado en este
   equipo, así que no se probó de punta a punta.
-- Registro de errores: `%APPDATA%\CoucouWin\coucou.log`.
+- Registro de errores: `%APPDATA%\AgentManagerNotch\coucou.log`.

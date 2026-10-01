@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace CoucouWin.Views
+namespace AgentManagerNotch.Views
 {
     public class NullToVisibilityConverter : IValueConverter
     {

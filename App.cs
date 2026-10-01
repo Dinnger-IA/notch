@@ -5,13 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
-using CoucouWin.Controls;
-using CoucouWin.Models;
-using CoucouWin.Providers;
-using CoucouWin.Services;
-using CoucouWin.Views;
+using AgentManagerNotch.Controls;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Providers;
+using AgentManagerNotch.Services;
+using AgentManagerNotch.Views;
 
-namespace CoucouWin
+namespace AgentManagerNotch
 {
     public static class Program
     {
@@ -23,13 +23,13 @@ namespace CoucouWin
             // Comandos de control: --notify, --ask, --claude-event
             if (ControlChannel.TryRunCli(args) is int code) return code;
 
-            using var mutex = new Mutex(true, "CoucouWin.SingleInstance", out bool first);
+            using var mutex = new Mutex(true, "AgentManagerNotch.SingleInstance", out bool first);
             if (!first)
             {
                 // Ya hay una instancia: le pedimos que se muestre
                 if (!ControlChannel.Send(new { cmd = "show" }))
-                    MessageBox.Show("Coucou ya se está ejecutando (busca el icono en la bandeja o pulsa Ctrl+Alt+Espacio).",
-                        "Coucou", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("Agent Manager Notch ya se está ejecutando (busca el icono en la bandeja o pulsa Ctrl+Alt+Espacio).",
+                        "Agent Manager Notch", MessageBoxButton.OK, MessageBoxImage.Information);
                 return 0;
             }
             var app = new App();
@@ -62,7 +62,7 @@ namespace CoucouWin
             ThemeMode = ThemeMode.Dark; // Controles Fluent nativos de Windows 11
             Resources.MergedDictionaries.Add(new ResourceDictionary
             {
-                Source = new Uri("pack://application:,,,/CoucouWin;component/Themes/Theme.xaml")
+                Source = new Uri("pack://application:,,,/AgentManagerNotch;component/Themes/Theme.xaml")
             });
 
             DispatcherUnhandledException += (_, ex) =>
@@ -89,6 +89,8 @@ namespace CoucouWin
             Approvals.Start();
 
             Notifier = new NotificationService(() => Store.Config.Settings);
+            NotificationService.MigrateStartupEntry();
+            ControlChannel.RefreshClaudeIntegrationPath();
             Notifier.ShowRequested += () => Notch.Expand(focusInput: true);
             Notifier.NotificationClicked += key => Notch.Expand(focusInput: true, sessionKey: key);
             Notifier.NewAgentRequested += () => Notch.OpenEditor(null);
@@ -104,7 +106,7 @@ namespace CoucouWin
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);
-            Log.Info("Coucou iniciado");
+            Log.Info("Agent Manager Notch iniciado");
         }
 
         // =============================================================== agentes, pestañas y sesiones
@@ -142,26 +144,26 @@ namespace CoucouWin
         {
             var now = DateTime.Now;
             var addendum =
-                "\n\n---\n[Contexto de Coucou para Windows]\n" +
-                $"Eres «{s.Profile.Name}», un agente que vive en el notch de Coucou en Windows. " +
+                "\n\n---\n[Contexto de Agent Manager Notch]\n" +
+                $"Eres «{s.Profile.Name}», un agente que vive en el notch de Agent Manager Notch en Windows. " +
                 $"Fecha y hora local: {now:yyyy-MM-dd HH:mm} ({TimeZoneInfo.Local.DisplayName}).\n" +
                 "Si el usuario te pide que le recuerdes algo, incluye en tu respuesta una línea con el formato exacto " +
                 "[[reminder: <cuándo> | <texto del aviso>]]. Si te pide hacer algo tú mismo más tarde (o de forma periódica), usa " +
                 "[[task: <cuándo> | <instrucción que debes ejecutar>]]. <cuándo> puede ser una duración (10m, 2h, 1d) o una " +
-                "fecha-hora local ISO (2026-10-02T09:00). Coucou elimina la etiqueta y programa el aviso; confirma brevemente al usuario.";
+                "fecha-hora local ISO (2026-10-02T09:00). Agent Manager Notch elimina la etiqueta y programa el aviso; confirma brevemente al usuario.";
             if (s.IsCode)
                 addendum += $"\nEres un agente de código. Tu carpeta de trabajo (workspace) es «{s.WorkDir}»: trabaja solo dentro de ella.";
             else if (s.IsScheduled)
                 addendum += "\nEsta es una ejecución PROGRAMADA y automática: nadie va a responder preguntas. Haz la tarea de principio a fin.\n" +
-                            "FORMATO DE LA RESPUESTA FINAL (Coucou la muestra en una tarjeta): la PRIMERA línea es un titular muy corto " +
+                            "FORMATO DE LA RESPUESTA FINAL (Agent Manager Notch la muestra en una tarjeta): la PRIMERA línea es un titular muy corto " +
                             "(máximo 40 caracteres) con el dato principal, p. ej. «22 °C · Soleado» o «3 PRs pendientes»; después, de 1 a 3 " +
                             "líneas cortas (una idea por línea, sin viñetas ni Markdown). Nada más.";
             if (s.IsConversational)
-                addendum += "\nPROGRESO: Coucou muestra al usuario una lista con tus pasos. Si la petición tiene 2 o más pasos, " +
+                addendum += "\nPROGRESO: Agent Manager Notch muestra al usuario una lista con tus pasos. Si la petición tiene 2 o más pasos, " +
                             "escribe al empezar tu plan en este formato exacto (en su propio mensaje, antes de usar herramientas):\n" +
                             "[[tasks]]\n- [~] primer paso (en curso)\n- [ ] siguiente paso\n[[/tasks]]\n" +
                             "Cada vez que termines un paso, vuelve a escribir el bloque completo actualizado: [x] hecho, [~] en curso, [ ] pendiente. " +
-                            "Coucou oculta el bloque del chat, así que no lo menciones. Para peticiones simples de un paso no lo uses.";
+                            "Agent Manager Notch oculta el bloque del chat, así que no lo menciones. Para peticiones simples de un paso no lo uses.";
             return new RunContext
             {
                 AgentId = s.Key,
@@ -193,6 +195,12 @@ namespace CoucouWin
                 }
                 st.SeededCodeAgent = true;
             }
+            // Proyecto renombrado: las carpetas que apuntaban a la carpeta vieja pasan a la nueva
+            foreach (var a in Store.Config.Agents)
+            {
+                a.WorkingDirectory = FixRenamedFolder(a.WorkingDirectory);
+                foreach (var w in a.Workspaces) w.Folder = FixRenamedFolder(w.Folder);
+            }
             // Versión anterior: un agente de código por carpeta → ahora la carpeta es un workspace (pestaña)
             foreach (var a in Store.Config.Agents.Where(a => a.Kind == AgentKind.Code))
             {
@@ -200,6 +208,15 @@ namespace CoucouWin
                     a.Workspaces.Add(new WorkspaceInfo { Id = WorkspaceInfo.LegacyId, Folder = a.WorkingDirectory });
                 a.WorkingDirectory = "";
             }
+        }
+
+        /// <summary>Si la carpeta ya no existe pero sí con el nombre nuevo del proyecto, devuelve la nueva.</summary>
+        private static string FixRenamedFolder(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder) || System.IO.Directory.Exists(folder)) return folder;
+            var renamed = System.Text.RegularExpressions.Regex.Replace(folder, @"\\CoucouWin(?=\\|$)", @"\agent-manager-notch",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return renamed != folder && System.IO.Directory.Exists(renamed) ? renamed : folder;
         }
 
         /// <summary>Marca el agente principal; si no existe, el primero pasa a serlo.</summary>
@@ -359,7 +376,7 @@ namespace CoucouWin
                 return;
             }
 
-            var name = s?.DisplayName ?? "Coucou";
+            var name = s?.DisplayName ?? "Agent Manager Notch";
             Notifier.Play(NotificationService.SoundKind.Reminder);
             Notifier.Toast($"⏰ Recordatorio de {name}", r.Text, s?.Key);
             if (s != null)
@@ -414,7 +431,7 @@ namespace CoucouWin
                         break;
                     case "notify":
                         {
-                            var title = msg["title"]?.GetValue<string>() ?? "Coucou";
+                            var title = msg["title"]?.GetValue<string>() ?? "Agent Manager Notch";
                             var body = msg["body"]?.GetValue<string>() ?? "";
                             var s = FindSession(msg["agent"]?.GetValue<string>()) ?? Sessions.FirstOrDefault();
                             if (s != null)

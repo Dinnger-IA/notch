@@ -5,7 +5,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
-namespace CoucouWin.Models
+namespace AgentManagerNotch.Models
 {
     /// <summary>CLI que ejecuta al agente por debajo.</summary>
     public enum ProviderKind { ClaudeCode, Codex, Gemini, Custom }

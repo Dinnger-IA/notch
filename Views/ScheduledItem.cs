@@ -1,8 +1,8 @@
 using System;
 using System.Windows.Media;
-using CoucouWin.Services;
+using AgentManagerNotch.Services;
 
-namespace CoucouWin.Views
+namespace AgentManagerNotch.Views
 {
     /// <summary>Elemento de la vista de tareas programadas: un recordatorio/tarea o un agente programado.</summary>
     public sealed class ScheduledItem

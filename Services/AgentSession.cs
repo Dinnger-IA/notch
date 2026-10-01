@@ -12,11 +12,11 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Threading;
-using CoucouWin.Controls;
-using CoucouWin.Models;
-using CoucouWin.Providers;
+using AgentManagerNotch.Controls;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Providers;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     public record TurnResult(bool Success, bool Cancelled, string Summary, TimeSpan Duration, bool FromSchedule);
 
@@ -131,7 +131,7 @@ namespace CoucouWin.Services
 
         /// <summary>
         /// Último resultado partido en titular + detalles (para la tarjeta de los programados).
-        /// El titular es la primera línea (Coucou pide a los programados que sea corta); si la respuesta es
+        /// El titular es la primera línea (Agent Manager Notch pide a los programados que sea corta); si la respuesta es
         /// un solo párrafo, se parte por frases.
         /// </summary>
         public (string Headline, List<string> Details) LastOutputParts()

@@ -8,14 +8,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>CoucouWin</AssemblyName>
-    <RootNamespace>CoucouWin</RootNamespace>
-    <StartupObject>CoucouWin.Program</StartupObject>
+    <AssemblyName>AgentManagerNotch</AssemblyName>
+    <RootNamespace>AgentManagerNotch</RootNamespace>
+    <StartupObject>AgentManagerNotch.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>
     <Version>0.1.0</Version>
-    <Product>Coucou para Windows</Product>
+    <Product>Agent Manager Notch</Product>
   </PropertyGroup>
 
 </Project>

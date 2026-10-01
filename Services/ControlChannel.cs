@@ -8,17 +8,17 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     /// <summary>
-    /// Canal de control: permite que scripts y otros programas hablen con Coucou.
-    ///   CoucouWin.exe --notify "Título" "Mensaje" [--agent Nombre]
-    ///   CoucouWin.exe --ask Nombre "texto para el agente"
-    ///   CoucouWin.exe --claude-event      (hook global de Claude Code; JSON por stdin)
+    /// Canal de control: permite que scripts y otros programas hablen con Agent Manager Notch.
+    ///   AgentManagerNotch.exe --notify "Título" "Mensaje" [--agent Nombre]
+    ///   AgentManagerNotch.exe --ask Nombre "texto para el agente"
+    ///   AgentManagerNotch.exe --claude-event      (hook global de Claude Code; JSON por stdin)
     /// </summary>
     public static class ControlChannel
     {
-        public static string PipeName => "coucouwin-control-" + Environment.UserName.ToLowerInvariant();
+        public static string PipeName => "agentmanagernotch-control-" + Environment.UserName.ToLowerInvariant();
 
         // ------------------------------------------------------------ servidor (dentro de la app)
         public static void StartServer(Action<JsonObject> onMessage, CancellationToken ct)
@@ -69,7 +69,7 @@ namespace CoucouWin.Services
             {
                 case "--notify":
                     {
-                        var title = args.Length > 1 ? args[1] : "Coucou";
+                        var title = args.Length > 1 ? args[1] : "Agent Manager Notch";
                         var body = args.Length > 2 ? args[2] : "";
                         var agentIdx = Array.IndexOf(args, "--agent");
                         var agent = agentIdx >= 0 && agentIdx + 1 < args.Length ? args[agentIdx + 1] : null;
@@ -96,8 +96,8 @@ namespace CoucouWin.Services
                     }
                 case "--claude-event":
                     {
-                        // Nunca bloquea a Claude Code: si Coucou no está, sale enseguida.
-                        // Las sesiones lanzadas por los propios agentes de Coucou ya notifican por su cuenta.
+                        // Nunca bloquea a Claude Code: si Agent Manager Notch no está, sale enseguida.
+                        // Las sesiones lanzadas por los propios agentes de Agent Manager Notch ya notifican por su cuenta.
                         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COUCOU_AGENT_ID"))) return 0;
                         try
                         {
@@ -118,7 +118,20 @@ namespace CoucouWin.Services
         private static string ClaudeSettingsPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "settings.json");
 
-        private static string HookCommand => $"\"{(Environment.ProcessPath ?? "CoucouWin.exe").Replace('\\', '/')}\" --claude-event";
+        private static string HookCommand => $"\"{(Environment.ProcessPath ?? "AgentManagerNotch.exe").Replace('\\', '/')}\" --claude-event";
+
+        /// <summary>Si los hooks globales apuntan a otro ejecutable (p. ej. el nombre anterior), los actualiza.</summary>
+        public static void RefreshClaudeIntegrationPath()
+        {
+            try
+            {
+                if (!IsClaudeIntegrationInstalled()) return;
+                var text = File.ReadAllText(ClaudeSettingsPath);
+                var exe = (Environment.ProcessPath ?? "").Replace('\\', '/');
+                if (exe != "" && !text.Contains(exe)) SetClaudeIntegration(true);
+            }
+            catch (Exception ex) { Log.Error("Actualizar hooks de Claude Code", ex); }
+        }
 
         public static bool IsClaudeIntegrationInstalled()
         {
@@ -144,7 +157,7 @@ namespace CoucouWin.Services
             foreach (var ev in new[] { "Stop", "Notification" })
             {
                 var arr = hooks[ev] as JsonArray ?? new JsonArray();
-                // Quita entradas previas de Coucou
+                // Quita entradas previas de Agent Manager Notch
                 for (int i = arr.Count - 1; i >= 0; i--)
                 {
                     if (arr[i]?.ToJsonString().Contains("--claude-event") == true) arr.RemoveAt(i);
