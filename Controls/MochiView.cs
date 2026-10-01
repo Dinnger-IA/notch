@@ -324,8 +324,7 @@ namespace CoucouWin.Controls
 
             double bodyW = size * 0.84 * sx;
             double bodyH = size * 0.74 * sy;
-            double boxSink = _boxAmount * size * 0.16;
-            double baseY = ground + jumpY + boxSink;
+            double baseY = ground + jumpY;
             double bcx = cx + offX, bcy = baseY - bodyH / 2;
 
             // sombra
@@ -336,11 +335,22 @@ namespace CoucouWin.Controls
 
             dc.PushTransform(new RotateTransform(rot, bcx, baseY));
 
-            // --- cuerpo squircle
-            var body = Squircle(bcx, bcy, bodyW / 2, bodyH / 2, 3.2);
-            dc.DrawGeometry(_bodyBrush, null, body);
-            // brillo
-            dc.DrawEllipse(GlossBrush, null, new Point(bcx - bodyW * 0.2, bcy - bodyH * 0.27), bodyW * 0.13, bodyH * 0.07);
+            // --- cuerpo: squircle normal o, en modo caja, una caja de cartón con las mismas animaciones
+            double box = Math.Clamp(_boxAmount, 0, 1);
+            if (box < 0.98)
+            {
+                dc.PushOpacity(1 - box);
+                var body = Squircle(bcx, bcy, bodyW / 2, bodyH / 2, 3.2);
+                dc.DrawGeometry(_bodyBrush, null, body);
+                dc.DrawEllipse(GlossBrush, null, new Point(bcx - bodyW * 0.2, bcy - bodyH * 0.27), bodyW * 0.13, bodyH * 0.07);
+                dc.Pop();
+            }
+            if (box > 0.02)
+            {
+                dc.PushOpacity(box);
+                DrawBoxBody(dc, bcx, bcy, bodyW, bodyH);
+                dc.Pop();
+            }
 
             // --- posición de los ojos (sin rubor en las mejillas)
             double eyeY = bcy - bodyH * 0.04 + _lookY * bodyH * 0.07;
@@ -443,7 +453,6 @@ namespace CoucouWin.Controls
             dc.Pop(); // rotación
 
             // --- caja (al arrastrar archivos)
-            if (_boxAmount > 0.02) DrawBox(dc, cx, ground, size, _boxAmount);
 
             // --- extras por encima (no rotan)
             double headY = baseY - bodyH - size * 0.02;
@@ -559,32 +568,40 @@ namespace CoucouWin.Controls
             dc.DrawGeometry(null, new Pen(pen.Brush, pen.Thickness * 0.7) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, g);
         }
 
-        private void DrawBox(DrawingContext dc, double cx, double ground, double size, double amt)
+        /// <summary>
+        /// Cuerpo en modo caja: una caja de cartón abierta del tamaño del personaje. Se dibuja con las mismas
+        /// transformaciones (respirar, aplastarse, saltar, girar), así que se anima igual que el personaje.
+        /// </summary>
+        private void DrawBoxBody(DrawingContext dc, double cx, double cy, double w, double h)
         {
-            double bw = size * 0.92, bh = size * 0.46 * amt;
-            var front = new Rect(cx - bw / 2, ground - bh, bw, bh);
-            dc.DrawRoundedRectangle(BoxBrush, null, front, size * 0.04, size * 0.04);
+            double bw = w * 0.98, bh = h * 0.9;
+            var front = new Rect(cx - bw / 2, cy - bh / 2 + h * 0.06, bw, bh);
+            dc.DrawRoundedRectangle(BoxBrush, null, front, w * 0.06, w * 0.06);
+            // borde superior (boca de la caja) un poco más oscuro
+            dc.DrawRectangle(BoxDarkBrush, null, new Rect(front.Left + w * 0.02, front.Top, bw - w * 0.04, h * 0.07));
+            // cinta vertical
+            dc.DrawRectangle(TapeBrush, null, new Rect(cx - w * 0.07, front.Top, w * 0.14, bh));
             // solapas abiertas
-            double flap = size * 0.16 * amt;
+            double flap = h * 0.22;
             var lf = new StreamGeometry();
             using (var ctx = lf.Open())
             {
                 ctx.BeginFigure(new Point(front.Left, front.Top), true, true);
-                ctx.LineTo(new Point(front.Left - flap * 0.7, front.Top - flap), true, true);
-                ctx.LineTo(new Point(front.Left + bw * 0.28, front.Top - flap * 0.8), true, true);
-                ctx.LineTo(new Point(front.Left + bw * 0.32, front.Top), true, true);
+                ctx.LineTo(new Point(front.Left - flap * 0.6, front.Top - flap), true, true);
+                ctx.LineTo(new Point(front.Left + bw * 0.26, front.Top - flap * 0.85), true, true);
+                ctx.LineTo(new Point(front.Left + bw * 0.3, front.Top), true, true);
             }
             var rf = new StreamGeometry();
             using (var ctx = rf.Open())
             {
                 ctx.BeginFigure(new Point(front.Right, front.Top), true, true);
-                ctx.LineTo(new Point(front.Right + flap * 0.7, front.Top - flap), true, true);
-                ctx.LineTo(new Point(front.Right - bw * 0.28, front.Top - flap * 0.8), true, true);
-                ctx.LineTo(new Point(front.Right - bw * 0.32, front.Top), true, true);
+                ctx.LineTo(new Point(front.Right + flap * 0.6, front.Top - flap), true, true);
+                ctx.LineTo(new Point(front.Right - bw * 0.26, front.Top - flap * 0.85), true, true);
+                ctx.LineTo(new Point(front.Right - bw * 0.3, front.Top), true, true);
             }
+            lf.Freeze(); rf.Freeze();
             dc.DrawGeometry(BoxDarkBrush, null, lf);
             dc.DrawGeometry(BoxDarkBrush, null, rf);
-            dc.DrawRectangle(TapeBrush, null, new Rect(cx - size * 0.06, front.Top, size * 0.12, bh));
         }
 
         private void DrawThinkingDots(DrawingContext dc, double x, double y, double size)

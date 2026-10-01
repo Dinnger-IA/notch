@@ -153,7 +153,7 @@ namespace CoucouWin.Views
                 Shell.BeginAnimation(HeightProperty, null);
                 Shell.Width = size.Width; Shell.Height = size.Height;
             }
-            Shell.CornerRadius = IsPanel(m) ? new CornerRadius(0, 0, 30, 30) : new CornerRadius(0, 0, 22, 22);
+            Shell.CornerRadius = IsPanel(m) ? new CornerRadius(0, 0, 16, 16) : new CornerRadius(0, 0, 10, 10);
             if (m == Mode.Collapsed) foreach (var a in AppRef.Agents) a.IsBox = false;
             SetOutsideClickHook(IsPanel(m) && ClickOutsideOnly);
         }
