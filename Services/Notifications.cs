@@ -103,12 +103,12 @@ namespace CoucouWin.Services
 
         // ---------------- Inicio con Windows (HKCU\...\Run) ----------------
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        private static bool IsStartupEnabled()
+        public static bool IsStartupEnabled()
         {
             using var k = Registry.CurrentUser.OpenSubKey(RunKey);
             return k?.GetValue("CoucouWin") != null;
         }
-        private static void SetStartup(bool on)
+        public static void SetStartup(bool on)
         {
             using var k = Registry.CurrentUser.CreateSubKey(RunKey);
             if (on) k.SetValue("CoucouWin", $"\"{Environment.ProcessPath}\"");

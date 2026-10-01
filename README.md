@@ -32,6 +32,17 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
 | **Chat** | Conversacional, sin carpeta de proyecto. | Chat estilo coucou + lista de tareas |
 | **Programado** | No interactivo: ejecuta una **instrucción** según un **horario** y te avisa con el resultado. | Su estado en la tarjeta grande de la vista general |
 
+### Píldora y barra superior
+
+- **Píldora** (modo pequeño), en dos lados: a la izquierda el **principal**; a la derecha **todos los demás
+  agrupados** en un bloque 2×2 del mismo alto (máximo 4 visibles; si hay más, un indicador «+N»).
+- Al abrir el notch siempre hay una **barra superior**: 🏠 *Inicio* a la izquierda y, a la derecha, 📌 fijar,
+  📅 **tareas programadas** y ⚙ **configuración** (ajustes del agente, nuevos agentes y opciones de Coucou:
+  sonidos, avisos, abrir al pasar el ratón, avisos de Claude Code, iniciar con Windows, salir).
+- **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
+  con su hora, agente, tipo y repetición, que se pueden borrar; y los agentes programados con su próxima
+  ejecución. Pulsar un elemento abre su agente.
+
 ### Vista general (al pasar el ratón o con el primer clic)
 
 Igual que coucou: **una tarjeta grande a la izquierda** con el agente enfocado y **el resto en chips pequeños
@@ -46,11 +57,14 @@ a la derecha**.
     con botones *Ejecutar ahora* y *Pausar*.
 - Chips: insignia roja si su última tarea falló, naranja si piden permiso, borde ámbar si están trabajando.
 - **Pulsar un chip** lo pasa a la tarjeta grande (el que estaba ahí baja a los chips; «‹» vuelve al principal).
-- **Pulsar la tarjeta grande** (o ↗) abre el chat. El chip *+ Nuevo* crea agentes, workspaces o recordatorios.
+- **Pulsar la tarjeta grande** (o ↗) abre el chat. En un **programado**, la tarjeta se **expande** con más
+  detalle: último resultado completo, instrucción, próximas 3 ejecuciones, última ejecución y permisos.
+  El chip *+ Nuevo* crea agentes, workspaces o recordatorios.
 
 ### Chat (interactivos y código)
 
-- Estilo coucou: barra superior mínima (💬 volver · + nueva conversación · ⚙ ajustes), píldora de contexto,
+- El chat va dentro de una **tarjeta** (como las de la vista general) bajo la barra superior. Estilo coucou:
+  nombre del agente + nueva conversación (o pestañas de workspace en código), píldora de contexto,
   tus mensajes en burbuja a la derecha, las respuestas como texto suelto, fondo oscuro con halo violeta y el
   personaje asomando abajo a la izquierda. Entrada «Continuar…».
 - **Código**: en lugar de «+» aparecen las **pestañas de workspace** (carpeta + estado: ▶ activa, ✓ terminó,
