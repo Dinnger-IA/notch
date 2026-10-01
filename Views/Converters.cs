@@ -22,6 +22,14 @@ namespace CoucouWin.Views
         public object ConvertBack(object? value, Type t, object? p, CultureInfo c) => throw new NotSupportedException();
     }
 
+    /// <summary>Texto vacío o null → Collapsed.</summary>
+    public class EmptyToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object? value, Type t, object? p, CultureInfo c)
+            => string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
+        public object ConvertBack(object? value, Type t, object? p, CultureInfo c) => throw new NotSupportedException();
+    }
+
     /// <summary>0 → Collapsed; cualquier otro número → Visible.</summary>
     public class ZeroToVisibilityConverter : IValueConverter
     {

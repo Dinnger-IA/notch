@@ -7,8 +7,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using CoucouWin.Controls;
@@ -17,39 +19,37 @@ using CoucouWin.Services;
 
 namespace CoucouWin.Views
 {
+    /// <summary>
+    /// El notch. Modos:
+    ///   Collapsed → píldora con los personajes
+    ///   Banner    → aviso temporal
+    ///   Overview  → al pasar el ratón / primer clic: solo información de los agentes
+    ///   Chat      → conversación de un agente interactivo (lista de tareas a la izquierda)
+    ///   Info      → barra informativa de un agente no interactivo (programado)
+    /// </summary>
     public partial class NotchWindow : Window
     {
-        private enum Mode { Collapsed, Banner, Expanded }
+        private enum Mode { Collapsed, Banner, Overview, Chat, Info }
 
         private Mode _mode = Mode.Collapsed;
-        private bool _pinned, _modalOpen, _autoScroll = true, _rebuildQueued;
+        private bool _pinned, _modalOpen, _autoScroll = true, _rebuildQueued, _codeExpanded;
         private AgentSession? _selected;
         private AgentSession? _bannerSession;
         private string? _bannerAgentId;
         private RemindersWindow? _reminders;
         private string _layoutSignature = "";
-
-        private readonly AgentGroupView _codeGroup = new() { Title = "Código", ShowAddButton = true, AddTooltip = "Nuevo agente de código (elige o arrastra una carpeta)" };
-        private readonly AgentGroupView _chatGroup = new() { Title = "Chat" };
-        private readonly AgentGroupView _schedGroup = new() { Title = "Programados" };
+        private List<AgentSession> _codeSiblings = new();
 
         private readonly DispatcherTimer _hoverTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
         private readonly DispatcherTimer _collapseTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
         private readonly DispatcherTimer _bannerTimer = new() { Interval = TimeSpan.FromSeconds(5) };
 
         private static App AppRef => App.Current;
+        private bool InAgentView => _mode is Mode.Chat or Mode.Info;
 
         public NotchWindow()
         {
             InitializeComponent();
-
-            foreach (var g in new[] { _codeGroup, _chatGroup, _schedGroup })
-            {
-                g.AgentClicked += s => { Select(s); FocusInput(); };
-                g.MenuFactory = BuildAgentMenu;
-                GroupsHost.Children.Add(g);
-            }
-            _codeGroup.AddClicked += PickFolderAndCreateCodeAgent;
 
             foreach (var s in AppRef.Sessions) s.PropertyChanged += Session_PropertyChanged;
             AppRef.Sessions.CollectionChanged += Sessions_CollectionChanged;
@@ -63,12 +63,15 @@ namespace CoucouWin.Views
             _hoverTimer.Tick += (_, _) =>
             {
                 _hoverTimer.Stop();
-                if (_mode != Mode.Expanded && AppRef.Store.Config.Settings.ExpandOnHover && Shell.IsMouseOver) Expand(false);
+                if (_mode is Mode.Collapsed or Mode.Banner && AppRef.Store.Config.Settings.ExpandOnHover && Shell.IsMouseOver)
+                    SetMode(Mode.Overview);
             };
             _collapseTimer.Tick += (_, _) =>
             {
                 _collapseTimer.Stop();
-                if (_mode == Mode.Expanded && !_pinned && !_modalOpen && !IsActive && !Shell.IsMouseOver && _selected?.PendingApproval == null) Collapse();
+                if (_pinned || _modalOpen || Shell.IsMouseOver || _selected?.PendingApproval != null) return;
+                // La vista general es solo informativa: se cierra al salir. El chat, solo si no tiene el foco.
+                if (_mode == Mode.Overview || (InAgentView && !IsActive)) Collapse();
             };
             _bannerTimer.Tick += (_, _) =>
             {
@@ -79,8 +82,8 @@ namespace CoucouWin.Views
             ChatScroll.ScrollChanged += ChatScroll_ScrollChanged;
             Deactivated += (_, _) =>
             {
-                // Con un permiso pendiente el panel se queda abierto: el usuario tiene que decidir
-                if (_mode == Mode.Expanded && !_pinned && !_modalOpen && !Shell.IsMouseOver && _selected?.PendingApproval == null) Collapse();
+                if (_mode != Mode.Collapsed && _mode != Mode.Banner && !_pinned && !_modalOpen && !Shell.IsMouseOver
+                    && _selected?.PendingApproval == null) Collapse();
             };
             SourceInitialized += OnSourceInitialized;
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.Invoke(PositionOnScreen);
@@ -98,8 +101,12 @@ namespace CoucouWin.Views
         {
             switch (m)
             {
-                case Mode.Expanded: return new Size(800, 660);
+                case Mode.Chat: return new Size(780, 560);
+                case Mode.Info: return new Size(640, 118);
                 case Mode.Banner: return new Size(450, 74);
+                case Mode.Overview:
+                    OverviewContent.Measure(new Size(476, double.PositiveInfinity));
+                    return new Size(500, Math.Clamp(OverviewContent.DesiredSize.Height + 20, 120, 620));
                 default:
                     // Se mide el contenido directamente: CollapsedView puede estar oculto en este momento
                     CollapsedContent.Measure(new Size(double.PositiveInfinity, 44));
@@ -115,11 +122,11 @@ namespace CoucouWin.Views
 
             if (animate)
             {
-                bool growing = m == Mode.Expanded || (m == Mode.Banner && prev == Mode.Collapsed);
+                bool growing = size.Height > Shell.ActualHeight + 2;
                 IEasingFunction ease = growing
-                    ? new BackEase { Amplitude = 0.28, EasingMode = EasingMode.EaseOut }
+                    ? new BackEase { Amplitude = 0.25, EasingMode = EasingMode.EaseOut }
                     : new CubicEase { EasingMode = EasingMode.EaseOut };
-                var dur = TimeSpan.FromMilliseconds(growing ? 340 : 230);
+                var dur = TimeSpan.FromMilliseconds(growing ? 330 : 230);
                 Shell.BeginAnimation(WidthProperty, new DoubleAnimation(size.Width, dur) { EasingFunction = ease });
                 Shell.BeginAnimation(HeightProperty, new DoubleAnimation(size.Height, dur) { EasingFunction = ease });
             }
@@ -129,11 +136,26 @@ namespace CoucouWin.Views
                 Shell.BeginAnimation(HeightProperty, null);
                 Shell.Width = size.Width; Shell.Height = size.Height;
             }
-            Shell.CornerRadius = m == Mode.Expanded ? new CornerRadius(0, 0, 26, 26) : new CornerRadius(0, 0, 22, 22);
+            Shell.CornerRadius = m is Mode.Chat or Mode.Overview ? new CornerRadius(0, 0, 26, 26) : new CornerRadius(0, 0, 22, 22);
 
-            ShowView(CollapsedView, m == Mode.Collapsed);
-            ShowView(BannerView, m == Mode.Banner);
-            ShowView(ExpandedView, m == Mode.Expanded);
+            if (prev != m || !animate)
+            {
+                ShowView(CollapsedView, m == Mode.Collapsed);
+                ShowView(BannerView, m == Mode.Banner);
+                ShowView(OverviewView, m == Mode.Overview);
+                ShowView(ChatView, m == Mode.Chat);
+                ShowView(InfoView, m == Mode.Info);
+            }
+            if (m == Mode.Collapsed) foreach (var s in AppRef.Sessions) s.IsBox = false;
+        }
+
+        /// <summary>Recalcula el tamaño del modo actual (p. ej. al desglosar los agentes de código).</summary>
+        private void Resize()
+        {
+            var size = TargetSize(_mode);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            Shell.BeginAnimation(WidthProperty, new DoubleAnimation(size.Width, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+            Shell.BeginAnimation(HeightProperty, new DoubleAnimation(size.Height, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
         }
 
         private static void ShowView(FrameworkElement el, bool show)
@@ -141,7 +163,7 @@ namespace CoucouWin.Views
             if (show)
             {
                 el.Visibility = Visibility.Visible;
-                el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { BeginTime = TimeSpan.FromMilliseconds(90) });
+                el.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { BeginTime = TimeSpan.FromMilliseconds(80) });
             }
             else
             {
@@ -151,46 +173,58 @@ namespace CoucouWin.Views
             }
         }
 
+        /// <summary>
+        /// Usado por la app (bandeja, atajo, notificaciones). Con un agente concreto abre su vista;
+        /// sin agente muestra la vista general.
+        /// </summary>
         public void Expand(bool focusInput, string? agentId = null)
         {
             _bannerTimer.Stop();
-            if (agentId != null)
-            {
-                var s = AppRef.Sessions.FirstOrDefault(x => x.Profile.Id == agentId);
-                if (s != null) Select(s);
-            }
-            if (_mode != Mode.Expanded) SetMode(Mode.Expanded);
-            if (focusInput) FocusInput();
+            var s = agentId == null ? null : AppRef.Sessions.FirstOrDefault(x => x.Profile.Id == agentId);
+            if (s != null) { Open(s, focusInput); return; }
+            if (_mode != Mode.Overview) SetMode(Mode.Overview);
+            if (focusInput) Activate();
+        }
+
+        /// <summary>Abre el chat (interactivos) o la barra informativa (programados) de un agente.</summary>
+        private void Open(AgentSession s, bool focus = true)
+        {
+            _bannerTimer.Stop();
+            Select(s);
+            var target = s.IsScheduled ? Mode.Info : Mode.Chat;
+            if (_mode != target) SetMode(target);
+            if (focus) FocusInput();
             ScrollToEnd();
         }
 
         private void FocusInput()
         {
             Activate();
-            if (_selected?.CanType == true)
+            if (_mode == Mode.Chat && _selected?.CanType == true)
                 Dispatcher.BeginInvoke(() => { Input.Focus(); Keyboard.Focus(Input); }, DispatcherPriority.Input);
         }
 
         public void Collapse()
         {
             if (_mode == Mode.Collapsed) { UpdateCollapsedSize(); return; }
-            foreach (var s in AppRef.Sessions) s.IsBox = false;
+            _codeExpanded = false;
+            ApplyCodeExpanded();
             SetMode(Mode.Collapsed);
         }
 
-        public bool IsLookingAt(AgentSession s) => _mode == Mode.Expanded && _selected == s;
+        public bool IsLookingAt(AgentSession s) => InAgentView && _selected == s;
 
         public void ShowBanner(AgentSession s, string title, string body, bool sticky = false)
         {
-            if (_mode == Mode.Expanded) return; // el usuario ya está mirando el panel
+            if (_mode != Mode.Collapsed && _mode != Mode.Banner) return; // el usuario ya está mirando el panel
             ShowBannerRaw(s.Color, s.State == MochiState.Idle ? MochiState.Done : s.State, title, body, s.Profile.Id, sticky);
             _bannerSession = s;
         }
 
         /// <summary>Aviso en el notch con un personaje de cualquier color (también para eventos externos).</summary>
-        public void ShowBannerRaw(System.Windows.Media.Color color, MochiState state, string title, string body, string? agentId, bool sticky)
+        public void ShowBannerRaw(Color color, MochiState state, string title, string body, string? agentId, bool sticky)
         {
-            if (_mode == Mode.Expanded) return; // panel abierto: basta con el toast y la animación del personaje
+            if (_mode != Mode.Collapsed && _mode != Mode.Banner) return; // panel abierto: basta con el toast
             _bannerSession = null;
             _bannerAgentId = agentId;
             BannerMochi.BodyColor = color;
@@ -220,7 +254,7 @@ namespace CoucouWin.Views
             }
         }
 
-        // =============================================================== agentes: principal + grupos
+        // =============================================================== agentes: principal + código agrupados
         private void QueueRebuild()
         {
             if (_rebuildQueued) return;
@@ -228,7 +262,10 @@ namespace CoucouWin.Views
             Dispatcher.BeginInvoke(() => { _rebuildQueued = false; RebuildAgents(); }, DispatcherPriority.Background);
         }
 
-        /// <summary>Reconstruye la cabecera y la píldora: principal grande, el resto pequeños por grupo.</summary>
+        /// <summary>
+        /// El principal y todos los agentes de código forman una sola pila. El resto (chat y programados)
+        /// va debajo, cada uno en su fila.
+        /// </summary>
         private void RebuildAgents(bool force = false)
         {
             var sessions = AppRef.Sessions.ToList();
@@ -237,63 +274,107 @@ namespace CoucouWin.Views
             _layoutSignature = sig;
 
             var primary = sessions.FirstOrDefault(s => s.IsDefault);
-            var others = sessions.Where(s => s != primary).ToList();
-            var code = others.Where(s => s.IsCode).ToList();
-            var chat = others.Where(s => s.Profile.Kind == AgentKind.Interactive).ToList();
-            var sched = others.Where(s => s.IsScheduled).ToList();
+            _codeSiblings = sessions.Where(s => s != primary && s.IsCode).ToList();
+            var chat = sessions.Where(s => s != primary && s.Profile.Kind == AgentKind.Interactive).ToList();
+            var sched = sessions.Where(s => s != primary && s.IsScheduled).ToList();
 
-            // --- cabecera del panel
-            PrimaryHost.Child = primary == null ? null : BuildPrimaryTab(primary);
-            _codeGroup.SetItems(code);
-            _chatGroup.SetItems(chat);
-            _chatGroup.Visibility = chat.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            _schedGroup.SetItems(sched);
-            _schedGroup.Visibility = sched.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // --- vista general
+            PrincipalCard.Visibility = primary == null ? Visibility.Collapsed : Visibility.Visible;
+            PrincipalCard.DataContext = primary;
+            PeekList.ItemsSource = _codeSiblings;
+            PeekHost.Visibility = _codeSiblings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            CodeList.ItemsSource = primary == null ? _codeSiblings : new[] { primary }.Concat(_codeSiblings).ToList();
+            OthersList.ItemsSource = chat.Concat(sched).ToList();
+            NoAgents.Visibility = sessions.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (_codeSiblings.Count == 0) _codeExpanded = false;
+            ApplyCodeExpanded();
 
-            // --- píldora: principal grande + grupos pequeños superpuestos
+            // --- píldora: principal grande con los de código asomando detrás; luego los demás
             CollapsedAgents.Children.Clear();
             if (primary != null)
             {
-                var big = new MochiView { Width = 36, Height = 36, Margin = new Thickness(0, 0, 4, 0), ToolTip = primary.Profile.Name };
-                AgentGroupView.Bind(big, primary);
-                CollapsedAgents.Children.Add(big);
+                var stack = new Grid { Margin = new Thickness(0, 0, 4, 0) };
+                var peeks = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(26, 0, 0, 0) };
+                int i = 0;
+                foreach (var s in _codeSiblings.Take(4))
+                {
+                    var mini = Mini(s, 24);
+                    mini.Margin = new Thickness(i == 0 ? 0 : -14, 0, 0, 0);
+                    Panel.SetZIndex(mini, 10 - i);
+                    peeks.Children.Add(mini);
+                    i++;
+                }
+                stack.Children.Add(peeks);
+                var big = Mini(primary, 36);
+                big.HorizontalAlignment = HorizontalAlignment.Left;
+                Panel.SetZIndex(big, 20);
+                stack.Children.Add(big);
+                CollapsedAgents.Children.Add(stack);
             }
-            foreach (var group in new[] { code, chat, sched })
+            foreach (var group in new[] { chat, sched })
             {
                 if (group.Count == 0) continue;
-                CollapsedAgents.Children.Add(new Border { Width = 1, Height = 16, Margin = new Thickness(6, 0, 6, 0), Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)) });
+                CollapsedAgents.Children.Add(new Border { Width = 1, Height = 16, Margin = new Thickness(6, 0, 6, 0), Background = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)) });
                 int i = 0;
                 foreach (var s in group)
                 {
-                    var mini = new MochiView { Width = 22, Height = 22, Margin = new Thickness(i == 0 ? 0 : -8, 0, 0, 0), ToolTip = $"{s.Profile.Name} · {s.SubLabel}" };
-                    AgentGroupView.Bind(mini, s);
+                    var mini = Mini(s, 22);
+                    mini.Margin = new Thickness(i == 0 ? 0 : -8, 0, 0, 0);
                     Panel.SetZIndex(mini, group.Count - i);
                     CollapsedAgents.Children.Add(mini);
                     i++;
                 }
             }
 
-            NoAgents.Visibility = sessions.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             if (_selected == null || !sessions.Contains(_selected)) Select(primary ?? sessions.FirstOrDefault());
+            if (_mode == Mode.Overview) Resize();
+            else if (InAgentView && _selected == null) SetMode(Mode.Overview);
             UpdateCollapsedSize();
         }
 
-        private FrameworkElement BuildPrimaryTab(AgentSession s)
+        private static MochiView Mini(AgentSession s, double size)
         {
-            var tab = _chatGroup.BuildTab(s, 60, 104);
-            tab.Margin = new Thickness(0, 0, 4, 0);
-            var star = new TextBlock
-            {
-                Text = "", FontFamily = (System.Windows.Media.FontFamily)FindResource("IconFont"), FontSize = 10,
-                Foreground = (System.Windows.Media.Brush)FindResource("AlertBorder"),
-                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 4, 6, 0),
-                ToolTip = "Agente principal"
-            };
-            var g = new Grid();
-            g.Children.Add(tab);
-            g.Children.Add(star);
-            return g;
+            var m = new MochiView { Width = size, Height = size, Interactive = false, ToolTip = $"{s.Profile.Name} · {s.SubLabel}", DataContext = s };
+            m.SetBinding(MochiView.BodyColorProperty, new Binding(nameof(AgentSession.Color)) { Source = s });
+            m.SetBinding(MochiView.StateProperty, new Binding(nameof(AgentSession.State)) { Source = s });
+            m.SetBinding(MochiView.IsBoxProperty, new Binding(nameof(AgentSession.IsBox)) { Source = s });
+            return m;
         }
+
+        private void ApplyCodeExpanded()
+        {
+            CodeList.Visibility = _codeExpanded ? Visibility.Visible : Visibility.Collapsed;
+            Chevron.Text = _codeExpanded ? "" : "";
+            PrincipalCard.ToolTip = _codeSiblings.Count > 0
+                ? (_codeExpanded ? "Ocultar agentes de código" : $"Ver los {_codeSiblings.Count + 1} agentes de código")
+                : "Abrir";
+        }
+
+        private void Principal_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (PrincipalCard.DataContext is not AgentSession p) return;
+            if (_codeSiblings.Count == 0) { Open(p); return; }
+            // Con más agentes de código, el principal se desglosa para elegir
+            _codeExpanded = !_codeExpanded;
+            ApplyCodeExpanded();
+            Resize();
+        }
+
+        private void Row_Click(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is AgentSession s) { Open(s); e.Handled = true; }
+        }
+
+        private void Row_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not AgentSession s) return;
+            var menu = BuildAgentMenu(s);
+            menu.PlacementTarget = (UIElement)sender;
+            menu.IsOpen = true;
+            e.Handled = true;
+        }
+
+        private void BackToOverview_Click(object sender, RoutedEventArgs e) => SetMode(Mode.Overview);
 
         private ContextMenu BuildAgentMenu(AgentSession s)
         {
@@ -304,9 +385,12 @@ namespace CoucouWin.Views
                 it.Click += (_, _) => a();
                 m.Items.Add(it);
             }
+            Add("Abrir", () => Open(s));
             Add("Editar agente…", () => OpenEditor(s));
             Add(s.IsDefault ? "★ Es el principal" : "Establecer como principal", () => { AppRef.SetDefault(s); QueueRebuild(); }, !s.IsDefault);
             if (s.IsConversational) Add("Nueva conversación", s.NewConversation);
+            if (s.CanResumeQueue) Add($"Reanudar cola ({s.PendingCount})", s.ResumeQueue);
+            if (s.PendingCount > 0) Add("Vaciar cola", s.ClearQueue);
             if (s.IsScheduled) Add("Ejecutar ahora", () => _ = s.RunScheduledAsync());
             if (s.HasFolder) Add("Abrir carpeta", () => OpenInExplorer(s.FolderPath));
             if (!s.IsCode) Add("Duplicar", () => Duplicate(s));
@@ -324,7 +408,8 @@ namespace CoucouWin.Views
                 _selected.Messages.CollectionChanged -= Messages_CollectionChanged;
             }
             _selected = s;
-            ExpandedView.DataContext = s;
+            ChatView.DataContext = s;
+            InfoView.DataContext = s;
             if (s != null)
             {
                 s.IsSelected = true;
@@ -356,7 +441,13 @@ namespace CoucouWin.Views
                 case nameof(AgentSession.IsDefault):
                 case nameof(AgentSession.Profile):
                     QueueRebuild();
-                    if (sender == _selected) { UpdateEmptyChat(); UpdatePauseButton(); }
+                    if (sender == _selected)
+                    {
+                        UpdateEmptyChat();
+                        UpdatePauseButton();
+                        // Si cambió el tipo, cambia también la vista
+                        if (InAgentView && _selected != null) Open(_selected, focus: false);
+                    }
                     break;
                 case nameof(AgentSession.NeedsFolder):
                     if (sender == _selected) UpdateEmptyChat();
@@ -374,27 +465,16 @@ namespace CoucouWin.Views
             bool show = s != null && s.Messages.Count == 0 && !s.NeedsFolder;
             EmptyChat.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (s == null) return;
-            if (s.IsScheduled)
-            {
-                EmptyTitle.Text = "Aquí verás el resultado de cada ejecución";
-                EmptyHint.Text = "Usa «Ejecutar ahora» para probar la instrucción.";
-            }
-            else if (s.IsCode)
-            {
-                EmptyTitle.Text = $"¿Qué hacemos en {s.FolderName}?";
-                EmptyHint.Text = "Si le pides algo mientras trabaja, se añade a Pendientes · arrastra archivos para adjuntarlos";
-            }
-            else
-            {
-                EmptyTitle.Text = $"Habla con {s.Profile.Name}";
-                EmptyHint.Text = "Arrastra archivos sobre el personaje · /recordar 10m algo · /tarea 9:00 revisa el correo";
-            }
+            EmptyChat.Text = s.IsCode
+                ? $"¿Qué hacemos en {s.FolderName}?\nSi le escribes mientras trabaja, se encola."
+                : $"Habla con {s.Profile.Name}\n/recordar 10m algo · arrastra archivos sobre el notch";
         }
 
         private void UpdatePauseButton()
         {
             if (_selected?.IsScheduled != true) return;
-            PauseButton.Content = _selected.IsPaused ? "Reanudar" : "Pausar";
+            PauseButton.Content = _selected.IsPaused ? "" : "";
+            PauseButton.ToolTip = _selected.IsPaused ? "Reanudar programación" : "Pausar programación";
         }
 
         private void ChatScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -409,21 +489,22 @@ namespace CoucouWin.Views
         private void Shell_MouseEnter(object sender, MouseEventArgs e)
         {
             _collapseTimer.Stop();
-            if (_mode != Mode.Expanded) _hoverTimer.Start();
+            if (_mode is Mode.Collapsed or Mode.Banner) _hoverTimer.Start();
         }
 
         private void Shell_MouseLeave(object sender, MouseEventArgs e)
         {
             _hoverTimer.Stop();
-            if (_mode == Mode.Expanded && !_pinned && !IsActive) _collapseTimer.Start();
+            if (_mode == Mode.Overview || (InAgentView && !IsActive)) _collapseTimer.Start();
             if (_mode == Mode.Banner && !_bannerTimer.IsEnabled) _bannerTimer.Start();
         }
 
         private void Collapsed_Click(object sender, MouseButtonEventArgs e)
         {
-            // Clic en un personaje de la píldora → abre su panel
-            if (e.OriginalSource is DependencyObject d && FindAncestor<MochiView>(d)?.DataContext is AgentSession s) Select(s);
-            Expand(focusInput: true);
+            // El primer clic solo muestra la vista general
+            _hoverTimer.Stop();
+            SetMode(Mode.Overview);
+            Activate();
         }
 
         private void Banner_Click(object sender, MouseButtonEventArgs e)
@@ -434,16 +515,7 @@ namespace CoucouWin.Views
 
         private void BannerClose_Click(object sender, RoutedEventArgs e) => Collapse();
 
-        private void Tabs_MouseWheel(object sender, MouseWheelEventArgs e)
-        {
-            var sv = (ScrollViewer)sender;
-            sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta / 3.0);
-            e.Handled = true;
-        }
-
         // =============================================================== chat
-        private async void Send_Click(object sender, RoutedEventArgs e) => await SendCurrent();
-
         private async System.Threading.Tasks.Task SendCurrent()
         {
             if (_selected == null || !_selected.CanType) return;
@@ -496,6 +568,7 @@ namespace CoucouWin.Views
         private void AppendFiles(IReadOnlyCollection<string> files)
         {
             if (files.Count == 0 || _selected?.CanType != true) return;
+            if (_mode != Mode.Chat) Open(_selected);
             var block = "Archivos:\n" + string.Join("\n", files.Select(f => "- " + f));
             Input.Text = string.IsNullOrWhiteSpace(Input.Text) ? block + "\n\n" : Input.Text.TrimEnd() + "\n\n" + block + "\n\n";
             Input.CaretIndex = Input.Text.Length;
@@ -503,33 +576,11 @@ namespace CoucouWin.Views
             Input.Focus();
         }
 
-        // =============================================================== barra lateral de tareas
-        private void TaskInput_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key != Key.Enter || _selected == null) return;
-            e.Handled = true;
-            var text = TaskInput.Text.Trim();
-            if (text == "") return;
-            TaskInput.Clear();
-            _ = _selected.SendAsync(text); // libre → empieza ya; ocupado → a la cola
-        }
-
-        private void TaskInput_TextChanged(object sender, TextChangedEventArgs e) =>
-            TaskPlaceholder.Visibility = TaskInput.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-
-        private void RemoveQueued_Click(object sender, RoutedEventArgs e)
-        {
-            if ((sender as FrameworkElement)?.DataContext is AgentTask t) _selected?.RemoveQueued(t);
-        }
-
-        private void ResumeQueue_Click(object sender, RoutedEventArgs e) => _selected?.ResumeQueue();
-        private void ClearCompleted_Click(object sender, RoutedEventArgs e) => _selected?.ClearCompleted();
-
         // =============================================================== agentes programados
         private void RunNow_Click(object sender, RoutedEventArgs e)
         {
             if (_selected?.IsScheduled != true) return;
-            if (_selected.IsBusy) { _selected.AddNotice("Ya se está ejecutando.", true); return; }
+            if (_selected.IsBusy) return;
             _ = _selected.RunScheduledAsync();
             AppRef.SaveAgents();
         }
@@ -558,7 +609,7 @@ namespace CoucouWin.Views
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.None; return; }
             e.Effects = DragDropEffects.Copy;
-            if (_mode != Mode.Expanded) Expand(false);
+            if (_mode is Mode.Collapsed or Mode.Banner) SetMode(Mode.Overview);
             if (_selected != null) _selected.IsBox = true;
         }
 
@@ -568,8 +619,8 @@ namespace CoucouWin.Views
         }
 
         /// <summary>
-        /// Carpetas: si el agente de código seleccionado aún no tiene carpeta, se le asigna;
-        /// cualquier otra carpeta crea un agente de código nuevo. Archivos: se adjuntan al mensaje.
+        /// Carpetas: si el agente de código abierto aún no tiene carpeta, se le asigna; cualquier otra
+        /// carpeta crea un agente de código nuevo. Archivos: se adjuntan al mensaje del agente abierto.
         /// </summary>
         private void Shell_Drop(object sender, DragEventArgs e)
         {
@@ -583,15 +634,17 @@ namespace CoucouWin.Views
                 AgentSession? last = null;
                 foreach (var d in dirs)
                 {
-                    if (_selected?.NeedsFolder == true && last == null)
+                    var target = _selected?.NeedsFolder == true && last == null ? _selected
+                               : last == null ? AppRef.Sessions.FirstOrDefault(x => x.NeedsFolder) : null;
+                    if (target != null)
                     {
-                        if (_selected.TrySetFolder(d, out var err)) { AppRef.SaveAgents(); last = _selected; QueueRebuild(); }
-                        else _selected.AddNotice(err ?? "No se pudo usar esa carpeta", true);
+                        if (target.TrySetFolder(d, out var err)) { AppRef.SaveAgents(); last = target; QueueRebuild(); }
+                        else target.AddNotice(err ?? "No se pudo usar esa carpeta", true);
                         continue;
                     }
                     last = AppRef.AddCodeAgent(d);
                 }
-                if (last != null) { Select(last); FocusInput(); }
+                if (last != null) Open(last);
             }
             if (files.Count > 0) AppendFiles(files);
         }
@@ -622,9 +675,7 @@ namespace CoucouWin.Views
         {
             var folder = PickFolder("Carpeta del nuevo agente de código");
             if (folder == null) return;
-            var s = AppRef.AddCodeAgent(folder);
-            Select(s);
-            FocusInput();
+            Open(AppRef.AddCodeAgent(folder));
         }
 
         private void PickFolderForSelected_Click(object sender, RoutedEventArgs e)
@@ -660,7 +711,9 @@ namespace CoucouWin.Views
             _modalOpen = false;
             Activate();
             if (!ok) return;
+            bool wasOpen = _selected == s;
             AppRef.RemoveAgent(s);
+            if (wasOpen) SetMode(Mode.Overview);
         }
 
         private void Duplicate(AgentSession s)
@@ -670,7 +723,7 @@ namespace CoucouWin.Views
             p.Name += " 2";
             p.Schedule.NextRun = null;
             p.Schedule.LastRun = null;
-            Select(AppRef.AddAgent(p));
+            Open(AppRef.AddAgent(p));
         }
 
         public void OpenEditor(AgentSession? session, AgentKind kindForNew = AgentKind.Interactive)
@@ -678,7 +731,6 @@ namespace CoucouWin.Views
             _modalOpen = true;
             try
             {
-                if (_mode != Mode.Expanded) SetMode(Mode.Expanded);
                 var win = new AgentEditorWindow(session?.Profile.Clone(), kindForNew, session?.HasFolder == true,
                                                 session?.IsDefault ?? false) { Owner = this };
                 if (win.ShowDialog() != true || win.Result == null) return;
@@ -687,16 +739,15 @@ namespace CoucouWin.Views
                 {
                     var ns = AppRef.AddAgent(p);
                     if (win.MakeDefault) AppRef.SetDefault(ns);
-                    Select(ns);
                     ns.AddNotice($"¡Hola! Soy {p.Name} ({ns.KindLabel.ToLowerInvariant()}). Funciono con {ns.ProviderLabel}.");
+                    Open(ns, focus: false);
                 }
                 else
                 {
                     bool contextChanged = session.Profile.Provider != p.Provider || session.Profile.Kind != p.Kind;
-                    bool scheduleChanged = p.Kind == AgentKind.Scheduled;
                     session.UpdateProfile(p);
                     if (contextChanged) session.NewConversation();
-                    if (scheduleChanged) ScheduleService.Reschedule(session);
+                    if (p.Kind == AgentKind.Scheduled) ScheduleService.Reschedule(session);
                     if (win.MakeDefault && !session.IsDefault) AppRef.SetDefault(session);
                     AppRef.SaveAgents();
                 }
@@ -759,7 +810,7 @@ namespace CoucouWin.Views
             if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
             {
                 handled = true;
-                if (_mode == Mode.Expanded && IsActive) { _pinned = false; UpdatePin(); Collapse(); }
+                if (_mode != Mode.Collapsed && _mode != Mode.Banner && IsActive) { _pinned = false; UpdatePin(); Collapse(); }
                 else Expand(focusInput: true);
             }
             return IntPtr.Zero;
@@ -770,8 +821,8 @@ namespace CoucouWin.Views
             while (d != null)
             {
                 if (d is T t) return t;
-                d = d is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
-                    ? System.Windows.Media.VisualTreeHelper.GetParent(d)
+                d = d is Visual or System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(d)
                     : LogicalTreeHelper.GetParent(d);
             }
             return null;

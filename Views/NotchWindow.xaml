@@ -4,143 +4,164 @@
         xmlns:c="clr-namespace:CoucouWin.Controls"
         xmlns:v="clr-namespace:CoucouWin.Views"
         xmlns:m="clr-namespace:CoucouWin.Models"
+        xmlns:s="clr-namespace:CoucouWin.Services"
         Title="Coucou" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
-        Width="840" Height="740" FontFamily="{StaticResource UiFont}"
+        Width="840" Height="700" FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True">
 
     <Window.Resources>
         <v:NullToVisibilityConverter x:Key="NullToVis"/>
-        <v:NullToVisibilityConverter x:Key="InvNullToVis" Invert="True"/>
         <v:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <v:BoolToVisibilityConverter x:Key="InvBoolToVis" Invert="True"/>
         <v:ColorToBrushConverter x:Key="ColorBrush"/>
-        <v:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
+        <v:EmptyToVisibilityConverter x:Key="EmptyToVis"/>
 
-        <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10.5"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-            <Setter Property="Margin" Value="2,10,0,6"/>
+        <!-- Fondo del chat, como el de coucou: oscuro con un halo violeta abajo -->
+        <RadialGradientBrush x:Key="ChatBackground" Center="0.5,1.05" GradientOrigin="0.5,1.05" RadiusX="0.75" RadiusY="0.95">
+            <GradientStop Color="#2A2650" Offset="0"/>
+            <GradientStop Color="#16152A" Offset="0.55"/>
+            <GradientStop Color="#0C0C10" Offset="1"/>
+        </RadialGradientBrush>
+
+        <!-- Píldora de botón de la barra superior (💬 / +) -->
+        <Style x:Key="TopPill" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="15"/>
         </Style>
 
-        <!-- Mensaje del chat -->
+        <!-- Mensajes estilo coucou: usuario en burbuja a la derecha, agente como texto suelto -->
         <DataTemplate x:Key="Message" DataType="{x:Type m:ChatMessage}">
-            <Border x:Name="Bubble" Margin="0,3" Padding="12,8" CornerRadius="14" MaxWidth="420"
-                    HorizontalAlignment="Left" Background="{StaticResource Surface2}">
+            <Border x:Name="Bubble" Margin="0,6" Padding="0" CornerRadius="16" MaxWidth="500"
+                    HorizontalAlignment="Left" Background="Transparent">
                 <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Copiar" Click="CopyMessage_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
-                    <TextBlock x:Name="Md" v:Markdown.Text="{Binding Text}" TextWrapping="Wrap" FontSize="13"
-                               Foreground="{StaticResource TextPrimary}" LineHeight="19"/>
-                    <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}" Visibility="Collapsed"/>
+                    <TextBlock x:Name="Md" v:Markdown.Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5"
+                               Foreground="#ECECF2" LineHeight="20"/>
+                    <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"
+                             FontSize="13.5" Visibility="Collapsed"/>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.User}">
                     <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
-                    <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubble}"/>
+                    <Setter TargetName="Bubble" Property="Background" Value="#2C2C33"/>
+                    <Setter TargetName="Bubble" Property="Padding" Value="14,7"/>
+                    <Setter TargetName="Bubble" Property="MaxWidth" Value="420"/>
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Tool}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
-                    <Setter TargetName="Bubble" Property="Background" Value="Transparent"/>
-                    <Setter TargetName="Bubble" Property="Padding" Value="4,1"/>
                     <Setter TargetName="Bubble" Property="Margin" Value="0,0"/>
-                    <Setter TargetName="Bubble" Property="MaxWidth" Value="520"/>
+                    <Setter TargetName="Bubble" Property="MaxWidth" Value="560"/>
                     <Setter TargetName="Txt" Property="FontFamily" Value="{StaticResource MonoFont}"/>
-                    <Setter TargetName="Txt" Property="FontSize" Value="11.5"/>
-                    <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                    <Setter TargetName="Txt" Property="FontSize" Value="11"/>
+                    <Setter TargetName="Txt" Property="Foreground" Value="#6E6E7C"/>
                     <Setter TargetName="Txt" Property="TextWrapping" Value="NoWrap"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Notice}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
-                    <Setter TargetName="Bubble" Property="Background" Value="Transparent"/>
                     <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Center"/>
-                    <Setter TargetName="Bubble" Property="Padding" Value="4,2"/>
-                    <Setter TargetName="Txt" Property="FontSize" Value="11.5"/>
-                    <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                    <Setter TargetName="Bubble" Property="Margin" Value="0,3"/>
+                    <Setter TargetName="Txt" Property="FontSize" Value="11"/>
+                    <Setter TargetName="Txt" Property="Foreground" Value="#6E6E7C"/>
                     <Setter TargetName="Txt" Property="TextAlignment" Value="Center"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Error}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="Bubble" Property="Background" Value="{StaticResource ErrorBg}"/>
+                    <Setter TargetName="Bubble" Property="Padding" Value="12,7"/>
                     <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource ErrorFg}"/>
                     <Setter TargetName="Txt" Property="FontSize" Value="12"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- Paso de la tarea actual -->
-        <DataTemplate x:Key="StepTemplate" DataType="{x:Type m:TaskStep}">
-            <Grid Margin="0,2">
+        <!-- Línea de la lista de tareas: solo icono + texto -->
+        <DataTemplate x:Key="TaskLineTemplate" DataType="{x:Type m:TaskLine}">
+            <Grid x:Name="Root" Margin="0,2" ToolTip="{Binding Detail}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="18"/>
+                    <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Ic" Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="11"
-                           Foreground="{StaticResource TextSecondary}" Margin="0,2,0,0"/>
-                <TextBlock x:Name="Tx" Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" FontSize="11.5" Foreground="{StaticResource TextSecondary}"/>
+                <TextBlock x:Name="Ic" Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="9.5"
+                           Foreground="#6E6E7C" Margin="0,2,0,0"/>
+                <TextBlock x:Name="Tx" Grid.Column="1" Text="{Binding Text}" FontSize="11" Foreground="#9A9AA8"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
             </Grid>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:StepStatus.InProgress}">
-                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource TextPrimary}"/>
-                    <Setter TargetName="Tx" Property="FontWeight" Value="SemiBold"/>
-                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                <DataTrigger Binding="{Binding IsStep}" Value="True">
+                    <Setter TargetName="Root" Property="Margin" Value="12,1,0,1"/>
+                    <Setter TargetName="Tx" Property="FontSize" Value="10.5"/>
                 </DataTrigger>
-                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:StepStatus.Completed}">
-                    <Setter TargetName="Tx" Property="TextDecorations" Value="Strikethrough"/>
-                    <Setter TargetName="Tx" Property="Opacity" Value="0.6"/>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Done}">
                     <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#6E6E7C"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.StepDone}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#6E6E7C"/>
+                    <Setter TargetName="Tx" Property="TextDecorations" Value="Strikethrough"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Failed}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Running}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.StepActive}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- Tarea pendiente -->
-        <DataTemplate x:Key="PendingTemplate" DataType="{x:Type m:AgentTask}">
-            <Border Margin="0,0,0,4" Padding="8,6" CornerRadius="8" Background="{StaticResource Surface2}" ToolTip="{Binding Prompt}">
+        <!-- Tarjeta de agente en la vista general -->
+        <DataTemplate x:Key="AgentRow" DataType="{x:Type s:AgentSession}">
+            <Border x:Name="Row" Padding="8,6" Margin="0,1" CornerRadius="12" Background="Transparent" Cursor="Hand"
+                    MouseLeftButtonUp="Row_Click" MouseRightButtonUp="Row_RightClick">
                 <Grid>
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" MaxHeight="34" TextTrimming="CharacterEllipsis"
-                               FontSize="11.5" Foreground="{StaticResource TextPrimary}"/>
-                    <Button Grid.Column="1" Style="{StaticResource IconButton}" Width="20" Height="20" FontSize="9"
-                            Content="&#xE711;" ToolTip="Quitar de la cola" Click="RemoveQueued_Click" VerticalAlignment="Top"/>
+                    <c:MochiView Width="34" Height="34" Interactive="False"
+                                 BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                        <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="#ECECF2" FontWeight="SemiBold"/>
+                            <Run Text="  "/><Run Text="{Binding SubLabel, Mode=OneWay}" Foreground="#6E6E7C"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding OverviewLine}" FontSize="11.5" Foreground="#9A9AA8" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                    </StackPanel>
+                    <Border Grid.Column="2" CornerRadius="8" Padding="7,2" Background="#1AFFFFFF" VerticalAlignment="Center"
+                            Visibility="{Binding OverviewBadge, Converter={StaticResource EmptyToVis}}">
+                        <TextBlock Text="{Binding OverviewBadge}" FontSize="10.5" Foreground="#C8C8D2"/>
+                    </Border>
                 </Grid>
             </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="#14FFFFFF"/>
+                </Trigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- Tarea completada -->
-        <DataTemplate x:Key="DoneTemplate" DataType="{x:Type m:AgentTask}">
-            <Grid Margin="0,2,0,4" ToolTip="{Binding Prompt}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="18"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Ic" Text="{Binding StatusIcon}" FontFamily="{StaticResource IconFont}" FontSize="11"
-                           Foreground="#4DD0A1" Margin="0,2,0,0"/>
-                <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" FontSize="11.5"
-                           Foreground="{StaticResource TextSecondary}"/>
-                <TextBlock Grid.Column="2" Text="{Binding TimeLabel}" FontSize="10" Foreground="#5E5E6A" Margin="6,1,0,0"/>
-            </Grid>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:AgentTaskStatus.Failed}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:AgentTaskStatus.Cancelled}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource TextSecondary}"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
+        <!-- Mini personaje (pila del principal en la vista general) -->
+        <DataTemplate x:Key="PeekMini" DataType="{x:Type s:AgentSession}">
+            <c:MochiView Width="22" Height="22" Margin="-7,0,0,0" Interactive="False" BodyColor="{Binding Color}" State="{Binding State}"/>
         </DataTemplate>
     </Window.Resources>
 
@@ -155,7 +176,7 @@
             </Border.Effect>
             <Grid ClipToBounds="True">
 
-                <!-- ============ Modo píldora ============ -->
+                <!-- ============ Píldora ============ -->
                 <Grid x:Name="CollapsedView" Margin="14,0,14,4" MouseLeftButtonUp="Collapsed_Click">
                     <StackPanel x:Name="CollapsedContent" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <StackPanel x:Name="CollapsedAgents" Orientation="Horizontal" VerticalAlignment="Center"/>
@@ -164,7 +185,7 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- ============ Modo aviso (banner) ============ -->
+                <!-- ============ Aviso ============ -->
                 <Grid x:Name="BannerView" Visibility="Collapsed" Opacity="0" Margin="16,8,16,10" Cursor="Hand"
                       MouseLeftButtonUp="Banner_Click">
                     <Grid.ColumnDefinitions>
@@ -180,238 +201,223 @@
                     <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Click="BannerClose_Click" ToolTip="Cerrar"/>
                 </Grid>
 
-                <!-- ============ Modo panel ============ -->
-                <Grid x:Name="ExpandedView" Visibility="Collapsed" Opacity="0" Margin="14,8,14,14">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- Cabecera: principal + grupos -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Border x:Name="PrimaryHost" VerticalAlignment="Center"/>
-                        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
-                                      PreviewMouseWheel="Tabs_MouseWheel" Margin="6,0,0,0" VerticalAlignment="Center">
-                            <StackPanel x:Name="GroupsHost" Orientation="Horizontal" VerticalAlignment="Center"/>
-                        </ScrollViewer>
-                        <StackPanel Grid.Column="2" Orientation="Vertical" VerticalAlignment="Top" Margin="6,2,0,0">
-                            <Button x:Name="AddButton" Style="{StaticResource IconButton}" Content="&#xE710;" ToolTip="Nuevo agente" Click="AddAgentMenu_Click"/>
-                            <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#xE718;" ToolTip="Fijar panel abierto" Click="Pin_Click"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE823;" ToolTip="Recordatorios" Click="Reminders_Click"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Línea de estado -->
-                    <Grid Grid.Row="1" Margin="4,6,0,6" Visibility="{Binding Converter={StaticResource NullToVis}}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Color, Converter={StaticResource ColorBrush}}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
-                            <TextBlock FontSize="12" VerticalAlignment="Center">
-                                <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                <Run Text="  " /><Run Text="{Binding KindLabel, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
-                                <Run Text=" · " Foreground="{StaticResource TextSecondary}"/>
-                            </TextBlock>
-                            <!-- Carpeta (agentes de código) -->
-                            <Border Visibility="{Binding HasFolder, Converter={StaticResource BoolToVis}}" Background="#1AFFFFFF"
-                                    CornerRadius="8" Padding="7,2" Margin="0,0,6,0" ToolTip="{Binding FolderPath}" Cursor="Hand"
-                                    MouseLeftButtonUp="OpenFolder_Click">
-                                <TextBlock FontSize="11.5" Foreground="{StaticResource TextPrimary}">
-                                    <Run Text="&#xE8B7;" FontFamily="{StaticResource IconFont}"/><Run Text="  "/><Run Text="{Binding FolderName, Mode=OneWay}"/>
-                                </TextBlock>
-                            </Border>
-                            <TextBlock Text="{Binding StatusLine}" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal">
-                            <Button Style="{StaticResource IconButton}" Content="&#xE70F;" ToolTip="Editar agente" Click="EditSelected_Click"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE8F4;" ToolTip="Nueva conversación" Click="NewChat_Click"
-                                    Visibility="{Binding IsConversational, Converter={StaticResource BoolToVis}}"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE8BB;" ToolTip="Cerrar este agente" Click="CloseAgent_Click"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Cuerpo: chat + barra lateral -->
-                    <Grid Grid.Row="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="220"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border Background="{StaticResource Surface1}" CornerRadius="16" Padding="10,6,4,6">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-
-                                <!-- Tarjeta del agente programado -->
-                                <Border Margin="0,4,6,6" Padding="12,10" CornerRadius="12" Background="{StaticResource Surface2}"
-                                        Visibility="{Binding IsScheduled, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitle}" Margin="0,0,0,4" Text="INSTRUCCIÓN"/>
-                                        <TextBlock Text="{Binding Profile.Schedule.Instruction}" TextWrapping="Wrap" FontSize="12.5"
-                                                   Foreground="{StaticResource TextPrimary}" MaxHeight="80" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Margin="0,8,0,0" FontSize="11.5" Foreground="{StaticResource TextSecondary}">
-                                            <Run Text="&#xE787;" FontFamily="{StaticResource IconFont}"/><Run Text="  "/><Run Text="{Binding ScheduleSummary, Mode=OneWay}"/>
-                                        </TextBlock>
-                                        <TextBlock Margin="0,3,0,0" FontSize="11.5" Foreground="{StaticResource TextSecondary}">
-                                            <Run Text="{Binding NextRunLabel, Mode=OneWay}" Foreground="{StaticResource TextPrimary}"/><Run Text="   ·   "/><Run Text="{Binding LastRunLabel, Mode=OneWay}"/>
-                                        </TextBlock>
-                                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                            <Button Style="{StaticResource PillButton}" Click="RunNow_Click" Margin="0,0,6,0">
-                                                <TextBlock><Run Text="&#xE768;" FontFamily="{StaticResource IconFont}"/><Run Text="  Ejecutar ahora"/></TextBlock>
-                                            </Button>
-                                            <Button x:Name="PauseButton" Style="{StaticResource PillButton}" Click="TogglePause_Click" Margin="0,0,6,0"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
-
-                                <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                                    <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
-                                </ScrollViewer>
-
-                                <StackPanel x:Name="EmptyChat" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                                    <TextBlock x:Name="EmptyTitle" HorizontalAlignment="Center" FontSize="14" Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="EmptyHint" HorizontalAlignment="Center" Margin="0,6,0,0" FontSize="11.5" Foreground="#5E5E6A" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380"/>
-                                </StackPanel>
-
-                                <!-- Selección de carpeta (agente de código sin carpeta) -->
-                                <Border x:Name="FolderDrop" Grid.Row="0" Grid.RowSpan="2" Margin="8" CornerRadius="16" BorderThickness="2"
-                                        BorderBrush="#33FFFFFF" Background="#08FFFFFF"
-                                        Visibility="{Binding NeedsFolder, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center"
-                                                   Foreground="{Binding Color, Converter={StaticResource ColorBrush}}"/>
-                                        <TextBlock Text="Arrastra aquí la carpeta del proyecto" Margin="0,12,0,4" FontSize="15" FontWeight="SemiBold"
-                                                   HorizontalAlignment="Center" Foreground="{StaticResource TextPrimary}"/>
-                                        <TextBlock Text="Los CLI de este agente se abrirán ahí. Después no se podrá cambiar:&#x0a;para otra carpeta, cierra este agente y abre uno nuevo."
-                                                   FontSize="11.5" TextAlignment="Center" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
-                                        <Button Style="{StaticResource PillButton}" Content="Seleccionar carpeta…" Margin="0,14,0,0" HorizontalAlignment="Center"
-                                                Click="PickFolderForSelected_Click"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                        </Border>
-
-                        <!-- Barra lateral de tareas -->
-                        <Border Grid.Column="1" Margin="8,0,0,0" Background="{StaticResource Surface1}" CornerRadius="16" Padding="10,4,6,8">
-                            <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitle}" Text="AHORA"/>
-                                    <Border Padding="8,7" CornerRadius="10" Background="{StaticResource Surface2}"
-                                            Visibility="{Binding CurrentTask, Converter={StaticResource NullToVis}}">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding CurrentTask.Title}" TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource TextPrimary}" ToolTip="{Binding CurrentTask.Prompt}"/>
-                                            <TextBlock Text="{Binding CurrentTask.StepsSummary}" FontSize="10.5" Foreground="{StaticResource TextSecondary}" Margin="0,2,0,4"
-                                                       Visibility="{Binding CurrentTask.HasSteps, Converter={StaticResource BoolToVis}}"/>
-                                            <ItemsControl ItemsSource="{Binding CurrentTask.Steps}" ItemTemplate="{StaticResource StepTemplate}"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <TextBlock Text="Sin tarea en curso" FontSize="11.5" Foreground="#5E5E6A" Margin="2,0,0,0"
-                                               Visibility="{Binding CurrentTask, Converter={StaticResource InvNullToVis}}"/>
-
-                                    <StackPanel Visibility="{Binding IsConversational, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Style="{StaticResource SectionTitle}">
-                                            <Run Text="PENDIENTES · "/><Run Text="{Binding PendingCount, Mode=OneWay}"/>
-                                        </TextBlock>
-                                        <ItemsControl ItemsSource="{Binding PendingTasks}" ItemTemplate="{StaticResource PendingTemplate}"/>
-                                        <Button Style="{StaticResource PillButton}" Content="Reanudar cola" Margin="0,2,0,6" HorizontalAlignment="Left"
-                                                Visibility="{Binding CanResumeQueue, Converter={StaticResource BoolToVis}}" Click="ResumeQueue_Click"/>
-                                        <Border CornerRadius="8" Background="#0DFFFFFF" Padding="6,2" Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
-                                            <Grid>
-                                                <TextBox x:Name="TaskInput" Style="{StaticResource ChatInput}" FontSize="11.5" MinHeight="26" AcceptsReturn="False"
-                                                         PreviewKeyDown="TaskInput_PreviewKeyDown" TextChanged="TaskInput_TextChanged"/>
-                                                <TextBlock x:Name="TaskPlaceholder" Text="+ Añadir tarea a la cola" IsHitTestVisible="False" FontSize="11.5"
-                                                           Foreground="#5E5E6A" VerticalAlignment="Center" Margin="2,0"/>
-                                            </Grid>
-                                        </Border>
-                                    </StackPanel>
-
-                                    <Grid Margin="0,4,0,0">
-                                        <TextBlock Style="{StaticResource SectionTitle}">
-                                            <Run Text="COMPLETADAS · "/><Run Text="{Binding CompletedCount, Mode=OneWay}"/>
-                                        </TextBlock>
-                                        <Button Style="{StaticResource IconButton}" Width="22" Height="22" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                                Content="&#xE74D;" ToolTip="Vaciar historial" Click="ClearCompleted_Click"
-                                                Visibility="{Binding CompletedCount, Converter={StaticResource ZeroToVis}}"/>
-                                    </Grid>
-                                    <ItemsControl ItemsSource="{Binding CompletedTasks}" ItemTemplate="{StaticResource DoneTemplate}"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Border>
-
-                        <!-- Sin agentes -->
-                        <StackPanel x:Name="NoAgents" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
-                            <TextBlock Text="No hay agentes" FontSize="15" HorizontalAlignment="Center" Foreground="{StaticResource TextPrimary}"/>
-                            <TextBlock Text="Arrastra una carpeta para crear un agente de código, o usa +" FontSize="12" Margin="0,6,0,0"
-                                       HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Tarjeta de aprobación -->
-                    <Border Grid.Row="3" Margin="0,8,0,0" Padding="12,10" CornerRadius="14"
-                            Background="{StaticResource AlertBg}" BorderBrush="{StaticResource AlertBorder}" BorderThickness="1"
-                            Visibility="{Binding PendingApproval, Converter={StaticResource NullToVis}}">
-                        <StackPanel>
-                            <TextBlock FontSize="12.5" Foreground="{StaticResource TextPrimary}">
-                                <Run Text="&#xE72E;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AlertBorder}"/>
-                                <Run Text="  "/><Run Text="{Binding Profile.Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                <Run Text=" quiere usar "/><Run Text="{Binding PendingApproval.Tool, Mode=OneWay}" FontWeight="SemiBold"/>
-                            </TextBlock>
-                            <Border Margin="0,8,0,8" Padding="8,6" CornerRadius="8" Background="#40000000" MaxHeight="130">
-                                <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto">
-                                    <TextBox Style="{StaticResource SelectableText}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
-                                             Text="{Binding PendingApproval.Detail, Mode=OneWay}"/>
-                                </ScrollViewer>
-                            </Border>
+                <!-- ============ Vista general: solo información de los agentes ============ -->
+                <Grid x:Name="OverviewView" Visibility="Collapsed" Opacity="0" Margin="12,6,12,12">
+                    <StackPanel x:Name="OverviewContent">
+                        <Grid Margin="4,0,0,4">
+                            <TextBlock Text="AGENTES" FontSize="10.5" FontWeight="SemiBold" Foreground="#6E6E7C" VerticalAlignment="Center"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Style="{StaticResource PillButton}" Content="Denegar" Click="Deny_Click" Margin="0,0,6,0"/>
-                                <Button Style="{StaticResource PillButton}" Content="Permitir siempre" Click="AllowAlways_Click" Margin="0,0,6,0"/>
-                                <Button Style="{StaticResource PillButton}" Content="Permitir" Click="Allow_Click"
-                                        Background="{StaticResource AlertBorder}" Foreground="#1A1300" FontWeight="SemiBold"/>
+                                <Button x:Name="AddButton" Style="{StaticResource IconButton}" Content="&#xE710;" ToolTip="Nuevo agente" Click="AddAgentMenu_Click"/>
+                                <Button Style="{StaticResource IconButton}" Content="&#xE823;" ToolTip="Recordatorios" Click="Reminders_Click"/>
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Entrada -->
-                    <Border x:Name="InputBar" Grid.Row="4" Margin="0,8,0,0" Padding="6,4" CornerRadius="18" Background="{StaticResource Surface2}"
-                            BorderThickness="1" BorderBrush="#14FFFFFF" Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
-                            <Grid Grid.Column="1" Margin="4,0">
-                                <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
-                                         Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
-                                <TextBlock x:Name="Placeholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
-                                           Foreground="#5E5E6A" FontSize="13.5">
-                                    <Run Text="Escribe a "/><Run Text="{Binding Profile.Name, Mode=OneWay}"/><Run Text="…  (si está ocupado, se encola)"/>
-                                </TextBlock>
-                            </Grid>
-                            <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener la tarea actual" Click="Stop_Click"
-                                    Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
-                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
-                            <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE724;" ToolTip="Enviar (Enter)" Click="Send_Click"
-                                    Foreground="{Binding Color, Converter={StaticResource ColorBrush}}" VerticalAlignment="Bottom"/>
                         </Grid>
-                    </Border>
+
+                        <!-- Principal + pila de agentes de código -->
+                        <Border x:Name="PrincipalCard" Padding="8,8" CornerRadius="14" Background="#10FFFFFF" Cursor="Hand"
+                                MouseLeftButtonUp="Principal_Click" MouseRightButtonUp="Row_RightClick">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid>
+                                    <c:MochiView Width="46" Height="46" Interactive="False"
+                                                 BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                                    <TextBlock Text="&#xE735;" FontFamily="{StaticResource IconFont}" FontSize="9" Foreground="{StaticResource AlertBorder}"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" ToolTip="Agente principal"/>
+                                </Grid>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock FontSize="13.5" TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="#ECECF2" FontWeight="SemiBold"/>
+                                        <Run Text="  "/><Run Text="{Binding SubLabel, Mode=OneWay}" Foreground="#6E6E7C"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding OverviewLine}" FontSize="12" Foreground="#9A9AA8" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border CornerRadius="8" Padding="7,2" Background="#1AFFFFFF" Margin="0,0,8,0"
+                                            Visibility="{Binding OverviewBadge, Converter={StaticResource EmptyToVis}}">
+                                        <TextBlock Text="{Binding OverviewBadge}" FontSize="10.5" Foreground="#C8C8D2"/>
+                                    </Border>
+                                    <StackPanel x:Name="PeekHost" Orientation="Horizontal" VerticalAlignment="Center" Margin="7,0,0,0">
+                                        <ItemsControl x:Name="PeekList" ItemTemplate="{StaticResource PeekMini}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                        <TextBlock x:Name="Chevron" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="10"
+                                                   Foreground="#9A9AA8" VerticalAlignment="Center" Margin="8,0,2,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Agentes de código desglosados (al pulsar el principal) -->
+                        <ItemsControl x:Name="CodeList" ItemTemplate="{StaticResource AgentRow}" Margin="22,2,0,4" Visibility="Collapsed"/>
+
+                        <!-- Resto de agentes -->
+                        <ItemsControl x:Name="OthersList" ItemTemplate="{StaticResource AgentRow}" Margin="0,4,0,0"/>
+
+                        <TextBlock x:Name="NoAgents" Visibility="Collapsed" Margin="8,10" FontSize="12" Foreground="#9A9AA8" TextWrapping="Wrap"
+                                   Text="No hay agentes. Arrastra una carpeta para crear un agente de código, o usa +."/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ============ Chat (agentes interactivos) ============ -->
+                <Border x:Name="ChatView" Visibility="Collapsed" Opacity="0" Background="{StaticResource ChatBackground}" CornerRadius="0,0,26,26">
+                    <Grid Margin="10,6,14,12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Barra superior -->
+                        <Grid Grid.ColumnSpan="2" Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <Border CornerRadius="15" Background="#2C2C33">
+                                    <Button Style="{StaticResource TopPill}" Content="&#xE8BD;" ToolTip="Volver a los agentes" Click="BackToOverview_Click"
+                                            Foreground="#ECECF2"/>
+                                </Border>
+                                <Button Style="{StaticResource TopPill}" Content="&#xE710;" ToolTip="Nueva conversación" Click="NewChat_Click" Margin="4,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#xE718;" ToolTip="Fijar panel abierto" Click="Pin_Click"/>
+                                <Button Style="{StaticResource IconButton}" Content="&#xE8BB;" ToolTip="Cerrar este agente" Click="CloseAgent_Click"/>
+                                <Button Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Ajustes del agente" Click="EditSelected_Click" FontSize="15"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Lista de tareas (izquierda, mínima) -->
+                        <ScrollViewer Grid.Row="1" Grid.RowSpan="2" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
+                                      Padding="2,4,10,70">
+                            <ItemsControl ItemsSource="{Binding TaskLines}" ItemTemplate="{StaticResource TaskLineTemplate}"/>
+                        </ScrollViewer>
+
+                        <!-- Personaje asomándose abajo a la izquierda -->
+                        <c:MochiView x:Name="ChatMochi" Grid.Row="2" Grid.RowSpan="2" Width="64" Height="64" HorizontalAlignment="Left"
+                                     VerticalAlignment="Bottom" Margin="-30,0,0,-6"
+                                     BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+
+                        <!-- Conversación -->
+                        <Grid Grid.Row="1" Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Píldora de contexto -->
+                            <Border HorizontalAlignment="Left" CornerRadius="13" Background="#2C2C33" Padding="10,4,12,4" Margin="0,0,0,6"
+                                    ToolTip="{Binding FolderPath}" Cursor="Hand" MouseLeftButtonUp="OpenFolder_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="7" Height="7" Fill="{Binding Color, Converter={StaticResource ColorBrush}}" VerticalAlignment="Center"/>
+                                    <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="#ECECF2" VerticalAlignment="Center">
+                                        <Run Text="{Binding Profile.Name, Mode=OneWay}"/><Run Text=" · " Foreground="#9A9AA8"/><Run Text="{Binding ContextLabel, Mode=OneWay}" Foreground="#9A9AA8"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                                <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
+                            </ScrollViewer>
+
+                            <TextBlock x:Name="EmptyChat" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="13"
+                                       Foreground="#6E6E7C" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380" IsHitTestVisible="False"/>
+
+                            <!-- Elegir carpeta (agente de código sin carpeta) -->
+                            <Border Grid.Row="1" CornerRadius="16" BorderThickness="1.5" BorderBrush="#33FFFFFF" Background="#08FFFFFF"
+                                    Visibility="{Binding NeedsFolder, Converter={StaticResource BoolToVis}}">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" FontSize="30" HorizontalAlignment="Center"
+                                               Foreground="{Binding Color, Converter={StaticResource ColorBrush}}"/>
+                                    <TextBlock Text="Arrastra aquí la carpeta del proyecto" Margin="0,10,0,4" FontSize="14" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Foreground="#ECECF2"/>
+                                    <TextBlock Text="Los CLI se abrirán ahí. No se podrá cambiar: para otra carpeta, cierra este agente y abre uno nuevo."
+                                               FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360" Foreground="#9A9AA8"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Seleccionar carpeta…" Margin="0,12,0,0" HorizontalAlignment="Center"
+                                            Click="PickFolderForSelected_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Aprobación -->
+                        <Border Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Padding="12,10" CornerRadius="14"
+                                Background="{StaticResource AlertBg}" BorderBrush="{StaticResource AlertBorder}" BorderThickness="1"
+                                Visibility="{Binding PendingApproval, Converter={StaticResource NullToVis}}">
+                            <StackPanel>
+                                <TextBlock FontSize="12.5" Foreground="{StaticResource TextPrimary}">
+                                    <Run Text="&#xE72E;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AlertBorder}"/>
+                                    <Run Text="  "/><Run Text="{Binding Profile.Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                    <Run Text=" quiere usar "/><Run Text="{Binding PendingApproval.Tool, Mode=OneWay}" FontWeight="SemiBold"/>
+                                </TextBlock>
+                                <Border Margin="0,8,0,8" Padding="8,6" CornerRadius="8" Background="#40000000" MaxHeight="120">
+                                    <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto">
+                                        <TextBox Style="{StaticResource SelectableText}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                                 Text="{Binding PendingApproval.Detail, Mode=OneWay}"/>
+                                    </ScrollViewer>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Style="{StaticResource PillButton}" Content="Denegar" Click="Deny_Click" Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Permitir siempre" Click="AllowAlways_Click" Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Permitir" Click="Allow_Click"
+                                            Background="{StaticResource AlertBorder}" Foreground="#1A1300" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Entrada -->
+                        <Border Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="8,4" CornerRadius="20" Background="#1EFFFFFF"
+                                Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Margin="6,0">
+                                    <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
+                                             Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
+                                    <TextBlock x:Name="Placeholder" Text="Continuar…" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
+                                               Foreground="#6E6E7C" FontSize="13.5"/>
+                                </Grid>
+                                <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
+                                        Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
+                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+                                <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- ============ Barra informativa (agentes no interactivos) ============ -->
+                <Grid x:Name="InfoView" Visibility="Collapsed" Opacity="0" Margin="16,8,12,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <c:MochiView Width="54" Height="54" VerticalAlignment="Center" BodyColor="{Binding Color}" State="{Binding State}"/>
+                    <StackPanel Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
+                        <TextBlock FontSize="12.5">
+                            <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="#ECECF2" FontWeight="SemiBold"/>
+                            <Run Text="  "/><Run Text="{Binding ScheduleSummary, Mode=OneWay}" Foreground="#6E6E7C"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding InfoLine}" FontSize="12.5" Foreground="#D6D6DE" TextWrapping="Wrap" MaxHeight="54"
+                                   TextTrimming="CharacterEllipsis" Margin="0,4,0,4"/>
+                        <TextBlock FontSize="11" Foreground="#8C8C99">
+                            <Run Text="{Binding LastOutputTimeLabel, Mode=OneWay}"/><Run Text="   "/><Run Text="{Binding NextRunLabel, Mode=OneWay}" Foreground="#C8C8D2"/>
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource IconButton}" Content="&#xE8BD;" ToolTip="Volver a los agentes" Click="BackToOverview_Click"/>
+                        <Button Style="{StaticResource IconButton}" Content="&#xE768;" ToolTip="Ejecutar ahora" Click="RunNow_Click"/>
+                        <Button x:Name="PauseButton" Style="{StaticResource IconButton}" Click="TogglePause_Click"/>
+                        <Button Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Ajustes del agente" Click="EditSelected_Click"/>
+                    </StackPanel>
                 </Grid>
             </Grid>
         </Border>

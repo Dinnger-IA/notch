@@ -188,6 +188,26 @@ namespace CoucouWin.Models
 
     // ------------------------------------------------------------------ tareas
     public enum AgentTaskStatus { Pending, Running, Done, Failed, Cancelled }
+
+    /// <summary>Tono visual de una línea de la lista de tareas (solo icono + color).</summary>
+    public enum TaskTone { Done, Failed, Cancelled, Running, Pending, StepDone, StepActive, StepPending }
+
+    /// <summary>Una línea de la lista lateral: tarea o paso de la tarea actual.</summary>
+    public sealed class TaskLine
+    {
+        public string Text { get; init; } = "";
+        public string Detail { get; init; } = "";
+        public TaskTone Tone { get; init; }
+        public bool IsStep => Tone is TaskTone.StepDone or TaskTone.StepActive or TaskTone.StepPending;
+        public string Icon => Tone switch
+        {
+            TaskTone.Done or TaskTone.StepDone => "\uE73E",      // ✓
+            TaskTone.Failed => "\uE783",                         // !
+            TaskTone.Cancelled => "\uE711",                      // ×
+            TaskTone.Running or TaskTone.StepActive => "\uE768", // ▶
+            _ => "\uEA3A"                                         // ○
+        };
+    }
     public enum StepStatus { Pending, InProgress, Completed }
 
     /// <summary>Un paso dentro de una tarea (viene de TodoWrite / todo_list del CLI).</summary>
