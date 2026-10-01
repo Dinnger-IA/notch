@@ -6,58 +6,27 @@
         xmlns:m="clr-namespace:CoucouWin.Models"
         Title="Coucou" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
-        Width="640" Height="720" FontFamily="{StaticResource UiFont}"
+        Width="840" Height="740" FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True">
 
     <Window.Resources>
         <v:NullToVisibilityConverter x:Key="NullToVis"/>
+        <v:NullToVisibilityConverter x:Key="InvNullToVis" Invert="True"/>
         <v:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <v:BoolToVisibilityConverter x:Key="InvBoolToVis" Invert="True"/>
         <v:ColorToBrushConverter x:Key="ColorBrush"/>
+        <v:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
 
-        <!-- Personaje mini (modo píldora) -->
-        <DataTemplate x:Key="MiniAgent">
-            <c:MochiView Width="30" Height="30" Margin="2,0" Interactive="True"
-                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"
-                         ToolTip="{Binding Profile.Name}"/>
-        </DataTemplate>
-
-        <!-- Pestaña de agente (modo panel) -->
-        <DataTemplate x:Key="AgentTab">
-            <Border x:Name="Tab" Width="74" Height="84" CornerRadius="14" Margin="2,0" Background="Transparent"
-                    Cursor="Hand" MouseLeftButtonUp="AgentTab_Click" AllowDrop="True" DragEnter="AgentTab_DragEnter" Drop="AgentTab_Drop">
-                <Border.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Editar agente…" Click="MenuEdit_Click"/>
-                        <MenuItem Header="Nueva conversación" Click="MenuNewChat_Click"/>
-                        <MenuItem Header="Duplicar" Click="MenuDuplicate_Click"/>
-                        <Separator/>
-                        <MenuItem Header="Eliminar" Click="MenuDelete_Click"/>
-                    </ContextMenu>
-                </Border.ContextMenu>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <c:MochiView Width="54" Height="54" Margin="0,4,0,0" BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
-                    <TextBlock Grid.Row="1" Text="{Binding Profile.Name}" HorizontalAlignment="Center" Margin="0,0,0,6"
-                               FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
-                    <Ellipse Width="7" Height="7" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,10,0"
-                             Fill="{Binding Color, Converter={StaticResource ColorBrush}}"
-                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
-                </Grid>
-            </Border>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter TargetName="Tab" Property="Background" Value="#1CFFFFFF"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Margin" Value="2,10,0,6"/>
+        </Style>
 
         <!-- Mensaje del chat -->
         <DataTemplate x:Key="Message" DataType="{x:Type m:ChatMessage}">
-            <Border x:Name="Bubble" Margin="0,3" Padding="12,8" CornerRadius="14" MaxWidth="440"
+            <Border x:Name="Bubble" Margin="0,3" Padding="12,8" CornerRadius="14" MaxWidth="420"
                     HorizontalAlignment="Left" Background="{StaticResource Surface2}">
                 <Border.ContextMenu>
                     <ContextMenu>
@@ -74,8 +43,6 @@
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.User}">
                     <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
                     <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubble}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.User}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
@@ -85,7 +52,7 @@
                     <Setter TargetName="Bubble" Property="Background" Value="Transparent"/>
                     <Setter TargetName="Bubble" Property="Padding" Value="4,1"/>
                     <Setter TargetName="Bubble" Property="Margin" Value="0,0"/>
-                    <Setter TargetName="Bubble" Property="MaxWidth" Value="540"/>
+                    <Setter TargetName="Bubble" Property="MaxWidth" Value="520"/>
                     <Setter TargetName="Txt" Property="FontFamily" Value="{StaticResource MonoFont}"/>
                     <Setter TargetName="Txt" Property="FontSize" Value="11.5"/>
                     <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource TextSecondary}"/>
@@ -110,11 +77,76 @@
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <!-- Paso de la tarea actual -->
+        <DataTemplate x:Key="StepTemplate" DataType="{x:Type m:TaskStep}">
+            <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="18"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Ic" Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="11"
+                           Foreground="{StaticResource TextSecondary}" Margin="0,2,0,0"/>
+                <TextBlock x:Name="Tx" Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" FontSize="11.5" Foreground="{StaticResource TextSecondary}"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:StepStatus.InProgress}">
+                    <Setter TargetName="Tx" Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                    <Setter TargetName="Tx" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:StepStatus.Completed}">
+                    <Setter TargetName="Tx" Property="TextDecorations" Value="Strikethrough"/>
+                    <Setter TargetName="Tx" Property="Opacity" Value="0.6"/>
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Tarea pendiente -->
+        <DataTemplate x:Key="PendingTemplate" DataType="{x:Type m:AgentTask}">
+            <Border Margin="0,0,0,4" Padding="8,6" CornerRadius="8" Background="{StaticResource Surface2}" ToolTip="{Binding Prompt}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" MaxHeight="34" TextTrimming="CharacterEllipsis"
+                               FontSize="11.5" Foreground="{StaticResource TextPrimary}"/>
+                    <Button Grid.Column="1" Style="{StaticResource IconButton}" Width="20" Height="20" FontSize="9"
+                            Content="&#xE711;" ToolTip="Quitar de la cola" Click="RemoveQueued_Click" VerticalAlignment="Top"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Tarea completada -->
+        <DataTemplate x:Key="DoneTemplate" DataType="{x:Type m:AgentTask}">
+            <Grid Margin="0,2,0,4" ToolTip="{Binding Prompt}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="18"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Ic" Text="{Binding StatusIcon}" FontFamily="{StaticResource IconFont}" FontSize="11"
+                           Foreground="#4DD0A1" Margin="0,2,0,0"/>
+                <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" FontSize="11.5"
+                           Foreground="{StaticResource TextSecondary}"/>
+                <TextBlock Grid.Column="2" Text="{Binding TimeLabel}" FontSize="10" Foreground="#5E5E6A" Margin="6,1,0,0"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:AgentTaskStatus.Failed}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static m:AgentTaskStatus.Cancelled}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
         <Border x:Name="Shell" VerticalAlignment="Top" HorizontalAlignment="Center"
-                Width="180" Height="40" CornerRadius="0,0,22,22"
+                Width="180" Height="44" CornerRadius="0,0,22,22"
                 Background="{StaticResource NotchBg}" BorderBrush="{StaticResource NotchBorder}" BorderThickness="1,0,1,1"
                 AllowDrop="True" MouseEnter="Shell_MouseEnter" MouseLeave="Shell_MouseLeave"
                 DragEnter="Shell_DragEnter" DragLeave="Shell_DragLeave" Drop="Shell_Drop">
@@ -126,18 +158,14 @@
                 <!-- ============ Modo píldora ============ -->
                 <Grid x:Name="CollapsedView" Margin="14,0,14,4" MouseLeftButtonUp="Collapsed_Click">
                     <StackPanel x:Name="CollapsedContent" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <ItemsControl x:Name="MiniAgents" ItemTemplate="{StaticResource MiniAgent}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                        <TextBlock x:Name="CollapsedStatus" Margin="10,0,0,0" VerticalAlignment="Center" MaxWidth="220"
+                        <StackPanel x:Name="CollapsedAgents" Orientation="Horizontal" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="CollapsedStatus" Margin="10,0,0,0" VerticalAlignment="Center" MaxWidth="240"
                                    FontSize="12" Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </Grid>
 
                 <!-- ============ Modo aviso (banner) ============ -->
-                <Grid x:Name="BannerView" Visibility="Collapsed" Opacity="0" Margin="16,6,16,10" Cursor="Hand"
+                <Grid x:Name="BannerView" Visibility="Collapsed" Opacity="0" Margin="16,8,16,10" Cursor="Hand"
                       MouseLeftButtonUp="Banner_Click">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -152,7 +180,7 @@
                     <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Click="BannerClose_Click" ToolTip="Cerrar"/>
                 </Grid>
 
-                <!-- ============ Modo panel (chat) ============ -->
+                <!-- ============ Modo panel ============ -->
                 <Grid x:Name="ExpandedView" Visibility="Collapsed" Opacity="0" Margin="14,8,14,14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -162,63 +190,176 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Cabecera: personajes + acciones -->
+                    <!-- Cabecera: principal + grupos -->
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" PreviewMouseWheel="Tabs_MouseWheel">
-                            <StackPanel Orientation="Horizontal">
-                                <ItemsControl x:Name="AgentTabs" ItemTemplate="{StaticResource AgentTab}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                                <Button Style="{StaticResource IconButton}" Width="44" Height="44" Margin="4,0,0,10" FontSize="16"
-                                        Content="&#xE710;" ToolTip="Crear un agente nuevo" Click="AddAgent_Click"/>
-                            </StackPanel>
+                        <Border x:Name="PrimaryHost" VerticalAlignment="Center"/>
+                        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                                      PreviewMouseWheel="Tabs_MouseWheel" Margin="6,0,0,0" VerticalAlignment="Center">
+                            <StackPanel x:Name="GroupsHost" Orientation="Horizontal" VerticalAlignment="Center"/>
                         </ScrollViewer>
-                        <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Top" Margin="6,2,0,0">
+                        <StackPanel Grid.Column="2" Orientation="Vertical" VerticalAlignment="Top" Margin="6,2,0,0">
+                            <Button x:Name="AddButton" Style="{StaticResource IconButton}" Content="&#xE710;" ToolTip="Nuevo agente" Click="AddAgentMenu_Click"/>
                             <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#xE718;" ToolTip="Fijar panel abierto" Click="Pin_Click"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE823;" ToolTip="Recordatorios y tareas programadas" Click="Reminders_Click"/>
+                            <Button Style="{StaticResource IconButton}" Content="&#xE823;" ToolTip="Recordatorios" Click="Reminders_Click"/>
                         </StackPanel>
                     </Grid>
 
                     <!-- Línea de estado -->
-                    <Grid Grid.Row="1" Margin="4,6,0,4">
+                    <Grid Grid.Row="1" Margin="4,6,0,6" Visibility="{Binding Converter={StaticResource NullToVis}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Color, Converter={StaticResource ColorBrush}}"/>
-                        <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12">
-                            <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                            <Run Text=" · " Foreground="{StaticResource TextSecondary}"/>
-                            <Run Text="{Binding StatusLine, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
-                        </TextBlock>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
+                            <TextBlock FontSize="12" VerticalAlignment="Center">
+                                <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                <Run Text="  " /><Run Text="{Binding KindLabel, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
+                                <Run Text=" · " Foreground="{StaticResource TextSecondary}"/>
+                            </TextBlock>
+                            <!-- Carpeta (agentes de código) -->
+                            <Border Visibility="{Binding HasFolder, Converter={StaticResource BoolToVis}}" Background="#1AFFFFFF"
+                                    CornerRadius="8" Padding="7,2" Margin="0,0,6,0" ToolTip="{Binding FolderPath}" Cursor="Hand"
+                                    MouseLeftButtonUp="OpenFolder_Click">
+                                <TextBlock FontSize="11.5" Foreground="{StaticResource TextPrimary}">
+                                    <Run Text="&#xE8B7;" FontFamily="{StaticResource IconFont}"/><Run Text="  "/><Run Text="{Binding FolderName, Mode=OneWay}"/>
+                                </TextBlock>
+                            </Border>
+                            <TextBlock Text="{Binding StatusLine}" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
+                        </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal">
                             <Button Style="{StaticResource IconButton}" Content="&#xE70F;" ToolTip="Editar agente" Click="EditSelected_Click"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE8F4;" ToolTip="Nueva conversación" Click="NewChat_Click"/>
+                            <Button Style="{StaticResource IconButton}" Content="&#xE8F4;" ToolTip="Nueva conversación" Click="NewChat_Click"
+                                    Visibility="{Binding IsConversational, Converter={StaticResource BoolToVis}}"/>
+                            <Button Style="{StaticResource IconButton}" Content="&#xE8BB;" ToolTip="Cerrar este agente" Click="CloseAgent_Click"/>
                         </StackPanel>
                     </Grid>
 
-                    <!-- Chat -->
-                    <Border Grid.Row="2" Background="{StaticResource Surface1}" CornerRadius="16" Padding="10,6,4,6">
-                        <Grid>
-                            <ScrollViewer x:Name="ChatScroll" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                                <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
+                    <!-- Cuerpo: chat + barra lateral -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="220"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Background="{StaticResource Surface1}" CornerRadius="16" Padding="10,6,4,6">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Tarjeta del agente programado -->
+                                <Border Margin="0,4,6,6" Padding="12,10" CornerRadius="12" Background="{StaticResource Surface2}"
+                                        Visibility="{Binding IsScheduled, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SectionTitle}" Margin="0,0,0,4" Text="INSTRUCCIÓN"/>
+                                        <TextBlock Text="{Binding Profile.Schedule.Instruction}" TextWrapping="Wrap" FontSize="12.5"
+                                                   Foreground="{StaticResource TextPrimary}" MaxHeight="80" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Margin="0,8,0,0" FontSize="11.5" Foreground="{StaticResource TextSecondary}">
+                                            <Run Text="&#xE787;" FontFamily="{StaticResource IconFont}"/><Run Text="  "/><Run Text="{Binding ScheduleSummary, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <TextBlock Margin="0,3,0,0" FontSize="11.5" Foreground="{StaticResource TextSecondary}">
+                                            <Run Text="{Binding NextRunLabel, Mode=OneWay}" Foreground="{StaticResource TextPrimary}"/><Run Text="   ·   "/><Run Text="{Binding LastRunLabel, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                            <Button Style="{StaticResource PillButton}" Click="RunNow_Click" Margin="0,0,6,0">
+                                                <TextBlock><Run Text="&#xE768;" FontFamily="{StaticResource IconFont}"/><Run Text="  Ejecutar ahora"/></TextBlock>
+                                            </Button>
+                                            <Button x:Name="PauseButton" Style="{StaticResource PillButton}" Click="TogglePause_Click" Margin="0,0,6,0"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                                    <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
+                                </ScrollViewer>
+
+                                <StackPanel x:Name="EmptyChat" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                    <TextBlock x:Name="EmptyTitle" HorizontalAlignment="Center" FontSize="14" Foreground="{StaticResource TextSecondary}"/>
+                                    <TextBlock x:Name="EmptyHint" HorizontalAlignment="Center" Margin="0,6,0,0" FontSize="11.5" Foreground="#5E5E6A" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380"/>
+                                </StackPanel>
+
+                                <!-- Selección de carpeta (agente de código sin carpeta) -->
+                                <Border x:Name="FolderDrop" Grid.Row="0" Grid.RowSpan="2" Margin="8" CornerRadius="16" BorderThickness="2"
+                                        BorderBrush="#33FFFFFF" Background="#08FFFFFF"
+                                        Visibility="{Binding NeedsFolder, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" FontSize="34" HorizontalAlignment="Center"
+                                                   Foreground="{Binding Color, Converter={StaticResource ColorBrush}}"/>
+                                        <TextBlock Text="Arrastra aquí la carpeta del proyecto" Margin="0,12,0,4" FontSize="15" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" Foreground="{StaticResource TextPrimary}"/>
+                                        <TextBlock Text="Los CLI de este agente se abrirán ahí. Después no se podrá cambiar:&#x0a;para otra carpeta, cierra este agente y abre uno nuevo."
+                                                   FontSize="11.5" TextAlignment="Center" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+                                        <Button Style="{StaticResource PillButton}" Content="Seleccionar carpeta…" Margin="0,14,0,0" HorizontalAlignment="Center"
+                                                Click="PickFolderForSelected_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- Barra lateral de tareas -->
+                        <Border Grid.Column="1" Margin="8,0,0,0" Background="{StaticResource Surface1}" CornerRadius="16" Padding="10,4,6,8">
+                            <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="AHORA"/>
+                                    <Border Padding="8,7" CornerRadius="10" Background="{StaticResource Surface2}"
+                                            Visibility="{Binding CurrentTask, Converter={StaticResource NullToVis}}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding CurrentTask.Title}" TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextPrimary}" ToolTip="{Binding CurrentTask.Prompt}"/>
+                                            <TextBlock Text="{Binding CurrentTask.StepsSummary}" FontSize="10.5" Foreground="{StaticResource TextSecondary}" Margin="0,2,0,4"
+                                                       Visibility="{Binding CurrentTask.HasSteps, Converter={StaticResource BoolToVis}}"/>
+                                            <ItemsControl ItemsSource="{Binding CurrentTask.Steps}" ItemTemplate="{StaticResource StepTemplate}"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock Text="Sin tarea en curso" FontSize="11.5" Foreground="#5E5E6A" Margin="2,0,0,0"
+                                               Visibility="{Binding CurrentTask, Converter={StaticResource InvNullToVis}}"/>
+
+                                    <StackPanel Visibility="{Binding IsConversational, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Style="{StaticResource SectionTitle}">
+                                            <Run Text="PENDIENTES · "/><Run Text="{Binding PendingCount, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <ItemsControl ItemsSource="{Binding PendingTasks}" ItemTemplate="{StaticResource PendingTemplate}"/>
+                                        <Button Style="{StaticResource PillButton}" Content="Reanudar cola" Margin="0,2,0,6" HorizontalAlignment="Left"
+                                                Visibility="{Binding CanResumeQueue, Converter={StaticResource BoolToVis}}" Click="ResumeQueue_Click"/>
+                                        <Border CornerRadius="8" Background="#0DFFFFFF" Padding="6,2" Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
+                                            <Grid>
+                                                <TextBox x:Name="TaskInput" Style="{StaticResource ChatInput}" FontSize="11.5" MinHeight="26" AcceptsReturn="False"
+                                                         PreviewKeyDown="TaskInput_PreviewKeyDown" TextChanged="TaskInput_TextChanged"/>
+                                                <TextBlock x:Name="TaskPlaceholder" Text="+ Añadir tarea a la cola" IsHitTestVisible="False" FontSize="11.5"
+                                                           Foreground="#5E5E6A" VerticalAlignment="Center" Margin="2,0"/>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <Grid Margin="0,4,0,0">
+                                        <TextBlock Style="{StaticResource SectionTitle}">
+                                            <Run Text="COMPLETADAS · "/><Run Text="{Binding CompletedCount, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <Button Style="{StaticResource IconButton}" Width="22" Height="22" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                Content="&#xE74D;" ToolTip="Vaciar historial" Click="ClearCompleted_Click"
+                                                Visibility="{Binding CompletedCount, Converter={StaticResource ZeroToVis}}"/>
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{Binding CompletedTasks}" ItemTemplate="{StaticResource DoneTemplate}"/>
+                                </StackPanel>
                             </ScrollViewer>
-                            <StackPanel x:Name="EmptyChat" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                                <TextBlock HorizontalAlignment="Center" FontSize="14" Foreground="{StaticResource TextSecondary}">
-                                    <Run Text="Habla con "/><Run Text="{Binding Profile.Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                </TextBlock>
-                                <TextBlock HorizontalAlignment="Center" Margin="0,6,0,0" FontSize="11.5" Foreground="#5E5E6A" TextAlignment="Center"
-                                           Text="Arrastra archivos sobre el personaje · /recordar 10m algo · /tarea 9:00 revisa el correo"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                        </Border>
+
+                        <!-- Sin agentes -->
+                        <StackPanel x:Name="NoAgents" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
+                            <TextBlock Text="No hay agentes" FontSize="15" HorizontalAlignment="Center" Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="Arrastra una carpeta para crear un agente de código, o usa +" FontSize="12" Margin="0,6,0,0"
+                                       HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}"/>
+                        </StackPanel>
+                    </Grid>
 
                     <!-- Tarjeta de aprobación -->
                     <Border Grid.Row="3" Margin="0,8,0,0" Padding="12,10" CornerRadius="14"
@@ -246,12 +387,13 @@
                     </Border>
 
                     <!-- Entrada -->
-                    <Border Grid.Row="4" Margin="0,8,0,0" Padding="6,4" CornerRadius="18" Background="{StaticResource Surface2}"
-                            BorderThickness="1" BorderBrush="#14FFFFFF">
+                    <Border x:Name="InputBar" Grid.Row="4" Margin="0,8,0,0" Padding="6,4" CornerRadius="18" Background="{StaticResource Surface2}"
+                            BorderThickness="1" BorderBrush="#14FFFFFF" Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Button Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
@@ -260,17 +402,14 @@
                                          Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
                                 <TextBlock x:Name="Placeholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
                                            Foreground="#5E5E6A" FontSize="13.5">
-                                    <Run Text="Escribe a "/><Run Text="{Binding Profile.Name, Mode=OneWay}"/><Run Text="…  (Enter envía, Shift+Enter salto)"/>
+                                    <Run Text="Escribe a "/><Run Text="{Binding Profile.Name, Mode=OneWay}"/><Run Text="…  (si está ocupado, se encola)"/>
                                 </TextBlock>
                             </Grid>
-                            <Grid Grid.Column="2" VerticalAlignment="Bottom">
-                                <Button x:Name="SendButton" Style="{StaticResource IconButton}" Content="&#xE724;" ToolTip="Enviar" Click="Send_Click"
-                                        Foreground="{Binding Color, Converter={StaticResource ColorBrush}}"
-                                        Visibility="{Binding IsBusy, Converter={StaticResource InvBoolToVis}}"/>
-                                <Button Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
-                                        Foreground="{StaticResource ErrorFg}"
-                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
-                            </Grid>
+                            <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener la tarea actual" Click="Stop_Click"
+                                    Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
+                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+                            <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE724;" ToolTip="Enviar (Enter)" Click="Send_Click"
+                                    Foreground="{Binding Color, Converter={StaticResource ColorBrush}}" VerticalAlignment="Bottom"/>
                         </Grid>
                     </Border>
                 </Grid>

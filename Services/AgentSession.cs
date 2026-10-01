@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -34,6 +35,12 @@ namespace CoucouWin.Services
         public string? SessionId { get; private set; }
         public HashSet<string> AlwaysAllow { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Tareas en cola (mensajes enviados mientras el agente trabajaba).</summary>
+        public ObservableCollection<AgentTask> PendingTasks { get; } = new();
+        /// <summary>Historial de tareas terminadas, la más reciente primero.</summary>
+        public ObservableCollection<AgentTask> CompletedTasks { get; } = new();
+        private const int MaxCompleted = 60;
+
         public event Action<AgentSession, TurnResult>? TurnFinished;
         public event Action<AgentSession, ApprovalRequest>? ApprovalRequested;
         public event Action<AgentSession, Reminder>? ReminderCreated;
@@ -49,6 +56,12 @@ namespace CoucouWin.Services
             var h = store.LoadHistory(profile.Id);
             SessionId = h.SessionId;
             foreach (var m in h.Messages) Messages.Add(m);
+            foreach (var t in h.Pending) { t.Status = AgentTaskStatus.Pending; PendingTasks.Add(t); }
+            foreach (var t in h.Completed) CompletedTasks.Add(t);
+            // Si había cola al cerrar, no arrancamos solos: el usuario decide con "Reanudar".
+            _queuePaused = PendingTasks.Count > 0;
+            PendingTasks.CollectionChanged += (_, _) => { OnChanged(nameof(PendingCount)); OnChanged(nameof(CanResumeQueue)); };
+            CompletedTasks.CollectionChanged += (_, _) => OnChanged(nameof(CompletedCount));
         }
 
         // ---------------- Propiedades enlazables ----------------
@@ -75,10 +88,98 @@ namespace CoucouWin.Services
         public string ProviderLabel => ProviderFactory.Label(Profile.Provider);
         public string StatusLine => string.IsNullOrEmpty(Activity) ? ProviderLabel : Activity;
 
+        // ---- rol
+        public bool IsCode => Profile.Kind == AgentKind.Code;
+        public bool IsScheduled => Profile.Kind == AgentKind.Scheduled;
+        public bool IsConversational => Profile.Kind != AgentKind.Scheduled;
+        /// <summary>Agente de código que todavía no tiene carpeta asignada.</summary>
+        public bool NeedsFolder => IsCode && string.IsNullOrWhiteSpace(Profile.WorkingDirectory);
+        public bool HasFolder => IsCode && !NeedsFolder;
+        public bool CanType => IsConversational && !NeedsFolder;
+        public string FolderPath => Profile.WorkingDirectory;
+        public string FolderName
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Profile.WorkingDirectory)) return "sin carpeta";
+                var n = Path.GetFileName(Profile.WorkingDirectory.TrimEnd('\\', '/'));
+                return string.IsNullOrEmpty(n) ? Profile.WorkingDirectory : n;
+            }
+        }
+        public string KindLabel => Profile.Kind switch
+        {
+            AgentKind.Code => "Código",
+            AgentKind.Scheduled => "Programado",
+            _ => "Chat"
+        };
+
+        private bool _isDefault;
+        /// <summary>Agente principal (se muestra grande en el notch).</summary>
+        public bool IsDefault { get => _isDefault; set => Set(ref _isDefault, value); }
+
+        // ---- programación
+        public string ScheduleSummary => IsScheduled ? Profile.Schedule.Summary : "";
+        public bool IsPaused => IsScheduled && Profile.Schedule.Paused;
+        public string NextRunLabel
+        {
+            get
+            {
+                if (!IsScheduled) return "";
+                if (Profile.Schedule.Paused) return "En pausa";
+                return Profile.Schedule.NextRun is { } n ? "Próxima: " + FormatWhen(n) : "Sin próximas ejecuciones";
+            }
+        }
+        public string LastRunLabel => Profile.Schedule.LastRun is { } l ? "Última: " + FormatWhen(l) : "Aún no se ha ejecutado";
+
+        /// <summary>Texto corto bajo el nombre en las pestañas.</summary>
+        public string SubLabel => IsCode ? FolderName
+            : IsScheduled ? (Profile.Schedule.Paused ? "en pausa" : Profile.Schedule.NextRun is { } n ? FormatWhen(n) : "—")
+            : ProviderLabel;
+
+        // ---- tareas
+        private AgentTask? _current;
+        public AgentTask? CurrentTask { get => _current; private set { if (Set(ref _current, value)) OnChanged(nameof(HasCurrentTask)); } }
+        public bool HasCurrentTask => _current != null;
+        public int PendingCount => PendingTasks.Count;
+        public int CompletedCount => CompletedTasks.Count;
+        private bool _queuePaused;
+        public bool CanResumeQueue => _queuePaused && !IsBusy && PendingTasks.Count > 0;
+
+        private static string FormatWhen(DateTime t)
+        {
+            var today = DateTime.Today;
+            if (t.Date == today) return "hoy " + t.ToString("HH:mm");
+            if (t.Date == today.AddDays(1)) return "mañana " + t.ToString("HH:mm");
+            if (t.Date == today.AddDays(-1)) return "ayer " + t.ToString("HH:mm");
+            return t.ToString("ddd dd, HH:mm");
+        }
+
         public void UpdateProfile(AgentProfile p)
         {
             Profile = p;
-            OnChanged(nameof(Profile)); OnChanged(nameof(Color)); OnChanged(nameof(ProviderLabel)); OnChanged(nameof(StatusLine));
+            RaiseProfileChanged();
+        }
+
+        public void RaiseProfileChanged()
+        {
+            foreach (var n in new[] { nameof(Profile), nameof(Color), nameof(ProviderLabel), nameof(StatusLine), nameof(IsCode),
+                         nameof(IsScheduled), nameof(IsConversational), nameof(NeedsFolder), nameof(HasFolder), nameof(CanType),
+                         nameof(FolderPath), nameof(FolderName), nameof(KindLabel), nameof(ScheduleSummary), nameof(IsPaused),
+                         nameof(NextRunLabel), nameof(LastRunLabel), nameof(SubLabel) })
+                OnChanged(n);
+        }
+
+        /// <summary>Asigna la carpeta a un agente de código. Solo se puede hacer una vez.</summary>
+        public bool TrySetFolder(string path, out string? error)
+        {
+            error = null;
+            if (!IsCode) { error = "Solo los agentes de código tienen carpeta."; return false; }
+            if (!NeedsFolder) { error = "La carpeta no se puede cambiar: cierra este agente y abre otro."; return false; }
+            if (!Directory.Exists(path)) { error = "Esa carpeta no existe."; return false; }
+            Profile.WorkingDirectory = Path.GetFullPath(path);
+            RaiseProfileChanged();
+            AddNotice($"📁 Trabajando en {Profile.WorkingDirectory}");
+            return true;
         }
 
         // ---------------- Conversación ----------------
@@ -98,15 +199,86 @@ namespace CoucouWin.Services
             SaveHistory();
         }
 
+        /// <summary>
+        /// Envía un mensaje. Si el agente está ocupado, queda en la cola de pendientes y se ejecutará
+        /// cuando termine la tarea actual.
+        /// </summary>
         public async Task SendAsync(string text, bool fromSchedule = false)
         {
             text = text.Trim();
-            if (text == "" || IsBusy) return;
-
+            if (text == "") return;
             if (!fromSchedule && TryHandleCommand(text)) return;
+            if (NeedsFolder)
+            {
+                AddNotice("Primero elige la carpeta de trabajo: arrástrala sobre el notch o usa «Seleccionar carpeta».", true);
+                return;
+            }
+            if (IsBusy)
+            {
+                if (fromSchedule) return; // el planificador reintentará
+                PendingTasks.Add(new AgentTask { Prompt = text });
+                AddNotice($"📝 En cola · {PendingTasks.Count} pendiente(s)");
+                return;
+            }
+            await RunTaskAsync(new AgentTask { Prompt = text, FromSchedule = fromSchedule });
+        }
 
+        /// <summary>Ejecución de un agente programado.</summary>
+        public async Task<bool> RunScheduledAsync()
+        {
+            if (IsBusy || !IsScheduled) return false;
+            var instr = Profile.Schedule.Instruction.Trim();
+            if (instr == "") return false;
+            if (!Profile.Schedule.KeepContext) SessionId = null;
+            Profile.Schedule.LastRun = DateTime.Now;
+            RaiseProfileChanged();
+            await RunTaskAsync(new AgentTask { Prompt = instr, FromSchedule = true });
+            return true;
+        }
+
+        public void RemoveQueued(AgentTask t)
+        {
+            PendingTasks.Remove(t);
+            SaveHistory();
+        }
+
+        public void ResumeQueue()
+        {
+            _queuePaused = false;
+            OnChanged(nameof(CanResumeQueue));
+            StartNextQueued();
+        }
+
+        public void ClearCompleted()
+        {
+            CompletedTasks.Clear();
+            SaveHistory();
+        }
+
+        private void StartNextQueued()
+        {
+            if (IsBusy || _queuePaused || PendingTasks.Count == 0) return;
+            var next = PendingTasks[0];
+            PendingTasks.RemoveAt(0);
+            _ = RunTaskAsync(next);
+        }
+
+        private async Task RunTaskAsync(AgentTask task)
+        {
+            var text = task.Prompt;
+            bool fromSchedule = task.FromSchedule;
+            if (IsCode && !System.IO.Directory.Exists(Profile.WorkingDirectory))
+            {
+                AddNotice($"La carpeta {Profile.WorkingDirectory} ya no existe. Cierra este agente y abre uno nuevo.", true);
+                return;
+            }
+
+            task.Status = AgentTaskStatus.Running;
+            task.Steps = new List<TaskStep>();
+            CurrentTask = task;
             Messages.Add(new ChatMessage(ChatRole.User, fromSchedule ? "⏰ " + text : text));
             IsBusy = true;
+            OnChanged(nameof(CanResumeQueue));
             _cancelled = false;
             _settleTimer.Stop();
             State = MochiState.Thinking;
@@ -115,6 +287,7 @@ namespace CoucouWin.Services
             int firstNew = Messages.Count;
 
             ChatMessage? streaming = null;
+            string streamingRaw = "";
             bool gotResult = false, success = true;
             string? error = null;
             var stderr = new StringBuilder();
@@ -153,16 +326,27 @@ namespace CoucouWin.Services
                                 if (streaming == null)
                                 {
                                     streaming = new ChatMessage(ChatRole.Agent, "");
+                                    streamingRaw = "";
                                     Messages.Add(streaming);
                                 }
-                                streaming.Text += d.Text;
+                                streamingRaw += d.Text;
+                                streaming.Text = StripTaskBlocks(streamingRaw, task);
                                 if (State != MochiState.Waiting) { State = MochiState.Thinking; Activity = "Escribiendo…"; }
                                 break;
                             case TextEvent t:
-                                if (streaming != null) { streaming.Text = t.Text; streaming = null; }
-                                else Messages.Add(new ChatMessage(ChatRole.Agent, t.Text));
-                                break;
+                                {
+                                    var clean = StripTaskBlocks(t.Text, task);
+                                    if (streaming != null)
+                                    {
+                                        streaming.Text = clean;
+                                        if (clean == "") Messages.Remove(streaming);
+                                        streaming = null;
+                                    }
+                                    else if (clean != "") Messages.Add(new ChatMessage(ChatRole.Agent, clean));
+                                    break;
+                                }
                             case ToolEvent tool:
+                                if (streaming != null && streaming.Text == "") Messages.Remove(streaming);
                                 streaming = null;
                                 Messages.Add(new ChatMessage(ChatRole.Tool, $"{tool.Tool}  {tool.Detail}".Trim()));
                                 if (State != MochiState.Waiting) State = MochiState.Working;
@@ -178,6 +362,11 @@ namespace CoucouWin.Services
                                 success = r.Success;
                                 error = r.Error;
                                 break;
+                            case TodoEvent td:
+                                task.Steps = td.Steps.ToList();
+                                var active = td.Steps.FirstOrDefault(x => x.Status == StepStatus.InProgress);
+                                if (active != null) Activity = active.Text;
+                                break;
                         }
                     }
                 }
@@ -188,7 +377,7 @@ namespace CoucouWin.Services
                 {
                     gotResult = true;
                     success = code == 0;
-                    if (streaming != null) streaming.Text = streaming.Text.TrimEnd();
+                    if (streaming != null) streaming.Text = StripTaskBlocks(streamingRaw, task).TrimEnd();
                 }
                 if (!gotResult && !_cancelled)
                 {
@@ -233,7 +422,17 @@ namespace CoucouWin.Services
             _approvals.Clear();
             PendingApproval = null;
 
+            task.Status = _cancelled ? AgentTaskStatus.Cancelled : success ? AgentTaskStatus.Done : AgentTaskStatus.Failed;
+            if (success && !_cancelled && task.Steps.Any(x => x.Status == StepStatus.InProgress))
+                task.Steps = task.Steps.Select(x => new TaskStep { Text = x.Text, Status = x.Status == StepStatus.InProgress ? StepStatus.Completed : x.Status }).ToList();
+            task.Finished = DateTime.Now;
+            CurrentTask = null;
+            CompletedTasks.Insert(0, task);
+            while (CompletedTasks.Count > MaxCompleted) CompletedTasks.RemoveAt(CompletedTasks.Count - 1);
+            if (_cancelled && PendingTasks.Count > 0) _queuePaused = true; // al detener, la cola espera
+
             IsBusy = false;
+            OnChanged(nameof(CanResumeQueue));
             var lastAgent = Messages.Skip(firstNew).LastOrDefault(m => m.Role == ChatRole.Agent)?.Text ?? error ?? "";
             State = _cancelled ? MochiState.Idle : success ? MochiState.Done : MochiState.Error;
             Activity = _cancelled ? "" : success ? "¡Listo!" : "Algo salió mal";
@@ -242,6 +441,14 @@ namespace CoucouWin.Services
             SaveHistory();
 
             TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule));
+
+            // Siguiente tarea de la cola
+            if (!_queuePaused && PendingTasks.Count > 0)
+            {
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+                t.Tick += (_, _) => { t.Stop(); StartNextQueued(); };
+                t.Start();
+            }
         }
 
         public void Cancel()
@@ -336,6 +543,38 @@ namespace CoucouWin.Services
             return false;
         }
 
+        // [[tasks]] - [x] hecho  - [~] en curso  - [ ] pendiente [[/tasks]]
+        private static readonly Regex TaskBlockRx = new(@"\[\[(?:tasks|tareas|plan)\]\](?<body>.*?)\[\[/(?:tasks|tareas|plan)\]\]",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex OpenTaskBlockRx = new(@"\[\[(?:tasks|tareas|plan)\]\](?:(?!\[\[/).)*$",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex StepLineRx = new(@"^\s*(?:[-*+]|\d+[.)])?\s*\[(?<m>[ xX~>\-✓])\]\s*(?<t>.+?)\s*$",
+            RegexOptions.Multiline | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Quita los bloques [[tasks]] del texto visible y, si hay alguno completo, actualiza los pasos
+        /// de la tarea con el último. Funciona con cualquier CLI (no depende de TodoWrite).
+        /// </summary>
+        private static string StripTaskBlocks(string raw, AgentTask task)
+        {
+            if (!raw.Contains("[[")) return raw;
+            var ms = TaskBlockRx.Matches(raw);
+            if (ms.Count > 0)
+            {
+                var steps = new List<TaskStep>();
+                foreach (Match l in StepLineRx.Matches(ms[^1].Groups["body"].Value))
+                {
+                    var mk = l.Groups["m"].Value;
+                    var st = mk is "x" or "X" or "✓" ? StepStatus.Completed : mk is "~" or ">" or "-" ? StepStatus.InProgress : StepStatus.Pending;
+                    steps.Add(new TaskStep { Text = l.Groups["t"].Value, Status = st });
+                }
+                if (steps.Count > 0) task.Steps = steps;
+            }
+            var s = TaskBlockRx.Replace(raw, "");
+            s = OpenTaskBlockRx.Replace(s, ""); // bloque a medio escribir durante el streaming
+            return Regex.Replace(s, @"\n{3,}", "\n\n").Trim();
+        }
+
         // [[reminder: 10m | texto]]   [[task: 2026-10-02T09:00 | instrucción]]
         private static readonly Regex ScheduleTag = new(@"\[\[\s*(?<k>reminder|recordatorio|task|tarea)\s*:\s*(?<when>[^|\]]+?)\s*\|\s*(?<text>[^\]]+?)\s*\]\]",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -364,7 +603,13 @@ namespace CoucouWin.Services
             foreach (var n in notices) Messages.Add(new ChatMessage(ChatRole.Notice, n));
         }
 
-        private void SaveHistory() => _store.SaveHistory(Profile.Id, new AgentHistory { SessionId = SessionId, Messages = Messages.ToList() });
+        private void SaveHistory() => _store.SaveHistory(Profile.Id, new AgentHistory
+        {
+            SessionId = SessionId,
+            Messages = Messages.ToList(),
+            Pending = PendingTasks.ToList(),
+            Completed = CompletedTasks.ToList()
+        });
 
         private static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
 

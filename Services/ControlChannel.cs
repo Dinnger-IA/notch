@@ -75,6 +75,14 @@ namespace CoucouWin.Services
                         var agent = agentIdx >= 0 && agentIdx + 1 < args.Length ? args[agentIdx + 1] : null;
                         return Send(new { cmd = "notify", title, body, agent }) ? 0 : 1;
                     }
+                case "--code":
+                    {
+                        // Abre un agente de código para una carpeta (por defecto, la actual)
+                        var folder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;
+                        folder = Path.GetFullPath(folder);
+                        if (!Directory.Exists(folder)) return 2;
+                        return Send(new { cmd = "code", folder }) ? 0 : 1;
+                    }
                 case "--show":
                     return Send(new { cmd = "show" }) ? 0 : 1;
                 case "--new-agent":

@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using CoucouWin.Controls;
 using CoucouWin.Models;
 using CoucouWin.Providers;
@@ -14,7 +15,19 @@ namespace CoucouWin.Views
     public partial class AgentEditorWindow : Window
     {
         public AgentProfile? Result { get; private set; }
+        /// <summary>El usuario marcó «Usar como agente principal».</summary>
+        public bool MakeDefault { get; private set; }
         private readonly AgentProfile _p;
+        private readonly bool _isNew, _folderLocked;
+        private readonly List<CheckBox> _dayChecks = new();
+        private bool _loading = true;
+
+        private static readonly DayOfWeek[] WeekOrder =
+        {
+            DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+            DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+        };
+        private static readonly string[] DayShort = { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" };
 
         private static readonly string[] Palette =
         {
@@ -40,12 +53,42 @@ namespace CoucouWin.Views
                 "Eres un asistente útil y conciso.")
         };
 
-        public AgentEditorWindow(AgentProfile? profile)
+        /// <param name="profile">null para crear uno nuevo.</param>
+        /// <param name="kindForNew">Tipo inicial cuando se crea uno nuevo.</param>
+        /// <param name="folderLocked">Agente de código que ya tiene carpeta: no se puede cambiar.</param>
+        public AgentEditorWindow(AgentProfile? profile, AgentKind kindForNew = AgentKind.Interactive, bool folderLocked = false, bool isDefault = false)
         {
             InitializeComponent();
-            bool isNew = profile == null;
-            _p = profile ?? new AgentProfile { Name = "Nuevo agente", ColorHex = Palette[new Random().Next(Palette.Length)] };
+            _isNew = profile == null;
+            _folderLocked = folderLocked;
+            bool isNew = _isNew;
+            _p = profile ?? new AgentProfile
+            {
+                Name = "Nuevo agente", ColorHex = Palette[new Random().Next(Palette.Length)], Kind = kindForNew,
+                Approval = kindForNew == AgentKind.Scheduled ? ApprovalMode.ReadOnly : ApprovalMode.Ask,
+                SystemPrompt = kindForNew == AgentKind.Code ? ConfigStore.CodePrompt : ""
+            };
             Title = isNew ? "Nuevo agente" : $"Editar · {_p.Name}";
+            DefaultCheck.IsChecked = isDefault;
+
+            foreach (var (k, label) in new[]
+                     {
+                         (AgentKind.Interactive, "Chat — conversacional, con lista de tareas"),
+                         (AgentKind.Code, "Código — conversacional, trabaja en una carpeta fija"),
+                         (AgentKind.Scheduled, "Programado — ejecuta una instrucción según un horario")
+                     })
+                KindBox.Items.Add(new ComboBoxItem { Content = label, Tag = k });
+            KindBox.IsEnabled = !folderLocked;
+
+            for (int i = 0; i < 7; i++)
+            {
+                var cb = new CheckBox { Content = DayShort[i], Tag = WeekOrder[i], Margin = new Thickness(0, 0, 10, 4), MinWidth = 0 };
+                cb.Checked += Schedule_Changed;
+                cb.Unchecked += Schedule_Changed;
+                _dayChecks.Add(cb);
+                DaysPanel.Children.Add(cb);
+            }
+            for (int h = 1; h <= 24; h++) IntervalBox.Items.Add(new ComboBoxItem { Content = $"{h} h", Tag = h });
             Icon = NotificationService.WindowIcon;
 
             foreach (var hex in Palette)
@@ -91,7 +134,128 @@ namespace CoucouWin.Views
             PromptBox.Text = _p.SystemPrompt;
             ExtraBox.Text = _p.ExtraArgs;
             CustomBox.Text = _p.CustomCommand;
+
+            var sc = _p.Schedule;
+            InstructionBox.Text = sc.Instruction;
+            (sc.Mode == ScheduleMode.FixedTimes ? ModeFixed : ModeInterval).IsChecked = true;
+            IntervalBox.SelectedIndex = Math.Clamp(sc.IntervalHours, 1, 24) - 1;
+            FromBox.Text = sc.WindowStart;
+            ToBox.Text = sc.WindowEnd;
+            TimesBox.Text = string.Join(", ", sc.Times);
+            foreach (var cb in _dayChecks) cb.IsChecked = sc.Days.Contains((DayOfWeek)cb.Tag);
+            KeepContextCheck.IsChecked = sc.KeepContext;
+            PausedCheck.IsChecked = sc.Paused;
+
+            KindBox.SelectedItem = KindBox.Items.Cast<ComboBoxItem>().First(i => (AgentKind)i.Tag == _p.Kind);
+            _loading = false;
+            UpdateKindUi();
+            UpdateSchedulePreview();
             Loaded += (_, _) => NameBox.Focus();
+        }
+
+        private AgentKind SelectedKind => KindBox.SelectedItem is ComboBoxItem i ? (AgentKind)i.Tag : AgentKind.Interactive;
+
+        private void Kind_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loading) return;
+            // Un programado no puede pedir permisos (nadie responde): proponemos solo lectura
+            if (SelectedKind == AgentKind.Scheduled && ApprovalBox.SelectedItem is ComboBoxItem a && (ApprovalMode)a.Tag == ApprovalMode.Ask)
+                ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == ApprovalMode.ReadOnly);
+            if (SelectedKind == AgentKind.Code && string.IsNullOrWhiteSpace(PromptBox.Text)) PromptBox.Text = ConfigStore.CodePrompt;
+            UpdateKindUi();
+        }
+
+        private void UpdateKindUi()
+        {
+            var k = SelectedKind;
+            SchedulePanel.Visibility = k == AgentKind.Scheduled ? Visibility.Visible : Visibility.Collapsed;
+            KindHint.Text = k switch
+            {
+                AgentKind.Code => "Tiene chat y lista de tareas. Los CLI se abren en su carpeta; puedes tener varios, uno por proyecto.",
+                AgentKind.Scheduled => "No tiene chat: ejecuta la instrucción en los días y horas que elijas (mínimo cada 1 hora) y te avisa al terminar. Como nadie puede aprobar permisos, usa Solo lectura o Automático.",
+                _ => "Conversacional: chat con barra lateral de tarea actual, pendientes y completadas."
+            };
+            FolderLabel.Text = k == AgentKind.Code ? "Carpeta del proyecto (se abren ahí los CLI)" : "Carpeta de trabajo (opcional)";
+            DirBox.IsReadOnly = _folderLocked;
+            BrowseButton.IsEnabled = !_folderLocked;
+            FolderNote.Text = _folderLocked
+                ? "🔒 La carpeta no se puede cambiar. Para otra carpeta, cierra este agente y abre uno nuevo."
+                : k == AgentKind.Code
+                    ? "Puedes dejarla vacía y arrastrar la carpeta sobre el notch después. Una vez elegida, queda fija."
+                    : "Vacía = una carpeta propia de Coucou.";
+        }
+
+        private ScheduleSpec ReadSchedule()
+        {
+            var sc = _p.Schedule.Clone();
+            sc.Instruction = InstructionBox.Text.Trim();
+            sc.Mode = ModeFixed.IsChecked == true ? ScheduleMode.FixedTimes : ScheduleMode.Interval;
+            sc.IntervalHours = IntervalBox.SelectedItem is ComboBoxItem i ? (int)i.Tag : 1;
+            sc.WindowStart = FromBox.Text.Trim();
+            sc.WindowEnd = ToBox.Text.Trim();
+            sc.Times = TimesBox.Text.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
+            sc.Days = _dayChecks.Where(c => c.IsChecked == true).Select(c => (DayOfWeek)c.Tag).ToList();
+            sc.KeepContext = KeepContextCheck.IsChecked == true;
+            sc.Paused = PausedCheck.IsChecked == true;
+            return sc;
+        }
+
+        private void Schedule_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            UpdateSchedulePreview();
+        }
+
+        private void UpdateSchedulePreview()
+        {
+            if (IntervalPanel == null) return;
+            bool fixedMode = ModeFixed.IsChecked == true;
+            IntervalPanel.Visibility = fixedMode ? Visibility.Collapsed : Visibility.Visible;
+            FixedPanel.Visibility = fixedMode ? Visibility.Visible : Visibility.Collapsed;
+
+            var sc = ReadSchedule();
+            var err = sc.Validate();
+            if (err != null && !(string.IsNullOrWhiteSpace(sc.Instruction) && err.StartsWith("Escribe")))
+            {
+                SchedulePreview.Text = "⚠ " + err;
+                SchedulePreview.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8A, 0x8A));
+                return;
+            }
+            var next = new List<DateTime>();
+            var t = DateTime.Now;
+            for (int i = 0; i < 3; i++)
+            {
+                var n = sc.ComputeNext(t);
+                if (n == null) break;
+                next.Add(n.Value);
+                t = n.Value;
+            }
+            SchedulePreview.Foreground = new SolidColorBrush(Color.FromRgb(0x8C, 0x8C, 0x99));
+            SchedulePreview.Text = sc.Summary + (next.Count > 0
+                ? "\nPróximas: " + string.Join("  ·  ", next.Select(x => x.ToString("ddd dd HH:mm")))
+                : "") + (sc.Paused ? "\n(en pausa)" : "");
+        }
+
+        private void SetDays(params DayOfWeek[] days)
+        {
+            foreach (var cb in _dayChecks) cb.IsChecked = days.Contains((DayOfWeek)cb.Tag);
+        }
+        private void DaysWeekdays_Click(object sender, RoutedEventArgs e) => SetDays(WeekOrder.Take(5).ToArray());
+        private void DaysAll_Click(object sender, RoutedEventArgs e) => SetDays(WeekOrder);
+        private void DaysWeekend_Click(object sender, RoutedEventArgs e) => SetDays(DayOfWeek.Saturday, DayOfWeek.Sunday);
+
+        private void DirBox_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = !_folderLocked && e.Data.GetData(DataFormats.FileDrop) is string[] p && p.Length > 0 && Directory.Exists(p[0])
+                ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void DirBox_Drop(object sender, DragEventArgs e)
+        {
+            if (!_folderLocked && e.Data.GetData(DataFormats.FileDrop) is string[] p && p.Length > 0 && Directory.Exists(p[0]))
+                DirBox.Text = p[0];
+            e.Handled = true;
         }
 
         private static string StateLabel(MochiState s) => s switch
@@ -176,6 +340,7 @@ namespace CoucouWin.Views
 
         private void Browse_Click(object sender, RoutedEventArgs e)
         {
+            if (_folderLocked) return;
             var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Carpeta de trabajo del agente" };
             if (!string.IsNullOrWhiteSpace(DirBox.Text) && System.IO.Directory.Exists(DirBox.Text)) dlg.InitialDirectory = DirBox.Text;
             if (dlg.ShowDialog(this) == true) DirBox.Text = dlg.FolderName;
@@ -194,12 +359,34 @@ namespace CoucouWin.Views
             catch { ColorBox.Focus(); return; }
             if (SelectedProvider == ProviderKind.Custom && string.IsNullOrWhiteSpace(CustomBox.Text)) { CustomBox.Focus(); return; }
 
+            var kind = SelectedKind;
+            var dir = DirBox.Text.Trim();
+            if (!_folderLocked && dir != "" && !Directory.Exists(dir))
+            {
+                MessageBox.Show(this, "Esa carpeta no existe.", "Coucou", MessageBoxButton.OK, MessageBoxImage.Warning);
+                DirBox.Focus();
+                return;
+            }
+            if (kind == AgentKind.Scheduled)
+            {
+                var sc = ReadSchedule();
+                var err = sc.Validate();
+                if (err != null)
+                {
+                    MessageBox.Show(this, err, "Horario", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                _p.Schedule = sc;
+            }
+
+            _p.Kind = kind;
+            MakeDefault = DefaultCheck.IsChecked == true;
             _p.Name = name;
             _p.ColorHex = hex;
             _p.Provider = SelectedProvider;
             _p.Approval = ApprovalBox.SelectedItem is ComboBoxItem a ? (ApprovalMode)a.Tag : ApprovalMode.Ask;
             _p.Model = ModelBox.Text.Trim();
-            _p.WorkingDirectory = DirBox.Text.Trim();
+            if (!_folderLocked) _p.WorkingDirectory = dir == "" ? "" : Path.GetFullPath(dir);
             _p.SystemPrompt = PromptBox.Text.Trim();
             _p.ExtraArgs = ExtraBox.Text.Trim();
             _p.CustomCommand = CustomBox.Text.Trim();
