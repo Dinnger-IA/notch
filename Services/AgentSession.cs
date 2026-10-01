@@ -127,6 +127,36 @@ namespace CoucouWin.Services
         }
 
         public string LastOutputTimeLabel => LastAgentMessage is { } m ? "Escrito " + FormatWhen(m.Time) : "";
+        public DateTime? LastOutputTime => LastAgentMessage?.Time;
+
+        /// <summary>
+        /// Último resultado partido en titular + detalles (para la tarjeta de los programados).
+        /// El titular es la primera línea (Coucou pide a los programados que sea corta); si la respuesta es
+        /// un solo párrafo, se parte por frases.
+        /// </summary>
+        public (string Headline, List<string> Details) LastOutputParts()
+        {
+            var m = LastAgentMessage;
+            if (m == null) return ("", new List<string>());
+            var text = Regex.Replace(m.Text, @"```.*?```", " ", RegexOptions.Singleline);
+            var lines = text.Replace("\r", "").Split('\n')
+                .Select(l => Regex.Replace(l, @"^\s*([-*+>]|\d+[.)])\s+", ""))   // viñetas
+                .Select(l => Regex.Replace(l, @"[*_`#]+", "").Trim())
+                .Where(l => l.Length > 0).ToList();
+            if (lines.Count == 1)
+            {
+                // Un solo párrafo: titular = primera frase, detalles = el resto de frases
+                var sentences = Regex.Split(lines[0], @"(?<=[.;!?])\s+").Where(x => x.Trim().Length > 0).ToList();
+                lines = sentences;
+            }
+            if (lines.Count == 0) return ("", new List<string>());
+            string Cut(string s, int max) => s.Length > max ? s[..max].TrimEnd() + "…" : s;
+            // Sin emojis/símbolos al inicio: WPF los dibuja como contorno monocromo
+            var head = Regex.Replace(lines[0], @"^[^\p{L}\p{N}¡¿""«(]+", "");
+            var headline = Cut(head.TrimEnd('.', ':'), 60);
+            var details = lines.Skip(1).Take(3).Select(l => Cut(l, 90)).ToList();
+            return (headline, details);
+        }
 
         /// <summary>Una línea para la vista general.</summary>
         public string OverviewLine

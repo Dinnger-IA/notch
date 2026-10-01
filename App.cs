@@ -152,8 +152,10 @@ namespace CoucouWin
             if (s.IsCode)
                 addendum += $"\nEres un agente de código. Tu carpeta de trabajo (workspace) es «{s.WorkDir}»: trabaja solo dentro de ella.";
             else if (s.IsScheduled)
-                addendum += "\nEsta es una ejecución PROGRAMADA y automática: nadie va a responder preguntas. Haz la tarea de principio a fin " +
-                            "y termina con un resumen de 1 a 3 líneas que sirva como notificación.";
+                addendum += "\nEsta es una ejecución PROGRAMADA y automática: nadie va a responder preguntas. Haz la tarea de principio a fin.\n" +
+                            "FORMATO DE LA RESPUESTA FINAL (Coucou la muestra en una tarjeta): la PRIMERA línea es un titular muy corto " +
+                            "(máximo 40 caracteres) con el dato principal, p. ej. «22 °C · Soleado» o «3 PRs pendientes»; después, de 1 a 3 " +
+                            "líneas cortas (una idea por línea, sin viñetas ni Markdown). Nada más.";
             if (s.IsConversational)
                 addendum += "\nPROGRESO: Coucou muestra al usuario una lista con tus pasos. Si la petición tiene 2 o más pasos, " +
                             "escribe al empezar tu plan en este formato exacto (en su propio mensaje, antes de usar herramientas):\n" +

@@ -106,6 +106,20 @@ namespace CoucouWin.Services
             : IsScheduled ? Tabs.FirstOrDefault()?.ScheduleSummary ?? ""
             : ProviderLabel;
 
+        /// <summary>Titular grande de la tarjeta (último resultado de un programado).</summary>
+        public string Headline
+        {
+            get
+            {
+                if (!IsScheduled) return "";
+                var s = Tabs.FirstOrDefault();
+                if (s == null) return "";
+                if (s.IsBusy) return "Actualizando…";
+                return s.LastOutputParts().Headline;
+            }
+        }
+        public bool HasHeadline => Headline.Length > 0;
+
         /// <summary>Líneas de detalle de la tarjeta grande (máximo 3).</summary>
         public ObservableCollection<TaskLine> Lines { get; } = new();
 
@@ -134,9 +148,24 @@ namespace CoucouWin.Services
 
             var s = Tabs.FirstOrDefault();
             if (s == null) return;
+            if (IsScheduled && !s.IsBusy && s.LastOutputParts() is { Headline.Length: > 0 } parts)
+            {
+                // Con resultado: titular grande (arriba) + detalles como lista + próxima ejecución en pequeño
+                var sc0 = Profile.Schedule;
+                foreach (var d in parts.Details)
+                    Lines.Add(new TaskLine { Text = d, Detail = s.LastOutputText, Tone = s.LastFailed ? TaskTone.Failed : TaskTone.Bullet });
+                var updated = s.LastOutputTime is { } lt ? $"actualizado {FormatWhen(lt).ToLowerInvariant()}" : "";
+                var next = sc0.Paused ? "En pausa" : sc0.NextRun is { } nr ? $"Próxima {FormatWhen(nr).ToLowerInvariant()}" : "Sin próximas";
+                Lines.Add(new TaskLine
+                {
+                    Text = string.Join(" · ", new[] { next, updated }.Where(x => x.Length > 0)),
+                    Detail = $"{sc0.Summary}\n{sc0.Instruction}", Tone = TaskTone.Schedule
+                });
+                return;
+            }
             if (IsScheduled)
             {
-                // No interactivo: su horario y lo que hará en la próxima ejecución
+                // Sin resultado todavía: su horario y lo que hará en la próxima ejecución
                 var sc = Profile.Schedule;
                 Lines.Add(new TaskLine { Text = (sc.Paused ? "En pausa · " : "") + sc.Summary, Detail = sc.Summary, Tone = TaskTone.Schedule });
                 var instr = sc.Instruction.Replace("\r", "").Replace("\n", " ").Trim();
@@ -215,7 +244,7 @@ namespace CoucouWin.Services
             RebuildLines();
             foreach (var n in new[] { nameof(State), nameof(ActiveTabs), nameof(Counter), nameof(StatusChip), nameof(ChipIsError),
                          nameof(ChipIsAlert), nameof(HasError), nameof(NeedsApproval), nameof(IsBusy), nameof(SubLabel),
-                         nameof(HasNoTabs), nameof(Color), nameof(Name), nameof(ActiveTab) })
+                         nameof(HasNoTabs), nameof(Color), nameof(Name), nameof(ActiveTab), nameof(Headline), nameof(HasHeadline) })
                 OnChanged(n);
         }
 

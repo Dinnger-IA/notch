@@ -162,6 +162,12 @@
                     <Setter TargetName="Ic" Property="Foreground" Value="#8EB8FF"/>
                     <Setter TargetName="Tx" Property="Foreground" Value="#C8C8D2"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Bullet}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                    <Setter TargetName="Ic" Property="FontSize" Value="7"/>
+                    <Setter TargetName="Ic" Property="Margin" Value="2,6,0,0"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#D6D6DE"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Next}">
                     <Setter TargetName="Ic" Property="Foreground" Value="#ECECF2"/>
                     <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
@@ -320,7 +326,9 @@
                                         </Border>
                                     </StackPanel>
                                 </Grid>
-                                <ItemsControl x:Name="FocusLines" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource DetailLineTemplate}" Margin="2,8,0,0"/>
+                                <TextBlock Text="{Binding Headline}" FontSize="24" FontWeight="SemiBold" Foreground="#F2F2F6" Margin="2,6,0,0"
+                                           TextTrimming="CharacterEllipsis" Visibility="{Binding HasHeadline, Converter={StaticResource BoolToVis}}"/>
+                                <ItemsControl x:Name="FocusLines" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource DetailLineTemplate}" Margin="2,6,0,0"/>
                             </StackPanel>
                         </Grid>
                     </Border>
