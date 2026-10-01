@@ -19,6 +19,8 @@ namespace CoucouWin.Providers
     public record ToolEvent(string Tool, string Detail) : AgentEvent;
     public record NoticeEvent(string Text, bool IsError) : AgentEvent;
     public record ResultEvent(bool Success, string? Error, double? CostUsd) : AgentEvent;
+    /// <summary>Lista de pasos que el propio CLI mantiene (TodoWrite, todo_list, write_todos).</summary>
+    public record TodoEvent(IReadOnlyList<TaskStep> Steps) : AgentEvent;
 
     public class RunContext
     {
@@ -127,6 +129,40 @@ namespace CoucouWin.Providers
             return s.Length <= max ? s : s[..max] + "…";
         }
 
+        internal static StepStatus ParseStepStatus(string s) => s.ToLowerInvariant() switch
+        {
+            "completed" or "done" or "complete" => StepStatus.Completed,
+            "in_progress" or "in-progress" or "inprogress" or "active" or "running" => StepStatus.InProgress,
+            _ => StepStatus.Pending
+        };
+
+        /// <summary>Lee un arreglo de todos con formato {content|text|description, status|completed}.</summary>
+        internal static List<TaskStep>? ParseTodos(JsonElement? arr)
+        {
+            if (arr is not { ValueKind: JsonValueKind.Array } a) return null;
+            var list = new List<TaskStep>();
+            foreach (var t in a.EnumerateArray())
+            {
+                if (t.ValueKind != JsonValueKind.Object) continue;
+                var text = Str(t, "content");
+                if (text == "") text = Str(t, "text");
+                if (text == "") text = Str(t, "description");
+                if (text == "") text = Str(t, "subject");
+                if (text == "") continue;
+                StepStatus st;
+                if (t.TryGetProperty("completed", out var c) && (c.ValueKind == JsonValueKind.True || c.ValueKind == JsonValueKind.False))
+                    st = c.ValueKind == JsonValueKind.True ? StepStatus.Completed : StepStatus.Pending;
+                else st = ParseStepStatus(Str(t, "status"));
+                if (st == StepStatus.InProgress)
+                {
+                    var active = Str(t, "activeForm");
+                    if (active != "") text = active;
+                }
+                list.Add(new TaskStep { Text = text, Status = st });
+            }
+            return list;
+        }
+
         /// <summary>Resume el input de una herramienta en una línea legible.</summary>
         internal static string SummarizeInput(JsonElement? input)
         {
@@ -229,8 +265,15 @@ namespace CoucouWin.Providers
                                     }
                                     else if (bt == "tool_use")
                                     {
-                                        yield return new ToolEvent(ProviderFactory.Str(block, "name"),
-                                            ProviderFactory.SummarizeInput(ProviderFactory.Obj(block, "input")));
+                                        var name = ProviderFactory.Str(block, "name");
+                                        var input = ProviderFactory.Obj(block, "input");
+                                        if (name.Contains("Todo", StringComparison.OrdinalIgnoreCase)
+                                            && input is { } inp && ProviderFactory.ParseTodos(ProviderFactory.Obj(inp, "todos")) is { } todos)
+                                        {
+                                            yield return new TodoEvent(todos);
+                                            continue;
+                                        }
+                                        yield return new ToolEvent(name, ProviderFactory.SummarizeInput(input));
                                     }
                                 }
                             }
@@ -335,11 +378,13 @@ namespace CoucouWin.Providers
                             break;
                         }
                     case "item.started":
+                    case "item.updated":
                     case "item.completed":
                         {
                             if (ProviderFactory.Obj(r, "item") is not { } item) break;
                             var it = ProviderFactory.Str(item, "type");
                             bool started = type == "item.started";
+                            if (type == "item.updated" && it != "todo_list") break;
                             switch (it)
                             {
                                 case "agent_message":
@@ -362,6 +407,10 @@ namespace CoucouWin.Providers
                                 case "mcp_tool_call":
                                     if (started) yield return new ToolEvent("MCP",
                                         ProviderFactory.Str(item, "server") + "." + ProviderFactory.Str(item, "tool"));
+                                    break;
+                                case "todo_list":
+                                    if (ProviderFactory.ParseTodos(ProviderFactory.Obj(item, "items")) is { } todos)
+                                        yield return new TodoEvent(todos);
                                     break;
                                 case "web_search":
                                     if (started) yield return new ToolEvent("Web", ProviderFactory.Short(ProviderFactory.Str(item, "query")));
@@ -445,9 +494,18 @@ namespace CoucouWin.Providers
                         }
                         break;
                     case "tool_use":
-                        yield return new ToolEvent(ProviderFactory.Str(r, "tool_name"),
-                            ProviderFactory.SummarizeInput(ProviderFactory.Obj(r, "parameters")));
-                        break;
+                        {
+                            var tn = ProviderFactory.Str(r, "tool_name");
+                            var pars = ProviderFactory.Obj(r, "parameters");
+                            if (tn.Contains("todo", StringComparison.OrdinalIgnoreCase) && pars is { } pp
+                                && ProviderFactory.ParseTodos(ProviderFactory.Obj(pp, "todos")) is { } todos)
+                            {
+                                yield return new TodoEvent(todos);
+                                break;
+                            }
+                            yield return new ToolEvent(tn, ProviderFactory.SummarizeInput(pars));
+                            break;
+                        }
                     case "error":
                         yield return new NoticeEvent(ProviderFactory.Str(r, "message"), true);
                         break;

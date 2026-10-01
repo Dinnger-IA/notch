@@ -24,14 +24,86 @@ dotnet run                 # desarrollo
 Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras usar (`claude`, `codex`,
 `gemini`…) en el PATH. Los shims `.cmd` de npm se resuelven a `node script.js` para no pasar por `cmd.exe`.
 
+## Tipos de agente
+
+| Tipo | Qué hace | Al abrirlo |
+|---|---|---|
+| **Código** | Chat con **pestañas de workspace**: cada pestaña es una carpeta donde se abre el CLI, con su propia conversación. | Chat estilo coucou + pestañas + lista de tareas |
+| **Chat** | Conversacional, sin carpeta de proyecto. | Chat estilo coucou + lista de tareas |
+| **Programado** | No interactivo: ejecuta una **instrucción** según un **horario** y te avisa con el resultado. | Su estado en la tarjeta grande de la vista general |
+
+### Píldora y barra superior
+
+- **Píldora** (modo pequeño), en dos lados: a la izquierda el **principal**; a la derecha **todos los demás
+  agrupados** en un bloque 2×2 del mismo alto (máximo 4 visibles; si hay más, un indicador «+N»).
+- Al abrir el notch siempre hay una **barra superior**: 🏠 *Inicio* a la izquierda y, a la derecha, 📌 fijar,
+  📅 **tareas programadas** y ⚙ **configuración** (ajustes del agente, nuevos agentes y opciones de Coucou:
+  sonidos, avisos, abrir al pasar el ratón, avisos de Claude Code, iniciar con Windows, salir).
+- **Cierre del panel** (⚙ → *Accesibilidad*): por defecto **solo se cierra al hacer clic fuera** del recuadro
+  (o con Esc / Ctrl+Alt+Espacio); sacar el ratón no lo cierra. Alternativa: *Cerrar al sacar el ratón*.
+  Ahí también está *Abrir al pasar el ratón*. Con 📌 fijado, o con un menú o diálogo abierto, nunca se cierra.
+- **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
+  con su hora, agente, tipo y repetición, que se pueden borrar; y los agentes programados con su próxima
+  ejecución. Pulsar un elemento abre su agente.
+
+### Vista general (al pasar el ratón o con el primer clic)
+
+Igual que coucou: **una tarjeta grande a la izquierda** con el agente enfocado y **el resto en chips pequeños
+a la derecha**.
+
+- Tarjeta grande: personaje, nombre, CLI, chip de estado (*Error*, *Permiso*, *Trabajando*, *En pausa*),
+  contador y botón ↗. Debajo, hasta tres líneas de detalle:
+  - **Código**: el último estado de cada workspace (`▶ demo-api · Leer server.js`, `✓ demo-blog · <resultado>`,
+    `✗ … · falló`). El contador es **pestañas activas / total**.
+  - **Chat**: el resultado de la última tarea y lo que hace ahora (el contador son sus pasos, p. ej. `2/5`).
+  - **Programado**: su **horario**, **qué hará en la próxima ejecución** (hora + instrucción) y cuándo fue la última,
+    con botones *Ejecutar ahora* y *Pausar*.
+- Chips: insignia roja si su última tarea falló, naranja si piden permiso, borde ámbar si están trabajando.
+- **Pulsar un chip** lo pasa a la tarjeta grande (el que estaba ahí baja a los chips; «‹» vuelve al principal).
+- **Pulsar la tarjeta grande** (o ↗) abre el chat. En un **programado**, la tarjeta se **expande** con más
+  detalle: último resultado completo, instrucción, próximas 3 ejecuciones, última ejecución y permisos.
+  El chip *+ Nuevo* crea agentes, workspaces o recordatorios.
+
+### Chat (interactivos y código)
+
+- El chat va dentro de una **tarjeta** (como las de la vista general) bajo la barra superior. Estilo coucou:
+  nombre del agente + nueva conversación (o pestañas de workspace en código), píldora de contexto,
+  tus mensajes en burbuja a la derecha, las respuestas como texto suelto, fondo oscuro con halo violeta y el
+  personaje asomando abajo a la izquierda. Entrada «Continuar…».
+- **Código**: en lugar de «+» aparecen las **pestañas de workspace** (carpeta + estado: ▶ activa, ✓ terminó,
+  ✗ falló, ! permiso) y el botón **Nuevo workspace**. La carpeta de una pestaña **no se puede cambiar**: se cierra
+  (×) y se abre otra. Arrastrar una carpeta sobre el notch abre un workspace nuevo. Desde un script:
+  `CoucouWin.exe --code D:\mi\proyecto` (si ya hay una pestaña para esa carpeta, la abre).
+- El **personaje** está arriba a la izquierda, a la altura de las pestañas, y debajo su **lista de tareas**
+  (hasta media altura, siempre mostrando lo más reciente, con desplazamiento y lo que no cabe difuminado), mínima: un listado con iconos (✓ hecha, ! fallida, × detenida,
+  ▶ en curso, ○ pendiente) y los pasos de la tarea en curso. Cada mensaje es una tarea; si escribes mientras
+  trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Coucou pide al agente (se oculta del chat)
+  o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
+
+### Ejemplo: agente del clima
+
+Un programado que cada 12 horas (06:00 y 18:00) consulta el clima con `WebFetch` a wttr.in y te avisa:
+tipo *Programado*, permisos *Solo lectura*, argumentos extra `--allowedTools WebFetch,WebSearch` (para que pueda
+usar la web sin pedir permiso) e instrucción del estilo «Consulta el clima actual y de las próximas 12 horas para
+Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
+
+### Principal y horarios
+
+- **Agente principal**: cualquiera (clic derecho → *Establecer como principal*, o la casilla del editor). Es el
+  que aparece en la tarjeta grande al abrir y en grande en la píldora. Por defecto, el agente de código.
+  Cualquier agente se puede **eliminar**.
+- **Horario de un programado**: *cada N horas* (mínimo 1 h) dentro de una franja, o *a horas fijas* (separadas
+  al menos 1 h), en los **días** que elijas. Si el PC estuvo apagado, recupera una ejecución perdida de las
+  últimas 12 h. Como nadie puede aprobar permisos, usa *Solo lectura* o *Automático*.
+
 ## Cómo se usa
 
 | Acción | Cómo |
 |---|---|
-| Abrir el panel | pasar el ratón por la píldora, clic en ella, o **Ctrl + Alt + Espacio** |
-| Cambiar de agente | clic en su personaje (clic derecho: editar, duplicar, nueva conversación, eliminar) |
-| Crear un agente | botón **+** (con plantillas: Revisor, Ingeniero, Investigador, Asistente, Escritor, Local) |
-| Enviar | **Enter** (Shift+Enter = salto de línea), botón rojo para detener |
+| Ver los agentes | pasar el ratón por la píldora, clic en ella, o **Ctrl + Alt + Espacio** |
+| Abrir un agente | clic en su chip (pasa a la tarjeta grande) y clic en la tarjeta para el chat; clic derecho = menú |
+| Crear | chip **+ Nuevo** → workspace de código / chat / programado; o arrastra una carpeta |
+| Enviar | **Enter** (Shift+Enter = salto de línea); si está ocupado, se encola. Botón rojo = detener |
 | Adjuntar archivos | arrastrarlos sobre el notch (el personaje se convierte en caja 📦) o con el clip |
 | Fijar el panel abierto | chincheta; **Esc** lo cierra |
 | Permisos | tarjeta naranja: *Permitir*, *Permitir siempre* (en la sesión) o *Denegar* |
@@ -85,6 +157,7 @@ bloquea** a Claude Code.
 ```powershell
 CoucouWin.exe --notify "Build terminado" "npm run build OK" --agent Codi   # aviso en el notch + toast
 CoucouWin.exe --ask Nube "Resume mi día"                                   # le habla a un agente
+CoucouWin.exe --code D:\proyecto                                         # agente de código para esa carpeta
 CoucouWin.exe --show | --new-agent | --reminders
 ```
 
@@ -103,12 +176,14 @@ Desmarcarlo los quita. Es opcional y no se activa solo.
 App.cs                     Main, arranque, coordinación de notificaciones/recordatorios/canal de control
 Controls/MochiView.cs      el personaje y todas sus animaciones
 Providers/Providers.cs     Claude Code, Codex, Gemini, Personalizado → eventos normalizados
-Services/AgentSession.cs   conversación, proceso del CLI, aprobaciones, etiquetas de recordatorio, TimeParser
+Services/AgentEntry.cs     agente en la interfaz: pestañas, estado agregado y líneas de detalle
+Services/AgentSession.cs   una conversación (agente o pestaña de workspace): cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
+Services/Scheduler.cs      ejecuta los agentes programados según su horario
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
-Views/NotchWindow.*        el notch: píldora, aviso y panel de chat
+Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas
 Views/Markdown.cs          Markdown ligero en las burbujas

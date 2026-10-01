@@ -82,8 +82,27 @@ namespace CoucouWin.Services
             try { File.Delete(Path.Combine(HistoryDir, agentId + ".json")); } catch { }
         }
 
+        public static readonly string[] CodePalette = { "#FF9E5E", "#64B5F6", "#4DD0A1", "#BA68C8", "#FFD54F", "#F06292", "#4DD0E1", "#AED581" };
+
+        public const string CodePrompt =
+            "Eres un ingeniero de software senior que trabaja en esta carpeta. Lees el código antes de cambiarlo, " +
+            "haces cambios pequeños y verificables, ejecutas las pruebas cuando existen y explicas en pocas líneas qué hiciste. " +
+            "Respondes en español.";
+
+        public static AgentProfile NewCodeAgent(string? folder, string name, string color) => new()
+        {
+            Name = name,
+            ColorHex = color,
+            Kind = AgentKind.Code,
+            Provider = ProviderKind.ClaudeCode,
+            Approval = ApprovalMode.Ask,
+            WorkingDirectory = folder ?? "",
+            SystemPrompt = CodePrompt
+        };
+
         public static AgentProfile[] DefaultAgents() => new[]
         {
+            NewCodeAgent(null, "Código", "#FF9E5E"),
             new AgentProfile
             {
                 Name = "Mochi", ColorHex = "#FF8A65", Provider = ProviderKind.ClaudeCode,

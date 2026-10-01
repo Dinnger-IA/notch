@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -34,21 +35,172 @@ namespace CoucouWin.Services
         public string? SessionId { get; private set; }
         public HashSet<string> AlwaysAllow { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Tareas en cola (mensajes enviados mientras el agente trabajaba).</summary>
+        public ObservableCollection<AgentTask> PendingTasks { get; } = new();
+        /// <summary>Historial de tareas terminadas, la más reciente primero.</summary>
+        public ObservableCollection<AgentTask> CompletedTasks { get; } = new();
+        private const int MaxCompleted = 60;
+
         public event Action<AgentSession, TurnResult>? TurnFinished;
         public event Action<AgentSession, ApprovalRequest>? ApprovalRequested;
         public event Action<AgentSession, Reminder>? ReminderCreated;
 
-        public AgentSession(AgentProfile profile, ConfigStore store, Func<RunContext> contextFactory)
+        /// <summary>Pestaña de workspace (solo agentes de código).</summary>
+        public WorkspaceInfo? Workspace { get; }
+        /// <summary>Identificador único de esta sesión (agente o agente + pestaña). Se usa para historial y aprobaciones.</summary>
+        public string Key => Workspace == null || Workspace.Id == WorkspaceInfo.LegacyId ? Profile.Id : $"{Profile.Id}_{Workspace.Id}";
+        /// <summary>Carpeta donde se abre el CLI.</summary>
+        public string WorkDir => Workspace?.Folder ?? Profile.WorkingDirectory;
+        /// <summary>Nombre para avisos: «Código · mi-proyecto» en pestañas.</summary>
+        public string DisplayName => Workspace != null ? $"{Profile.Name} · {FolderName}" : Profile.Name;
+
+        private DateTime _lastActivity = DateTime.MinValue;
+        /// <summary>Última vez que empezó o terminó una tarea (para ordenar pestañas).</summary>
+        public DateTime LastActivity { get => _lastActivity; private set => Set(ref _lastActivity, value); }
+
+        public AgentSession(AgentProfile profile, ConfigStore store, Func<RunContext> contextFactory, WorkspaceInfo? workspace = null)
         {
+            Workspace = workspace;
             Profile = profile;
             _store = store;
             _contextFactory = contextFactory;
             _settleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
             _settleTimer.Tick += (_, _) => { _settleTimer.Stop(); if (!IsBusy) { State = MochiState.Idle; Activity = ""; } };
 
-            var h = store.LoadHistory(profile.Id);
+            var h = store.LoadHistory(Key);
             SessionId = h.SessionId;
             foreach (var m in h.Messages) Messages.Add(m);
+            foreach (var t in h.Pending) { t.Status = AgentTaskStatus.Pending; PendingTasks.Add(t); }
+            foreach (var t in h.Completed) CompletedTasks.Add(t);
+            if (CompletedTasks.FirstOrDefault()?.Finished is { } lf) _lastActivity = lf;
+            // Si había cola al cerrar, no arrancamos solos: el usuario decide con "Reanudar".
+            _queuePaused = PendingTasks.Count > 0;
+            PendingTasks.CollectionChanged += (_, _) => { OnChanged(nameof(PendingCount)); OnChanged(nameof(CanResumeQueue)); RebuildTaskLines(); OnChanged(nameof(OverviewBadge)); };
+            CompletedTasks.CollectionChanged += (_, _) => { OnChanged(nameof(CompletedCount)); RebuildTaskLines(); };
+            Messages.CollectionChanged += (_, _) => RaiseOutputChanged();
+            RebuildTaskLines();
+        }
+
+        // ---------------- Lista lateral (plana: completadas → actual + pasos → pendientes) ----------------
+        public ObservableCollection<TaskLine> TaskLines { get; } = new();
+        public bool HasTaskLines => TaskLines.Count > 0;
+
+        private void RebuildTaskLines()
+        {
+            TaskLines.Clear();
+            foreach (var t in CompletedTasks.Take(10).Reverse())
+                TaskLines.Add(new TaskLine
+                {
+                    Text = t.Title, Detail = t.Prompt,
+                    Tone = t.Status switch { AgentTaskStatus.Failed => TaskTone.Failed, AgentTaskStatus.Cancelled => TaskTone.Cancelled, _ => TaskTone.Done }
+                });
+            if (_current != null)
+            {
+                TaskLines.Add(new TaskLine { Text = _current.Title, Detail = _current.Prompt, Tone = TaskTone.Running });
+                foreach (var st in _current.Steps)
+                    TaskLines.Add(new TaskLine
+                    {
+                        Text = st.Text, Detail = st.Text,
+                        Tone = st.Status switch { StepStatus.Completed => TaskTone.StepDone, StepStatus.InProgress => TaskTone.StepActive, _ => TaskTone.StepPending }
+                    });
+            }
+            foreach (var t in PendingTasks)
+                TaskLines.Add(new TaskLine { Text = t.Title, Detail = t.Prompt, Tone = TaskTone.Pending });
+            OnChanged(nameof(HasTaskLines));
+        }
+
+        // ---------------- Resumen (vista general y barra informativa) ----------------
+        private ChatMessage? LastAgentMessage => Messages.LastOrDefault(m => m.Role == ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text));
+
+        /// <summary>Lo último que escribió el agente (texto plano, sin Markdown).</summary>
+        public string LastOutputText
+        {
+            get
+            {
+                var m = LastAgentMessage;
+                if (m == null) return IsScheduled ? "Aún no se ha ejecutado." : "Sin mensajes todavía.";
+                var t = Regex.Replace(m.Text, @"```.*?```", " [código] ", RegexOptions.Singleline);
+                t = Regex.Replace(t, @"[#*`>_\[\]]+", "").Replace("\r", "");
+                t = Regex.Replace(t, @"\s*\n\s*", " · ").Trim(' ', '·');
+                return t.Length > 260 ? t[..260] + "…" : t;
+            }
+        }
+
+        public string LastOutputTimeLabel => LastAgentMessage is { } m ? "Escrito " + FormatWhen(m.Time) : "";
+        public DateTime? LastOutputTime => LastAgentMessage?.Time;
+
+        /// <summary>
+        /// Último resultado partido en titular + detalles (para la tarjeta de los programados).
+        /// El titular es la primera línea (Coucou pide a los programados que sea corta); si la respuesta es
+        /// un solo párrafo, se parte por frases.
+        /// </summary>
+        public (string Headline, List<string> Details) LastOutputParts()
+        {
+            var m = LastAgentMessage;
+            if (m == null) return ("", new List<string>());
+            var text = Regex.Replace(m.Text, @"```.*?```", " ", RegexOptions.Singleline);
+            var lines = text.Replace("\r", "").Split('\n')
+                .Select(l => Regex.Replace(l, @"^\s*([-*+>]|\d+[.)])\s+", ""))   // viñetas
+                .Select(l => Regex.Replace(l, @"[*_`#]+", "").Trim())
+                .Where(l => l.Length > 0).ToList();
+            if (lines.Count == 1)
+            {
+                // Un solo párrafo: titular = primera frase, detalles = el resto de frases
+                var sentences = Regex.Split(lines[0], @"(?<=[.;!?])\s+").Where(x => x.Trim().Length > 0).ToList();
+                lines = sentences;
+            }
+            if (lines.Count == 0) return ("", new List<string>());
+            string Cut(string s, int max) => s.Length > max ? s[..max].TrimEnd() + "…" : s;
+            // Sin emojis/símbolos al inicio: WPF los dibuja como contorno monocromo
+            var head = Regex.Replace(lines[0], @"^[^\p{L}\p{N}¡¿""«(]+", "");
+            var headline = Cut(head.TrimEnd('.', ':'), 60);
+            var details = lines.Skip(1).Take(3).Select(l => Cut(l, 90)).ToList();
+            return (headline, details);
+        }
+
+        /// <summary>Una línea para la vista general.</summary>
+        public string OverviewLine
+        {
+            get
+            {
+                if (PendingApproval != null) return $"Necesita permiso · {PendingApproval.Tool}";
+                if (NeedsFolder) return "Arrastra una carpeta para empezar";
+                if (IsBusy)
+                {
+                    var step = _current?.Steps.FirstOrDefault(s => s.Status == StepStatus.InProgress)?.Text;
+                    return step ?? (string.IsNullOrEmpty(Activity) ? _current?.Title ?? "Trabajando…" : Activity);
+                }
+                return LastOutputText;
+            }
+        }
+
+        /// <summary>Indicador corto a la derecha de la tarjeta.</summary>
+        public string OverviewBadge
+        {
+            get
+            {
+                if (PendingApproval != null) return "permiso";
+                if (IsBusy && _current is { HasSteps: true } c) return c.StepsSummary.Replace(" pasos", "");
+                if (IsBusy) return "trabajando";
+                if (PendingTasks.Count > 0) return $"{PendingTasks.Count} en cola";
+                if (IsScheduled && !Profile.Schedule.Paused && Profile.Schedule.NextRun is { } n) return n.ToString("HH:mm");
+                return "";
+            }
+        }
+
+        /// <summary>Línea principal de la barra informativa de un agente programado.</summary>
+        public string InfoLine => IsBusy ? $"Ejecutando · {(string.IsNullOrEmpty(Activity) ? "…" : Activity)}" : LastOutputText;
+
+        private void RaiseOutputChanged()
+        {
+            OnChanged(nameof(LastOutputText)); OnChanged(nameof(LastOutputTimeLabel));
+            OnChanged(nameof(OverviewLine)); OnChanged(nameof(InfoLine));
+        }
+
+        private void RaiseOverview()
+        {
+            OnChanged(nameof(OverviewLine)); OnChanged(nameof(OverviewBadge)); OnChanged(nameof(InfoLine));
+            RaiseTabState();
         }
 
         // ---------------- Propiedades enlazables ----------------
@@ -56,10 +208,10 @@ namespace CoucouWin.Services
         public MochiState State { get => _state; set => Set(ref _state, value); }
 
         private string _activity = "";
-        public string Activity { get => _activity; set { if (Set(ref _activity, value)) OnChanged(nameof(StatusLine)); } }
+        public string Activity { get => _activity; set { if (Set(ref _activity, value)) { OnChanged(nameof(StatusLine)); RaiseOverview(); } } }
 
         private bool _isBusy;
-        public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) OnChanged(nameof(IsIdle)); } }
+        public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) { OnChanged(nameof(IsIdle)); RaiseOverview(); } } }
         public bool IsIdle => !_isBusy;
 
         private bool _isSelected;
@@ -69,16 +221,150 @@ namespace CoucouWin.Services
         public bool IsBox { get => _isBox; set => Set(ref _isBox, value); }
 
         private ApprovalRequest? _pending;
-        public ApprovalRequest? PendingApproval { get => _pending; private set => Set(ref _pending, value); }
+        public ApprovalRequest? PendingApproval { get => _pending; private set { if (Set(ref _pending, value)) RaiseOverview(); } }
 
         public Color Color => ParseColor(Profile.ColorHex);
         public string ProviderLabel => ProviderFactory.Label(Profile.Provider);
         public string StatusLine => string.IsNullOrEmpty(Activity) ? ProviderLabel : Activity;
 
+        // ---- rol
+        public bool IsCode => Profile.Kind == AgentKind.Code;
+        public bool IsScheduled => Profile.Kind == AgentKind.Scheduled;
+        public bool IsConversational => Profile.Kind != AgentKind.Scheduled;
+        /// <summary>Agente de código que todavía no tiene carpeta asignada.</summary>
+        public bool NeedsFolder => IsCode && string.IsNullOrWhiteSpace(WorkDir);
+        public bool HasFolder => IsCode && !NeedsFolder;
+        public bool CanType => IsConversational && !NeedsFolder;
+        public string FolderPath => WorkDir;
+        public string FolderName
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(WorkDir)) return "sin carpeta";
+                var n = Path.GetFileName(WorkDir.TrimEnd('\\', '/'));
+                return string.IsNullOrEmpty(n) ? WorkDir : n;
+            }
+        }
+        /// <summary>Texto de la píldora de contexto del chat: carpeta (código) o CLI.</summary>
+        public string ContextLabel => IsCode ? (HasFolder ? FolderName : "sin carpeta") : ProviderLabel;
+
+        public string KindLabel => Profile.Kind switch
+        {
+            AgentKind.Code => "Código",
+            AgentKind.Scheduled => "Programado",
+            _ => "Chat"
+        };
+
+        private bool _isDefault;
+        /// <summary>Agente principal (se muestra grande en el notch).</summary>
+        public bool IsDefault { get => _isDefault; set => Set(ref _isDefault, value); }
+
+        // ---- programación
+        public string ScheduleSummary => IsScheduled ? Profile.Schedule.Summary : "";
+        public bool IsPaused => IsScheduled && Profile.Schedule.Paused;
+        public string NextRunLabel
+        {
+            get
+            {
+                if (!IsScheduled) return "";
+                if (Profile.Schedule.Paused) return "En pausa";
+                return Profile.Schedule.NextRun is { } n ? "Próxima: " + FormatWhen(n) : "Sin próximas ejecuciones";
+            }
+        }
+        public string LastRunLabel => Profile.Schedule.LastRun is { } l ? "Última: " + FormatWhen(l) : "Aún no se ha ejecutado";
+
+        /// <summary>Texto corto bajo el nombre en las pestañas.</summary>
+        public string SubLabel => IsCode ? FolderName
+            : IsScheduled ? (Profile.Schedule.Paused ? "en pausa" : Profile.Schedule.NextRun is { } n ? FormatWhen(n) : "—")
+            : ProviderLabel;
+
+        // ---- tareas
+        private AgentTask? _current;
+        public AgentTask? CurrentTask
+        {
+            get => _current;
+            private set
+            {
+                if (_current != null) _current.PropertyChanged -= CurrentTask_PropertyChanged;
+                if (!Set(ref _current, value)) return;
+                if (_current != null) _current.PropertyChanged += CurrentTask_PropertyChanged;
+                OnChanged(nameof(HasCurrentTask));
+                RebuildTaskLines();
+                RaiseOverview();
+            }
+        }
+
+        private void CurrentTask_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(AgentTask.Steps)) { RebuildTaskLines(); RaiseOverview(); }
+        }
+        public bool HasCurrentTask => _current != null;
+        public int PendingCount => PendingTasks.Count;
+        public int CompletedCount => CompletedTasks.Count;
+        private bool _queuePaused;
+        public bool CanResumeQueue => _queuePaused && !IsBusy && PendingTasks.Count > 0;
+
+        private static string FormatWhen(DateTime t)
+        {
+            var today = DateTime.Today;
+            if (t.Date == today) return "hoy " + t.ToString("HH:mm");
+            if (t.Date == today.AddDays(1)) return "mañana " + t.ToString("HH:mm");
+            if (t.Date == today.AddDays(-1)) return "ayer " + t.ToString("HH:mm");
+            return t.ToString("ddd dd, HH:mm");
+        }
+
         public void UpdateProfile(AgentProfile p)
         {
             Profile = p;
-            OnChanged(nameof(Profile)); OnChanged(nameof(Color)); OnChanged(nameof(ProviderLabel)); OnChanged(nameof(StatusLine));
+            RaiseProfileChanged();
+        }
+
+        public void RaiseProfileChanged()
+        {
+            foreach (var n in new[] { nameof(Profile), nameof(Color), nameof(ProviderLabel), nameof(StatusLine), nameof(IsCode),
+                         nameof(IsScheduled), nameof(IsConversational), nameof(NeedsFolder), nameof(HasFolder), nameof(CanType),
+                         nameof(FolderPath), nameof(FolderName), nameof(KindLabel), nameof(ScheduleSummary), nameof(IsPaused),
+                         nameof(NextRunLabel), nameof(LastRunLabel), nameof(SubLabel), nameof(OverviewLine), nameof(OverviewBadge),
+                         nameof(InfoLine), nameof(LastOutputText), nameof(ContextLabel) })
+                OnChanged(n);
+        }
+
+        /// <summary>Estado de la última tarea terminada (para chips y pestañas).</summary>
+        public AgentTaskStatus? LastTaskStatus => CompletedTasks.FirstOrDefault()?.Status;
+        public bool LastFailed => !IsBusy && LastTaskStatus == AgentTaskStatus.Failed;
+        /// <summary>Icono de estado de la pestaña: ▶ activa, ! permiso, ✓ terminó, ✗ falló, ○ sin tareas.</summary>
+        public string TabIcon => PendingApproval != null ? "\uE7BA" : IsBusy ? "\uE768" : LastTaskStatus switch
+        {
+            AgentTaskStatus.Done => "\uE73E",
+            AgentTaskStatus.Failed => "\uE711",
+            AgentTaskStatus.Cancelled => "\uE71A",
+            _ => "\uEA3A"
+        };
+        /// <summary>Tono de la pestaña para colorear el icono.</summary>
+        public TaskTone TabTone => PendingApproval != null ? TaskTone.Running : IsBusy ? TaskTone.Running : LastTaskStatus switch
+        {
+            AgentTaskStatus.Done => TaskTone.Done,
+            AgentTaskStatus.Failed => TaskTone.Failed,
+            AgentTaskStatus.Cancelled => TaskTone.Cancelled,
+            _ => TaskTone.Pending
+        };
+
+        /// <summary>Paso o actividad actual en una línea (vacío si está libre).</summary>
+        public string CurrentLine
+        {
+            get
+            {
+                if (PendingApproval != null) return $"Necesita permiso · {PendingApproval.Tool}";
+                if (!IsBusy) return "";
+                var step = _current?.Steps.FirstOrDefault(s => s.Status == StepStatus.InProgress)?.Text;
+                return step ?? (string.IsNullOrEmpty(Activity) ? _current?.Title ?? "Trabajando…" : Activity);
+            }
+        }
+
+        private void RaiseTabState()
+        {
+            OnChanged(nameof(TabIcon)); OnChanged(nameof(TabTone)); OnChanged(nameof(LastTaskStatus));
+            OnChanged(nameof(LastFailed)); OnChanged(nameof(CurrentLine));
         }
 
         // ---------------- Conversación ----------------
@@ -98,15 +384,94 @@ namespace CoucouWin.Services
             SaveHistory();
         }
 
+        /// <summary>
+        /// Envía un mensaje. Si el agente está ocupado, queda en la cola de pendientes y se ejecutará
+        /// cuando termine la tarea actual.
+        /// </summary>
         public async Task SendAsync(string text, bool fromSchedule = false)
         {
             text = text.Trim();
-            if (text == "" || IsBusy) return;
-
+            if (text == "") return;
             if (!fromSchedule && TryHandleCommand(text)) return;
+            if (NeedsFolder)
+            {
+                AddNotice("Primero elige la carpeta de trabajo: arrástrala sobre el notch o usa «Seleccionar carpeta».", true);
+                return;
+            }
+            if (IsBusy)
+            {
+                if (fromSchedule) return; // el planificador reintentará
+                PendingTasks.Add(new AgentTask { Prompt = text });
+                AddNotice($"📝 En cola · {PendingTasks.Count} pendiente(s)");
+                return;
+            }
+            _queuePaused = false; // escribir de nuevo reanuda la cola que se detuvo
+            await RunTaskAsync(new AgentTask { Prompt = text, FromSchedule = fromSchedule });
+        }
 
+        public void ClearQueue()
+        {
+            PendingTasks.Clear();
+            SaveHistory();
+        }
+
+        /// <summary>Ejecución de un agente programado.</summary>
+        public async Task<bool> RunScheduledAsync()
+        {
+            if (IsBusy || !IsScheduled) return false;
+            var instr = Profile.Schedule.Instruction.Trim();
+            if (instr == "") return false;
+            if (!Profile.Schedule.KeepContext) SessionId = null;
+            Profile.Schedule.LastRun = DateTime.Now;
+            RaiseProfileChanged();
+            await RunTaskAsync(new AgentTask { Prompt = instr, FromSchedule = true });
+            return true;
+        }
+
+        public void RemoveQueued(AgentTask t)
+        {
+            PendingTasks.Remove(t);
+            SaveHistory();
+        }
+
+        public void ResumeQueue()
+        {
+            _queuePaused = false;
+            OnChanged(nameof(CanResumeQueue));
+            StartNextQueued();
+        }
+
+        public void ClearCompleted()
+        {
+            CompletedTasks.Clear();
+            SaveHistory();
+        }
+
+        private void StartNextQueued()
+        {
+            if (IsBusy || _queuePaused || PendingTasks.Count == 0) return;
+            var next = PendingTasks[0];
+            PendingTasks.RemoveAt(0);
+            _ = RunTaskAsync(next);
+        }
+
+        private async Task RunTaskAsync(AgentTask task)
+        {
+            var text = task.Prompt;
+            bool fromSchedule = task.FromSchedule;
+            if (IsCode && !System.IO.Directory.Exists(WorkDir))
+            {
+                AddNotice($"La carpeta {WorkDir} ya no existe. Cierra esta pestaña y abre otra.", true);
+                return;
+            }
+            LastActivity = DateTime.Now;
+
+            task.Status = AgentTaskStatus.Running;
+            task.Steps = new List<TaskStep>();
+            CurrentTask = task;
             Messages.Add(new ChatMessage(ChatRole.User, fromSchedule ? "⏰ " + text : text));
             IsBusy = true;
+            OnChanged(nameof(CanResumeQueue));
             _cancelled = false;
             _settleTimer.Stop();
             State = MochiState.Thinking;
@@ -115,6 +480,7 @@ namespace CoucouWin.Services
             int firstNew = Messages.Count;
 
             ChatMessage? streaming = null;
+            string streamingRaw = "";
             bool gotResult = false, success = true;
             string? error = null;
             var stderr = new StringBuilder();
@@ -123,10 +489,13 @@ namespace CoucouWin.Services
             {
                 var provider = ProviderFactory.Create(Profile.Provider);
                 var ctx = _contextFactory();
-                var spec = provider.Build(Profile, text, SessionId, ctx);
+                // Cada pestaña usa el perfil del agente con su propia carpeta
+                var runProfile = Profile;
+                if (Workspace != null) { runProfile = Profile.Clone(); runProfile.WorkingDirectory = Workspace.Folder; }
+                var spec = provider.Build(runProfile, text, SessionId, ctx);
                 var psi = spec.Psi;
                 psi.Environment["COUCOU_PIPE"] = ctx.PipeName;
-                psi.Environment["COUCOU_AGENT_ID"] = Profile.Id;
+                psi.Environment["COUCOU_AGENT_ID"] = Key;
                 psi.Environment["COUCOU_AGENT_NAME"] = Profile.Name;
                 psi.Environment["COUCOU_APPROVAL"] = Profile.Approval.ToString();
 
@@ -153,16 +522,27 @@ namespace CoucouWin.Services
                                 if (streaming == null)
                                 {
                                     streaming = new ChatMessage(ChatRole.Agent, "");
+                                    streamingRaw = "";
                                     Messages.Add(streaming);
                                 }
-                                streaming.Text += d.Text;
+                                streamingRaw += d.Text;
+                                streaming.Text = StripTaskBlocks(streamingRaw, task);
                                 if (State != MochiState.Waiting) { State = MochiState.Thinking; Activity = "Escribiendo…"; }
                                 break;
                             case TextEvent t:
-                                if (streaming != null) { streaming.Text = t.Text; streaming = null; }
-                                else Messages.Add(new ChatMessage(ChatRole.Agent, t.Text));
-                                break;
+                                {
+                                    var clean = StripTaskBlocks(t.Text, task);
+                                    if (streaming != null)
+                                    {
+                                        streaming.Text = clean;
+                                        if (clean == "") Messages.Remove(streaming);
+                                        streaming = null;
+                                    }
+                                    else if (clean != "") Messages.Add(new ChatMessage(ChatRole.Agent, clean));
+                                    break;
+                                }
                             case ToolEvent tool:
+                                if (streaming != null && streaming.Text == "") Messages.Remove(streaming);
                                 streaming = null;
                                 Messages.Add(new ChatMessage(ChatRole.Tool, $"{tool.Tool}  {tool.Detail}".Trim()));
                                 if (State != MochiState.Waiting) State = MochiState.Working;
@@ -178,6 +558,11 @@ namespace CoucouWin.Services
                                 success = r.Success;
                                 error = r.Error;
                                 break;
+                            case TodoEvent td:
+                                if (!SameSteps(task.Steps, td.Steps.ToList())) task.Steps = td.Steps.ToList();
+                                var active = td.Steps.FirstOrDefault(x => x.Status == StepStatus.InProgress);
+                                if (active != null) Activity = active.Text;
+                                break;
                         }
                     }
                 }
@@ -188,7 +573,7 @@ namespace CoucouWin.Services
                 {
                     gotResult = true;
                     success = code == 0;
-                    if (streaming != null) streaming.Text = streaming.Text.TrimEnd();
+                    if (streaming != null) streaming.Text = StripTaskBlocks(streamingRaw, task).TrimEnd();
                 }
                 if (!gotResult && !_cancelled)
                 {
@@ -233,7 +618,21 @@ namespace CoucouWin.Services
             _approvals.Clear();
             PendingApproval = null;
 
+            task.Status = _cancelled ? AgentTaskStatus.Cancelled : success ? AgentTaskStatus.Done : AgentTaskStatus.Failed;
+            if (success && !_cancelled && task.Steps.Any(x => x.Status == StepStatus.InProgress))
+                task.Steps = task.Steps.Select(x => new TaskStep { Text = x.Text, Status = x.Status == StepStatus.InProgress ? StepStatus.Completed : x.Status }).ToList();
+            task.Finished = DateTime.Now;
+            {
+                var finalText = Messages.Skip(firstNew).LastOrDefault(m => m.Role == ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text))?.Text;
+                task.Summary = Summarize(success ? finalText ?? "" : error ?? finalText ?? "");
+            }
+            CurrentTask = null;
+            CompletedTasks.Insert(0, task);
+            while (CompletedTasks.Count > MaxCompleted) CompletedTasks.RemoveAt(CompletedTasks.Count - 1);
+            if (_cancelled && PendingTasks.Count > 0) _queuePaused = true; // al detener, la cola espera
+
             IsBusy = false;
+            OnChanged(nameof(CanResumeQueue));
             var lastAgent = Messages.Skip(firstNew).LastOrDefault(m => m.Role == ChatRole.Agent)?.Text ?? error ?? "";
             State = _cancelled ? MochiState.Idle : success ? MochiState.Done : MochiState.Error;
             Activity = _cancelled ? "" : success ? "¡Listo!" : "Algo salió mal";
@@ -241,7 +640,18 @@ namespace CoucouWin.Services
             _settleTimer.Start();
             SaveHistory();
 
+            LastActivity = DateTime.Now;
+            RaiseOutputChanged();
+            RaiseOverview();
             TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule));
+
+            // Siguiente tarea de la cola
+            if (!_queuePaused && PendingTasks.Count > 0)
+            {
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+                t.Tick += (_, _) => { t.Stop(); StartNextQueued(); };
+                t.Start();
+            }
         }
 
         public void Cancel()
@@ -336,6 +746,41 @@ namespace CoucouWin.Services
             return false;
         }
 
+        // [[tasks]] - [x] hecho  - [~] en curso  - [ ] pendiente [[/tasks]]
+        private static readonly Regex TaskBlockRx = new(@"\[\[(?:tasks|tareas|plan)\]\](?<body>.*?)\[\[/(?:tasks|tareas|plan)\]\]",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex OpenTaskBlockRx = new(@"\[\[(?:tasks|tareas|plan)\]\](?:(?!\[\[/).)*$",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex StepLineRx = new(@"^\s*(?:[-*+]|\d+[.)])?\s*\[(?<m>[ xX~>\-✓])\]\s*(?<t>.+?)\s*$",
+            RegexOptions.Multiline | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Quita los bloques [[tasks]] del texto visible y, si hay alguno completo, actualiza los pasos
+        /// de la tarea con el último. Funciona con cualquier CLI (no depende de TodoWrite).
+        /// </summary>
+        private static string StripTaskBlocks(string raw, AgentTask task)
+        {
+            if (!raw.Contains("[[")) return raw;
+            var ms = TaskBlockRx.Matches(raw);
+            if (ms.Count > 0)
+            {
+                var steps = new List<TaskStep>();
+                foreach (Match l in StepLineRx.Matches(ms[^1].Groups["body"].Value))
+                {
+                    var mk = l.Groups["m"].Value;
+                    var st = mk is "x" or "X" or "✓" ? StepStatus.Completed : mk is "~" or ">" or "-" ? StepStatus.InProgress : StepStatus.Pending;
+                    steps.Add(new TaskStep { Text = l.Groups["t"].Value, Status = st });
+                }
+                if (steps.Count > 0 && !SameSteps(task.Steps, steps)) task.Steps = steps;
+            }
+            var s = TaskBlockRx.Replace(raw, "");
+            s = OpenTaskBlockRx.Replace(s, ""); // bloque a medio escribir durante el streaming
+            return Regex.Replace(s, @"\n{3,}", "\n\n").Trim();
+        }
+
+        private static bool SameSteps(List<TaskStep> a, List<TaskStep> b) =>
+            a.Count == b.Count && a.Zip(b).All(p => p.First.Text == p.Second.Text && p.First.Status == p.Second.Status);
+
         // [[reminder: 10m | texto]]   [[task: 2026-10-02T09:00 | instrucción]]
         private static readonly Regex ScheduleTag = new(@"\[\[\s*(?<k>reminder|recordatorio|task|tarea)\s*:\s*(?<when>[^|\]]+?)\s*\|\s*(?<text>[^\]]+?)\s*\]\]",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -364,7 +809,13 @@ namespace CoucouWin.Services
             foreach (var n in notices) Messages.Add(new ChatMessage(ChatRole.Notice, n));
         }
 
-        private void SaveHistory() => _store.SaveHistory(Profile.Id, new AgentHistory { SessionId = SessionId, Messages = Messages.ToList() });
+        private void SaveHistory() => _store.SaveHistory(Key, new AgentHistory
+        {
+            SessionId = SessionId,
+            Messages = Messages.ToList(),
+            Pending = PendingTasks.ToList(),
+            Completed = CompletedTasks.ToList()
+        });
 
         private static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
 

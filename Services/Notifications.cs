@@ -50,6 +50,16 @@ namespace CoucouWin.Services
             hover.CheckedChanged += (_, _) => { settings().ExpandOnHover = hover.Checked; App.Current.Store.Save(); };
             menu.Items.Add(hover);
 
+            var clickOut = new WinForms.ToolStripMenuItem("Cerrar el panel solo al hacer clic fuera") { CheckOnClick = true, Checked = settings().CloseOnClickOutsideOnly };
+            clickOut.CheckedChanged += (_, _) => { settings().CloseOnClickOutsideOnly = clickOut.Checked; App.Current.Store.Save(); };
+            menu.Items.Add(clickOut);
+            // Los ajustes también se cambian desde el notch: refrescar las marcas al abrir el menú
+            menu.Opening += (_, _) =>
+            {
+                sounds.Checked = settings().Sounds; notify.Checked = settings().NotifyOnDone;
+                hover.Checked = settings().ExpandOnHover; clickOut.Checked = settings().CloseOnClickOutsideOnly;
+            };
+
             var claude = new WinForms.ToolStripMenuItem("Avisarme de mis sesiones de Claude Code")
             {
                 CheckOnClick = true, Checked = ControlChannel.IsClaudeIntegrationInstalled(),
@@ -103,12 +113,12 @@ namespace CoucouWin.Services
 
         // ---------------- Inicio con Windows (HKCU\...\Run) ----------------
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        private static bool IsStartupEnabled()
+        public static bool IsStartupEnabled()
         {
             using var k = Registry.CurrentUser.OpenSubKey(RunKey);
             return k?.GetValue("CoucouWin") != null;
         }
-        private static void SetStartup(bool on)
+        public static void SetStartup(bool on)
         {
             using var k = Registry.CurrentUser.CreateSubKey(RunKey);
             if (on) k.SetValue("CoucouWin", $"\"{Environment.ProcessPath}\"");

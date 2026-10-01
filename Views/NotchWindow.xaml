@@ -4,9 +4,10 @@
         xmlns:c="clr-namespace:CoucouWin.Controls"
         xmlns:v="clr-namespace:CoucouWin.Views"
         xmlns:m="clr-namespace:CoucouWin.Models"
+        xmlns:s="clr-namespace:CoucouWin.Services"
         Title="Coucou" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
-        Width="640" Height="720" FontFamily="{StaticResource UiFont}"
+        Width="860" Height="700" FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True">
 
     <Window.Resources>
@@ -14,99 +15,261 @@
         <v:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <v:BoolToVisibilityConverter x:Key="InvBoolToVis" Invert="True"/>
         <v:ColorToBrushConverter x:Key="ColorBrush"/>
+        <v:EmptyToVisibilityConverter x:Key="EmptyToVis"/>
 
-        <!-- Personaje mini (modo píldora) -->
-        <DataTemplate x:Key="MiniAgent">
-            <c:MochiView Width="30" Height="30" Margin="2,0" Interactive="True"
-                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"
-                         ToolTip="{Binding Profile.Name}"/>
-        </DataTemplate>
+        <RadialGradientBrush x:Key="ChatBackground" Center="0.5,1.05" GradientOrigin="0.5,1.05" RadiusX="0.75" RadiusY="0.95">
+            <GradientStop Color="#2A2650" Offset="0"/>
+            <GradientStop Color="#16152A" Offset="0.55"/>
+            <GradientStop Color="#0C0C10" Offset="1"/>
+        </RadialGradientBrush>
 
-        <!-- Pestaña de agente (modo panel) -->
-        <DataTemplate x:Key="AgentTab">
-            <Border x:Name="Tab" Width="74" Height="84" CornerRadius="14" Margin="2,0" Background="Transparent"
-                    Cursor="Hand" MouseLeftButtonUp="AgentTab_Click" AllowDrop="True" DragEnter="AgentTab_DragEnter" Drop="AgentTab_Drop">
-                <Border.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Editar agente…" Click="MenuEdit_Click"/>
-                        <MenuItem Header="Nueva conversación" Click="MenuNewChat_Click"/>
-                        <MenuItem Header="Duplicar" Click="MenuDuplicate_Click"/>
-                        <Separator/>
-                        <MenuItem Header="Eliminar" Click="MenuDelete_Click"/>
-                    </ContextMenu>
-                </Border.ContextMenu>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <c:MochiView Width="54" Height="54" Margin="0,4,0,0" BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
-                    <TextBlock Grid.Row="1" Text="{Binding Profile.Name}" HorizontalAlignment="Center" Margin="0,0,0,6"
-                               FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
-                    <Ellipse Width="7" Height="7" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,10,0"
-                             Fill="{Binding Color, Converter={StaticResource ColorBrush}}"
-                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
-                </Grid>
-            </Border>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter TargetName="Tab" Property="Background" Value="#1CFFFFFF"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
+        <SolidColorBrush x:Key="PaneBg" Color="#121217"/>
+        <SolidColorBrush x:Key="ChipBg" Color="#1A1A21"/>
 
-        <!-- Mensaje del chat -->
+        <Style x:Key="TopPill" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="15"/>
+        </Style>
+
+        <!-- Mensajes estilo coucou -->
         <DataTemplate x:Key="Message" DataType="{x:Type m:ChatMessage}">
-            <Border x:Name="Bubble" Margin="0,3" Padding="12,8" CornerRadius="14" MaxWidth="440"
-                    HorizontalAlignment="Left" Background="{StaticResource Surface2}">
+            <Border x:Name="Bubble" Margin="0,6" Padding="0" CornerRadius="16" MaxWidth="500"
+                    HorizontalAlignment="Left" Background="Transparent">
                 <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Copiar" Click="CopyMessage_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
-                    <TextBlock x:Name="Md" v:Markdown.Text="{Binding Text}" TextWrapping="Wrap" FontSize="13"
-                               Foreground="{StaticResource TextPrimary}" LineHeight="19"/>
-                    <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}" Visibility="Collapsed"/>
+                    <TextBlock x:Name="Md" v:Markdown.Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5"
+                               Foreground="#ECECF2" LineHeight="20"/>
+                    <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"
+                             FontSize="13.5" Visibility="Collapsed"/>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.User}">
                     <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
-                    <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubble}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.User}">
+                    <Setter TargetName="Bubble" Property="Background" Value="#2C2C33"/>
+                    <Setter TargetName="Bubble" Property="Padding" Value="14,7"/>
+                    <Setter TargetName="Bubble" Property="MaxWidth" Value="420"/>
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Tool}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
-                    <Setter TargetName="Bubble" Property="Background" Value="Transparent"/>
-                    <Setter TargetName="Bubble" Property="Padding" Value="4,1"/>
                     <Setter TargetName="Bubble" Property="Margin" Value="0,0"/>
-                    <Setter TargetName="Bubble" Property="MaxWidth" Value="540"/>
+                    <Setter TargetName="Bubble" Property="MaxWidth" Value="560"/>
                     <Setter TargetName="Txt" Property="FontFamily" Value="{StaticResource MonoFont}"/>
-                    <Setter TargetName="Txt" Property="FontSize" Value="11.5"/>
-                    <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                    <Setter TargetName="Txt" Property="FontSize" Value="11"/>
+                    <Setter TargetName="Txt" Property="Foreground" Value="#6E6E7C"/>
                     <Setter TargetName="Txt" Property="TextWrapping" Value="NoWrap"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Notice}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
-                    <Setter TargetName="Bubble" Property="Background" Value="Transparent"/>
                     <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Center"/>
-                    <Setter TargetName="Bubble" Property="Padding" Value="4,2"/>
-                    <Setter TargetName="Txt" Property="FontSize" Value="11.5"/>
-                    <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                    <Setter TargetName="Bubble" Property="Margin" Value="0,3"/>
+                    <Setter TargetName="Txt" Property="FontSize" Value="11"/>
+                    <Setter TargetName="Txt" Property="Foreground" Value="#6E6E7C"/>
                     <Setter TargetName="Txt" Property="TextAlignment" Value="Center"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Error}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="Bubble" Property="Background" Value="{StaticResource ErrorBg}"/>
+                    <Setter TargetName="Bubble" Property="Padding" Value="12,7"/>
                     <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource ErrorFg}"/>
                     <Setter TargetName="Txt" Property="FontSize" Value="12"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Línea de tarea: icono + texto. Tamaño pequeño (lista del chat) -->
+        <DataTemplate x:Key="TaskLineTemplate" DataType="{x:Type m:TaskLine}">
+            <Grid x:Name="Root" Margin="0,2" ToolTip="{Binding Detail}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Ic" Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="9.5"
+                           Foreground="#6E6E7C" Margin="0,2,0,0"/>
+                <TextBlock x:Name="Tx" Grid.Column="1" Text="{Binding Text}" FontSize="11" Foreground="#9A9AA8"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsStep}" Value="True">
+                    <Setter TargetName="Root" Property="Margin" Value="12,1,0,1"/>
+                    <Setter TargetName="Tx" Property="FontSize" Value="10.5"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Done}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#6E6E7C"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.StepDone}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#6E6E7C"/>
+                    <Setter TargetName="Tx" Property="TextDecorations" Value="Strikethrough"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Failed}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Running}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.StepActive}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Línea de detalle grande (tarjeta izquierda de la vista general) -->
+        <DataTemplate x:Key="DetailLineTemplate" DataType="{x:Type m:TaskLine}">
+            <Grid Margin="0,3" ToolTip="{Binding Detail}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Ic" Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="11"
+                           Foreground="#8C8C99" Margin="0,3,0,0"/>
+                <TextBlock x:Name="Tx" Grid.Column="1" Text="{Binding Text}" FontSize="13" Foreground="#9A9AA8"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Done}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#8C8C99"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Failed}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#E8B4B4"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Running}">
+                    <Setter TargetName="Ic" Property="Text" Value="&#xE76C;"/>
+                    <Setter TargetName="Ic" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="FontSize" Value="14"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Pending}">
+                    <Setter TargetName="Ic" Property="Text" Value="&#xE76C;"/>
+                    <Setter TargetName="Ic" Property="Foreground" Value="#5E5E6A"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Schedule}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#8EB8FF"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#C8C8D2"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Bullet}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                    <Setter TargetName="Ic" Property="FontSize" Value="7"/>
+                    <Setter TargetName="Ic" Property="Margin" Value="2,6,0,0"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#D6D6DE"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Next}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="FontSize" Value="14"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Chip pequeño de un agente (panel derecho) -->
+        <DataTemplate x:Key="AgentChip" DataType="{x:Type s:AgentEntry}">
+            <Border x:Name="Chip" Height="42" Margin="4" CornerRadius="21" Background="{StaticResource ChipBg}"
+                    BorderBrush="#1FFFFFFF" BorderThickness="1" Cursor="Hand"
+                    MouseLeftButtonUp="Chip_Click" MouseRightButtonUp="Chip_RightClick">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Margin="8,0,0,0" VerticalAlignment="Center">
+                        <c:MochiView Width="30" Height="30" Interactive="False"
+                                     BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                        <!-- Insignias -->
+                        <Border Width="14" Height="14" CornerRadius="7" Background="#E5484D" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,-4,-5,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="7" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border Width="14" Height="14" CornerRadius="7" Background="{StaticResource AlertBorder}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,-4,-5,0" Visibility="{Binding NeedsApproval, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="!" FontSize="10" FontWeight="Bold" Foreground="#1A1300"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                        </Border>
+                    </Grid>
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="#D6D6DE"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,12,0"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Chip" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Chip" Property="Background" Value="#26263A"/>
+                    <Setter TargetName="Chip" Property="BorderBrush" Value="#40FFFFFF"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                    <Setter TargetName="Chip" Property="BorderBrush" Value="#55FFB020"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Elemento de la vista de tareas programadas -->
+        <DataTemplate x:Key="ScheduledItemTemplate" DataType="{x:Type v:ScheduledItem}">
+            <Border x:Name="Row" Padding="8,6" Margin="0,1" CornerRadius="12" Background="Transparent" ToolTip="{Binding Tooltip}"
+                    Cursor="Hand" MouseLeftButtonUp="ScheduledItem_Click">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <c:MochiView Width="28" Height="28" Interactive="False" BodyColor="{Binding Color}"/>
+                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock FontSize="11" Foreground="#8C8C99" TextTrimming="CharacterEllipsis" Margin="0,1,0,0">
+                            <Run Text="{Binding When, Mode=OneWay}" Foreground="#C8C8D2"/><Run Text="  ·  "/><Run Text="{Binding Meta, Mode=OneWay}"/>
+                        </TextBlock>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="11" Content="&#xE74D;"
+                            ToolTip="Eliminar" Click="DeleteReminder_Click" VerticalAlignment="Center"
+                            Visibility="{Binding IsReminder, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="#14FFFFFF"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Pestaña de workspace (agentes de código) -->
+        <DataTemplate x:Key="WorkspaceTab" DataType="{x:Type s:AgentSession}">
+            <Border x:Name="Tab" Height="30" Margin="0,0,4,0" Padding="10,0,4,0" CornerRadius="15" Background="Transparent" Cursor="Hand"
+                    ToolTip="{Binding FolderPath}" MouseLeftButtonUp="Tab_Click" MouseRightButtonUp="Tab_RightClick">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="Ic" Text="{Binding TabIcon}" FontFamily="{StaticResource IconFont}" FontSize="10" Foreground="#8C8C99"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding FolderName}" FontSize="12" Foreground="#D6D6DE" Margin="6,0,2,0" VerticalAlignment="Center"
+                               MaxWidth="140" TextTrimming="CharacterEllipsis"/>
+                    <Button Style="{StaticResource IconButton}" Width="20" Height="20" FontSize="8" Content="&#xE711;" ToolTip="Cerrar workspace"
+                            Click="CloseTab_Click"/>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Tab" Property="Background" Value="#2C2C33"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TabTone}" Value="{x:Static m:TaskTone.Running}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TabTone}" Value="{x:Static m:TaskTone.Done}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TabTone}" Value="{x:Static m:TaskTone.Failed}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -114,7 +277,7 @@
 
     <Grid>
         <Border x:Name="Shell" VerticalAlignment="Top" HorizontalAlignment="Center"
-                Width="180" Height="40" CornerRadius="0,0,22,22"
+                Width="150" Height="34" CornerRadius="0,0,18,18"
                 Background="{StaticResource NotchBg}" BorderBrush="{StaticResource NotchBorder}" BorderThickness="1,0,1,1"
                 AllowDrop="True" MouseEnter="Shell_MouseEnter" MouseLeave="Shell_MouseLeave"
                 DragEnter="Shell_DragEnter" DragLeave="Shell_DragLeave" Drop="Shell_Drop">
@@ -123,21 +286,17 @@
             </Border.Effect>
             <Grid ClipToBounds="True">
 
-                <!-- ============ Modo píldora ============ -->
-                <Grid x:Name="CollapsedView" Margin="14,0,14,4" MouseLeftButtonUp="Collapsed_Click">
+                <!-- ============ Píldora ============ -->
+                <Grid x:Name="CollapsedView" Margin="12,0,12,2" MouseLeftButtonUp="Collapsed_Click">
                     <StackPanel x:Name="CollapsedContent" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <ItemsControl x:Name="MiniAgents" ItemTemplate="{StaticResource MiniAgent}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                        <TextBlock x:Name="CollapsedStatus" Margin="10,0,0,0" VerticalAlignment="Center" MaxWidth="220"
+                        <StackPanel x:Name="CollapsedAgents" Orientation="Horizontal" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="CollapsedStatus" Margin="10,0,0,0" VerticalAlignment="Center" MaxWidth="240"
                                    FontSize="12" Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                 </Grid>
 
-                <!-- ============ Modo aviso (banner) ============ -->
-                <Grid x:Name="BannerView" Visibility="Collapsed" Opacity="0" Margin="16,6,16,10" Cursor="Hand"
+                <!-- ============ Aviso ============ -->
+                <Grid x:Name="BannerView" Visibility="Collapsed" Opacity="0" Margin="16,8,16,10" Cursor="Hand"
                       MouseLeftButtonUp="Banner_Click">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -152,127 +311,278 @@
                     <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Click="BannerClose_Click" ToolTip="Cerrar"/>
                 </Grid>
 
-                <!-- ============ Modo panel (chat) ============ -->
-                <Grid x:Name="ExpandedView" Visibility="Collapsed" Opacity="0" Margin="14,8,14,14">
+                <!-- ============ Panel abierto: barra superior fija + contenido ============ -->
+                <Grid x:Name="PanelHost" Visibility="Collapsed" Opacity="0">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="40"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Cabecera: personajes + acciones -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" PreviewMouseWheel="Tabs_MouseWheel">
-                            <StackPanel Orientation="Horizontal">
-                                <ItemsControl x:Name="AgentTabs" ItemTemplate="{StaticResource AgentTab}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                                <Button Style="{StaticResource IconButton}" Width="44" Height="44" Margin="4,0,0,10" FontSize="16"
-                                        Content="&#xE710;" ToolTip="Crear un agente nuevo" Click="AddAgent_Click"/>
-                            </StackPanel>
-                        </ScrollViewer>
-                        <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Top" Margin="6,2,0,0">
+                    <!-- Barra superior: inicio a la izquierda; tareas programadas y configuración a la derecha -->
+                    <Grid Margin="14,4,14,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="HomePill" CornerRadius="15" Background="#2C2C33">
+                                <Button Style="{StaticResource TopPill}" Content="&#xE80F;" ToolTip="Inicio" Click="Home_Click" Foreground="#ECECF2"/>
+                            </Border>
+                            <TextBlock x:Name="TopTitle" Margin="12,0,0,0" FontSize="12" Foreground="#8C8C99" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                             <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#xE718;" ToolTip="Fijar panel abierto" Click="Pin_Click"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE823;" ToolTip="Recordatorios y tareas programadas" Click="Reminders_Click"/>
+                            <Border x:Name="SchedulePill" CornerRadius="15" Background="Transparent" Margin="2,0,0,0">
+                                <Button Style="{StaticResource TopPill}" Content="&#xE787;" ToolTip="Tareas programadas" Click="ScheduleView_Click"/>
+                            </Border>
+                            <Button x:Name="SettingsButton" Style="{StaticResource TopPill}" Content="&#xE713;" ToolTip="Configuración" Click="Settings_Click" Margin="2,0,0,0"/>
                         </StackPanel>
                     </Grid>
 
-                    <!-- Línea de estado -->
-                    <Grid Grid.Row="1" Margin="4,6,0,4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Color, Converter={StaticResource ColorBrush}}"/>
-                        <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12">
-                            <Run Text="{Binding Profile.Name, Mode=OneWay}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                            <Run Text=" · " Foreground="{StaticResource TextSecondary}"/>
-                            <Run Text="{Binding StatusLine, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
-                        </TextBlock>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal">
-                            <Button Style="{StaticResource IconButton}" Content="&#xE70F;" ToolTip="Editar agente" Click="EditSelected_Click"/>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE8F4;" ToolTip="Nueva conversación" Click="NewChat_Click"/>
-                        </StackPanel>
-                    </Grid>
+                    <Grid Grid.Row="1">
 
-                    <!-- Chat -->
-                    <Border Grid.Row="2" Background="{StaticResource Surface1}" CornerRadius="16" Padding="10,6,4,6">
+                <!-- ============ Vista general: tarjeta grande + chips ============ -->
+                <Grid x:Name="OverviewView" Visibility="Collapsed" Opacity="0" Margin="10,2,10,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="340"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Agente enfocado -->
+                    <Border x:Name="FocusCard" CornerRadius="22" Background="{StaticResource PaneBg}" Padding="12,12,14,12"
+                            Cursor="Hand" MouseLeftButtonUp="FocusCard_Click" MouseRightButtonUp="FocusCard_RightClick">
                         <Grid>
-                            <ScrollViewer x:Name="ChatScroll" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                                <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
-                            </ScrollViewer>
-                            <StackPanel x:Name="EmptyChat" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
-                                <TextBlock HorizontalAlignment="Center" FontSize="14" Foreground="{StaticResource TextSecondary}">
-                                    <Run Text="Habla con "/><Run Text="{Binding Profile.Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                </TextBlock>
-                                <TextBlock HorizontalAlignment="Center" Margin="0,6,0,0" FontSize="11.5" Foreground="#5E5E6A" TextAlignment="Center"
-                                           Text="Arrastra archivos sobre el personaje · /recordar 10m algo · /tarea 9:00 revisa el correo"/>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <c:MochiView Width="84" Height="84" VerticalAlignment="Center" Interactive="True"
+                                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button x:Name="BackToPrincipal" Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="10"
+                                                Content="&#xE76B;" ToolTip="Volver al principal" Click="BackToPrincipal_Click" Margin="0,0,4,0"/>
+                                        <Ellipse Width="8" Height="8" Fill="{Binding Color, Converter={StaticResource ColorBrush}}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                        <TextBlock Text="{Binding Name}" FontSize="15.5" FontWeight="SemiBold" Foreground="#ECECF2" VerticalAlignment="Center"
+                                                   MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding ProviderLabel}" FontSize="12.5" Foreground="#6E6E7C" VerticalAlignment="Center" Margin="8,1,0,0"/>
+                                        <Border x:Name="StatusChipBorder" CornerRadius="9" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                Background="#1FFFFFFF" Visibility="{Binding StatusChip, Converter={StaticResource EmptyToVis}}">
+                                            <TextBlock x:Name="StatusChipText" Text="{Binding StatusChip}" FontSize="11.5" Foreground="#D6D6DE"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding Counter}" FontSize="12.5" Foreground="#9A9AA8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <Button x:Name="ScheduledRun" Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="11" Content="&#xE768;"
+                                                ToolTip="Ejecutar ahora" Click="RunNow_Click"/>
+                                        <Button x:Name="ScheduledPause" Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="11"
+                                                Click="TogglePause_Click"/>
+                                        <Border x:Name="OpenChatButton" Width="28" Height="28" CornerRadius="14" Background="#24FFFFFF">
+                                            <Button Style="{StaticResource IconButton}" Width="28" Height="28" FontSize="11" Content="&#xE8A7;"
+                                                    ToolTip="Abrir chat" Click="OpenFocused_Click" Foreground="#ECECF2"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{Binding Headline}" FontSize="24" FontWeight="SemiBold" Foreground="#F2F2F6" Margin="2,6,0,0"
+                                           TextTrimming="CharacterEllipsis" Visibility="{Binding HasHeadline, Converter={StaticResource BoolToVis}}"/>
+                                <ItemsControl x:Name="FocusLines" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource DetailLineTemplate}" Margin="2,6,0,0"/>
+                                <!-- Más detalle (programados, al pulsar la tarjeta) -->
+                                <StackPanel x:Name="ScheduledDetails" Visibility="Collapsed" Margin="2,10,0,0">
+                                    <Border Height="1" Background="#1FFFFFFF" Margin="0,0,0,8"/>
+                                    <TextBlock Text="ÚLTIMO RESULTADO" FontSize="10" FontWeight="SemiBold" Foreground="#6E6E7C"/>
+                                    <TextBlock x:Name="DetailLastOutput" FontSize="12.5" Foreground="#D6D6DE" TextWrapping="Wrap" Margin="0,3,0,8" MaxHeight="110"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="INSTRUCCIÓN" FontSize="10" FontWeight="SemiBold" Foreground="#6E6E7C"/>
+                                    <TextBlock x:Name="DetailInstruction" FontSize="12" Foreground="#9A9AA8" TextWrapping="Wrap" Margin="0,3,0,8" MaxHeight="70"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="PRÓXIMAS EJECUCIONES" FontSize="10" FontWeight="SemiBold" Foreground="#6E6E7C"/>
+                                    <TextBlock x:Name="DetailNextRuns" FontSize="12" Foreground="#C8C8D2" Margin="0,3,0,8"/>
+                                    <TextBlock x:Name="DetailMeta" FontSize="11" Foreground="#6E6E7C" TextWrapping="Wrap"/>
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>
 
-                    <!-- Tarjeta de aprobación -->
-                    <Border Grid.Row="3" Margin="0,8,0,0" Padding="12,10" CornerRadius="14"
-                            Background="{StaticResource AlertBg}" BorderBrush="{StaticResource AlertBorder}" BorderThickness="1"
-                            Visibility="{Binding PendingApproval, Converter={StaticResource NullToVis}}">
-                        <StackPanel>
-                            <TextBlock FontSize="12.5" Foreground="{StaticResource TextPrimary}">
-                                <Run Text="&#xE72E;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AlertBorder}"/>
-                                <Run Text="  "/><Run Text="{Binding Profile.Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                <Run Text=" quiere usar "/><Run Text="{Binding PendingApproval.Tool, Mode=OneWay}" FontWeight="SemiBold"/>
-                            </TextBlock>
-                            <Border Margin="0,8,0,8" Padding="8,6" CornerRadius="8" Background="#40000000" MaxHeight="130">
-                                <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto">
-                                    <TextBox Style="{StaticResource SelectableText}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
-                                             Text="{Binding PendingApproval.Detail, Mode=OneWay}"/>
-                                </ScrollViewer>
-                            </Border>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Style="{StaticResource PillButton}" Content="Denegar" Click="Deny_Click" Margin="0,0,6,0"/>
-                                <Button Style="{StaticResource PillButton}" Content="Permitir siempre" Click="AllowAlways_Click" Margin="0,0,6,0"/>
-                                <Button Style="{StaticResource PillButton}" Content="Permitir" Click="Allow_Click"
-                                        Background="{StaticResource AlertBorder}" Foreground="#1A1300" FontWeight="SemiBold"/>
+                    <!-- Resto de agentes -->
+                    <Border Grid.Column="2" CornerRadius="22" Background="{StaticResource PaneBg}" Padding="8,8,8,8">
+                        <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" MaxHeight="320">
+                            <StackPanel>
+                                <ItemsControl x:Name="ChipList" ItemTemplate="{StaticResource AgentChip}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                                <UniformGrid Columns="2">
+                                    <Border x:Name="AddChip" Height="42" Margin="4" CornerRadius="21" BorderBrush="#26FFFFFF" BorderThickness="1"
+                                            Background="Transparent" Cursor="Hand" MouseLeftButtonUp="AddChip_Click">
+                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12.5" Foreground="#9A9AA8">
+                                            <Run Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="11"/><Run Text="  Nuevo"/>
+                                        </TextBlock>
+                                    </Border>
+                                </UniformGrid>
                             </StackPanel>
-                        </StackPanel>
+                        </ScrollViewer>
                     </Border>
+                </Grid>
 
-                    <!-- Entrada -->
-                    <Border Grid.Row="4" Margin="0,8,0,0" Padding="6,4" CornerRadius="18" Background="{StaticResource Surface2}"
-                            BorderThickness="1" BorderBrush="#14FFFFFF">
-                        <Grid>
+                <!-- ============ Chat ============ -->
+                <Border x:Name="ChatView" Visibility="Collapsed" Opacity="0" Background="{StaticResource ChatBackground}" CornerRadius="22"
+                        Margin="10,2,10,10" BorderBrush="#1AFFFFFF" BorderThickness="1">
+                    <Grid Margin="12,8,14,12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Personaje, a la altura de las pestañas -->
+                        <c:MochiView x:Name="ChatMochi" Grid.Row="0" Grid.Column="0" Width="46" Height="46"
+                                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,-4,0,2"/>
+
+                        <!-- Barra superior -->
+                        <Grid Grid.Column="1" Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
-                            <Grid Grid.Column="1" Margin="4,0">
-                                <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
-                                         Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
-                                <TextBlock x:Name="Placeholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
-                                           Foreground="#5E5E6A" FontSize="13.5">
-                                    <Run Text="Escribe a "/><Run Text="{Binding Profile.Name, Mode=OneWay}"/><Run Text="…  (Enter envía, Shift+Enter salto)"/>
-                                </TextBlock>
-                            </Grid>
-                            <Grid Grid.Column="2" VerticalAlignment="Bottom">
-                                <Button x:Name="SendButton" Style="{StaticResource IconButton}" Content="&#xE724;" ToolTip="Enviar" Click="Send_Click"
-                                        Foreground="{Binding Color, Converter={StaticResource ColorBrush}}"
-                                        Visibility="{Binding IsBusy, Converter={StaticResource InvBoolToVis}}"/>
-                                <Button Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
-                                        Foreground="{StaticResource ErrorFg}"
-                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
-                            </Grid>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="ChatTitle" FontSize="14" FontWeight="SemiBold" Foreground="#ECECF2" VerticalAlignment="Center" Margin="2,0,8,0"/>
+                                <Button x:Name="NewChatButton" Style="{StaticResource TopPill}" Content="&#xE710;" ToolTip="Nueva conversación" Click="NewChat_Click"/>
+                            </StackPanel>
+                            <!-- Pestañas de workspace (solo código) -->
+                            <ScrollViewer x:Name="TabsScroller" Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                                          Margin="8,0,8,0" PreviewMouseWheel="Tabs_MouseWheel">
+                                <StackPanel Orientation="Horizontal">
+                                    <ItemsControl x:Name="TabStrip" ItemTemplate="{StaticResource WorkspaceTab}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                    <Button Style="{StaticResource TopPill}" Width="34" Content="&#xE8F4;" ToolTip="Nuevo workspace (elige o arrastra una carpeta)"
+                                            Click="NewWorkspace_Click"/>
+                                </StackPanel>
+                            </ScrollViewer>
                         </Grid>
-                    </Border>
+
+                        <!-- Tareas debajo del personaje: hasta la mitad, siempre lo más reciente, el resto difuminado -->
+                        <ScrollViewer x:Name="TaskScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
+                                      VerticalAlignment="Top" MaxHeight="210" Padding="2,2,10,2" Margin="0,2,0,0">
+                            <ItemsControl ItemsSource="{Binding TaskLines}" ItemTemplate="{StaticResource TaskLineTemplate}"/>
+                        </ScrollViewer>
+
+                        <!-- Conversación -->
+                        <Grid Grid.Row="1" Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border x:Name="ContextPill" HorizontalAlignment="Left" CornerRadius="13" Background="#2C2C33" Padding="10,4,12,4" Margin="0,0,0,6"
+                                    ToolTip="{Binding FolderPath}" Cursor="Hand" MouseLeftButtonUp="OpenFolder_Click"
+                                    Visibility="{Binding Converter={StaticResource NullToVis}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="7" Height="7" Fill="{Binding Color, Converter={StaticResource ColorBrush}}" VerticalAlignment="Center"/>
+                                    <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="#ECECF2" VerticalAlignment="Center">
+                                        <Run Text="{Binding Profile.Name, Mode=OneWay}"/><Run Text=" · " Foreground="#9A9AA8"/><Run Text="{Binding ContextLabel, Mode=OneWay}" Foreground="#9A9AA8"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                                <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
+                            </ScrollViewer>
+
+                            <TextBlock x:Name="EmptyChat" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="13"
+                                       Foreground="#6E6E7C" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380" IsHitTestVisible="False"/>
+
+                            <!-- Agente de código sin workspaces -->
+                            <Border x:Name="NoWorkspace" Grid.Row="0" Grid.RowSpan="2" CornerRadius="16" BorderThickness="1.5" BorderBrush="#33FFFFFF" Background="#08FFFFFF"
+                                    Visibility="Collapsed">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE8F4;" FontFamily="{StaticResource IconFont}" FontSize="30" HorizontalAlignment="Center" Foreground="#9A9AA8"/>
+                                    <TextBlock Text="Abre un workspace" Margin="0,10,0,4" FontSize="14" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Foreground="#ECECF2"/>
+                                    <TextBlock Text="Arrastra la carpeta del proyecto aquí. Cada carpeta es una pestaña; no se puede cambiar: ciérrala y abre otra."
+                                               FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360" Foreground="#9A9AA8"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Seleccionar carpeta…" Margin="0,12,0,0" HorizontalAlignment="Center"
+                                            Click="NewWorkspace_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Aprobación -->
+                        <Border Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Padding="12,10" CornerRadius="14"
+                                Background="{StaticResource AlertBg}" BorderBrush="{StaticResource AlertBorder}" BorderThickness="1"
+                                Visibility="{Binding PendingApproval, Converter={StaticResource NullToVis}}">
+                            <StackPanel>
+                                <TextBlock FontSize="12.5" Foreground="{StaticResource TextPrimary}">
+                                    <Run Text="&#xE72E;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AlertBorder}"/>
+                                    <Run Text="  "/><Run Text="{Binding DisplayName, Mode=OneWay}" FontWeight="SemiBold"/>
+                                    <Run Text=" quiere usar "/><Run Text="{Binding PendingApproval.Tool, Mode=OneWay}" FontWeight="SemiBold"/>
+                                </TextBlock>
+                                <Border Margin="0,8,0,8" Padding="8,6" CornerRadius="8" Background="#40000000" MaxHeight="120">
+                                    <ScrollViewer Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto">
+                                        <TextBox Style="{StaticResource SelectableText}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                                 Text="{Binding PendingApproval.Detail, Mode=OneWay}"/>
+                                    </ScrollViewer>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Style="{StaticResource PillButton}" Content="Denegar" Click="Deny_Click" Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Permitir siempre" Click="AllowAlways_Click" Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Permitir" Click="Allow_Click"
+                                            Background="{StaticResource AlertBorder}" Foreground="#1A1300" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Entrada -->
+                        <Border x:Name="InputBar" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="8,4" CornerRadius="20" Background="#1EFFFFFF"
+                                Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Margin="6,0">
+                                    <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
+                                             Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
+                                    <TextBlock x:Name="Placeholder" Text="Continuar…" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
+                                               Foreground="#6E6E7C" FontSize="13.5"/>
+                                </Grid>
+                                <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
+                                        Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
+                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+                                <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+                <!-- ============ Tareas programadas ============ -->
+                <Border x:Name="ScheduleView" Visibility="Collapsed" Opacity="0" Margin="10,2,10,10" CornerRadius="22"
+                        Background="{StaticResource PaneBg}" Padding="14,10,10,12">
+                    <ScrollViewer x:Name="ScheduleScroll" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" MaxHeight="430" Padding="0,0,8,0">
+                        <StackPanel x:Name="ScheduleContent">
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="TAREAS Y RECORDATORIOS" FontSize="10.5" FontWeight="SemiBold" Foreground="#6E6E7C" VerticalAlignment="Center"/>
+                                <Button Style="{StaticResource PillButton}" HorizontalAlignment="Right" Padding="12,3" Click="NewReminder_Click">
+                                    <TextBlock><Run Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="10"/><Run Text="  Nueva"/></TextBlock>
+                                </Button>
+                            </Grid>
+                            <ItemsControl x:Name="ReminderList" ItemTemplate="{StaticResource ScheduledItemTemplate}"/>
+                            <TextBlock x:Name="NoReminders" Text="No hay recordatorios ni tareas. Pídeselos a un agente («recuérdame a las 5…») o usa Nueva."
+                                       FontSize="12" Foreground="#6E6E7C" TextWrapping="Wrap" Margin="2,2,0,8"/>
+                            <TextBlock Text="AGENTES PROGRAMADOS" FontSize="10.5" FontWeight="SemiBold" Foreground="#6E6E7C" Margin="0,12,0,6"/>
+                            <ItemsControl x:Name="ScheduledAgentList" ItemTemplate="{StaticResource ScheduledItemTemplate}"/>
+                            <TextBlock x:Name="NoScheduledAgents" Text="No hay agentes programados." FontSize="12" Foreground="#6E6E7C" Margin="2,2,0,0"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                    </Grid>
                 </Grid>
             </Grid>
         </Border>

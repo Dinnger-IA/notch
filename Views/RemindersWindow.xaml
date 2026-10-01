@@ -44,7 +44,7 @@
 
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="Agente" FontSize="12" Opacity="0.7"/>
-                    <ComboBox x:Name="AgentBox" Margin="0,4,0,10" HorizontalAlignment="Stretch" DisplayMemberPath="Profile.Name"/>
+                    <ComboBox x:Name="AgentBox" Margin="0,4,0,10" HorizontalAlignment="Stretch" DisplayMemberPath="Name"/>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="2">
                     <TextBlock Text="Tipo" FontSize="12" Opacity="0.7"/>
