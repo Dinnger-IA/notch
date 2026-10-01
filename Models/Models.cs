@@ -335,6 +335,11 @@ namespace CoucouWin.Models
         public bool Sounds { get; set; } = true;
         public bool NotifyOnDone { get; set; } = true;
         public bool ExpandOnHover { get; set; } = true;
+        /// <summary>
+        /// Accesibilidad: true = el panel solo se cierra al hacer clic fuera (o Esc);
+        /// false = se cierra al sacar el ratón / perder el foco.
+        /// </summary>
+        public bool CloseOnClickOutsideOnly { get; set; } = true;
         public string? SelectedAgentId { get; set; }
         /// <summary>Agente principal: se muestra grande en el notch.</summary>
         public string? DefaultAgentId { get; set; }

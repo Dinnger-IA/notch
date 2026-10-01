@@ -39,6 +39,9 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
 - Al abrir el notch siempre hay una **barra superior**: 🏠 *Inicio* a la izquierda y, a la derecha, 📌 fijar,
   📅 **tareas programadas** y ⚙ **configuración** (ajustes del agente, nuevos agentes y opciones de Coucou:
   sonidos, avisos, abrir al pasar el ratón, avisos de Claude Code, iniciar con Windows, salir).
+- **Cierre del panel** (⚙ → *Accesibilidad*): por defecto **solo se cierra al hacer clic fuera** del recuadro
+  (o con Esc / Ctrl+Alt+Espacio); sacar el ratón no lo cierra. Alternativa: *Cerrar al sacar el ratón*.
+  Ahí también está *Abrir al pasar el ratón*. Con 📌 fijado, o con un menú o diálogo abierto, nunca se cierra.
 - **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
   con su hora, agente, tipo y repetición, que se pueden borrar; y los agentes programados con su próxima
   ejecución. Pulsar un elemento abre su agente.

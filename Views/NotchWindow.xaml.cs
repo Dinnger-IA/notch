@@ -40,8 +40,9 @@ namespace CoucouWin.Views
         private RemindersWindow? _reminders;
 
         private readonly DispatcherTimer _hoverTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
-        private readonly DispatcherTimer _collapseTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
         private readonly DispatcherTimer _bannerTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+        private readonly DispatcherTimer _leaveTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
+        private static bool ClickOutsideOnly => App.Current.Store.Config.Settings.CloseOnClickOutsideOnly;
 
         private static App AppRef => App.Current;
         private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule;
@@ -65,13 +66,6 @@ namespace CoucouWin.Views
                 if (_mode is Mode.Collapsed or Mode.Banner && AppRef.Store.Config.Settings.ExpandOnHover && Shell.IsMouseOver)
                     ShowOverview();
             };
-            _collapseTimer.Tick += (_, _) =>
-            {
-                _collapseTimer.Stop();
-                if (_pinned || _modalOpen || Shell.IsMouseOver || _selected?.PendingApproval != null) return;
-                // La vista general es solo informativa: se cierra al salir. El chat, solo si no tiene el foco.
-                if (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule && !IsActive)) Collapse();
-            };
             _bannerTimer.Tick += (_, _) =>
             {
                 _bannerTimer.Stop();
@@ -80,10 +74,19 @@ namespace CoucouWin.Views
 
             ChatScroll.ScrollChanged += ChatScroll_ScrollChanged;
             TaskScroll.ScrollChanged += TaskScroll_ScrollChanged;
+            // Por defecto el panel solo se cierra con un clic fuera (hook de ratón), Esc o el atajo.
+            // Opción de accesibilidad: cerrarlo al sacar el ratón / al perder el foco.
+            Closed += (_, _) => SetOutsideClickHook(false);
+            _leaveTimer.Tick += (_, _) =>
+            {
+                _leaveTimer.Stop();
+                if (ClickOutsideOnly || _pinned || _modalOpen || Shell.IsMouseOver || _selected?.PendingApproval != null) return;
+                if (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule && !IsActive)) Collapse();
+            };
             Deactivated += (_, _) =>
             {
-                if (IsPanel(_mode) && !_pinned && !_modalOpen && !Shell.IsMouseOver
-                    && _selected?.PendingApproval == null) Collapse();
+                if (ClickOutsideOnly) return;
+                if (IsPanel(_mode) && !_pinned && !_modalOpen && !Shell.IsMouseOver && _selected?.PendingApproval == null) Collapse();
             };
             SourceInitialized += OnSourceInitialized;
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.Invoke(PositionOnScreen);
@@ -152,6 +155,70 @@ namespace CoucouWin.Views
             }
             Shell.CornerRadius = IsPanel(m) ? new CornerRadius(0, 0, 30, 30) : new CornerRadius(0, 0, 22, 22);
             if (m == Mode.Collapsed) foreach (var a in AppRef.Agents) a.IsBox = false;
+            SetOutsideClickHook(IsPanel(m) && ClickOutsideOnly);
+        }
+
+        // =============================================================== cerrar con clic fuera
+        // Hook de ratón de bajo nivel, activo solo con el panel abierto: detecta clics fuera del recuadro
+        // aunque la ventana no tenga el foco (p. ej. si se abrió al pasar el ratón).
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+        [StructLayout(LayoutKind.Sequential)] private struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr extra; }
+        [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc fn, IntPtr hMod, uint threadId);
+        [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+        [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+        [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string? name);
+        private const int WH_MOUSE_LL = 14, WM_LBUTTONDOWN = 0x201, WM_RBUTTONDOWN = 0x204, WM_MBUTTONDOWN = 0x207;
+
+        private IntPtr _mouseHook = IntPtr.Zero;
+        private LowLevelMouseProc? _mouseProc; // referencia viva para que el GC no la recoja
+
+        private void SetOutsideClickHook(bool on)
+        {
+            if (on && _mouseHook == IntPtr.Zero)
+            {
+                _mouseProc ??= MouseHookProc;
+                _mouseHook = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, GetModuleHandle(null), 0);
+                if (_mouseHook == IntPtr.Zero) Log.Info("No se pudo instalar el hook de ratón: el panel se cerrará con Esc");
+            }
+            else if (!on && _mouseHook != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_mouseHook);
+                _mouseHook = IntPtr.Zero;
+            }
+        }
+
+        private IntPtr MouseHookProc(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (nCode >= 0)
+            {
+                int msg = wParam.ToInt32();
+                if (msg is WM_LBUTTONDOWN or WM_RBUTTONDOWN or WM_MBUTTONDOWN)
+                {
+                    var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    var pt = new Point(info.pt.X, info.pt.Y);
+                    // Se evalúa fuera del hook para no bloquear el ratón del sistema
+                    Dispatcher.BeginInvoke(() => OnGlobalClick(pt));
+                }
+            }
+            return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+        }
+
+        private void OnGlobalClick(Point screenPt)
+        {
+            if (!ClickOutsideOnly || !IsPanel(_mode) || _pinned || _modalOpen) return;
+            if (OwnedWindows.Count > 0 && OwnedWindows.Cast<Window>().Any(w => w.IsVisible)) return;
+            if (IsInsideShell(screenPt)) return;
+            Collapse();
+        }
+
+        /// <summary>¿El punto (píxeles de pantalla) cae dentro del recuadro visible del notch?</summary>
+        private bool IsInsideShell(Point screenPt)
+        {
+            if (PresentationSource.FromVisual(Shell) == null) return false;
+            var topLeft = Shell.PointToScreen(new Point(0, 0));
+            var bottomRight = Shell.PointToScreen(new Point(Shell.ActualWidth, Shell.ActualHeight));
+            return screenPt.X >= topLeft.X && screenPt.X <= bottomRight.X && screenPt.Y >= topLeft.Y && screenPt.Y <= bottomRight.Y;
         }
 
         private void Resize()
@@ -443,7 +510,7 @@ namespace CoucouWin.Views
             m.FontFamily = (FontFamily)FindResource("UiFont");
             m.FontSize = 13;
             _modalOpen = true;
-            m.Closed += (_, _) => { _modalOpen = false; if (!Shell.IsMouseOver && _mode == Mode.Overview && !_pinned) _collapseTimer.Start(); };
+            m.Closed += (_, _) => _modalOpen = false;
             m.IsOpen = true;
         }
 
@@ -640,14 +707,14 @@ namespace CoucouWin.Views
         // =============================================================== ratón / hover
         private void Shell_MouseEnter(object sender, MouseEventArgs e)
         {
-            _collapseTimer.Stop();
+            _leaveTimer.Stop();
             if (_mode is Mode.Collapsed or Mode.Banner) _hoverTimer.Start();
         }
 
         private void Shell_MouseLeave(object sender, MouseEventArgs e)
         {
             _hoverTimer.Stop();
-            if (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule && !IsActive)) _collapseTimer.Start();
+            if (!ClickOutsideOnly && (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule && !IsActive))) _leaveTimer.Start();
             if (_mode == Mode.Banner && !_bannerTimer.IsEnabled) _bannerTimer.Start();
         }
 
@@ -767,12 +834,35 @@ namespace CoucouWin.Views
             m.Items.Add(new Separator());
             Toggle("Sonidos", st.Sounds, v => st.Sounds = v);
             Toggle("Avisar cuando un agente termina", st.NotifyOnDone, v => st.NotifyOnDone = v);
-            Toggle("Abrir al pasar el ratón", st.ExpandOnHover, v => st.ExpandOnHover = v);
             Toggle("Avisos de mis sesiones de Claude Code", ControlChannel.IsClaudeIntegrationInstalled(), v =>
             {
                 try { ControlChannel.SetClaudeIntegration(v); } catch (Exception ex) { Log.Error("Integración Claude", ex); }
             });
             Toggle("Iniciar con Windows", NotificationService.IsStartupEnabled(), NotificationService.SetStartup);
+
+            // Accesibilidad: cómo se abre y se cierra el panel
+            var access = new MenuItem { Header = "Accesibilidad" };
+            MenuItem Radio(string header, bool value, Action set)
+            {
+                var it = new MenuItem { Header = header, IsCheckable = true, IsChecked = value };
+                it.Click += (_, _) => { set(); AppRef.Store.Save(); };
+                return it;
+            }
+            access.Items.Add(Radio("Cerrar solo al hacer clic fuera", st.CloseOnClickOutsideOnly, () =>
+            {
+                st.CloseOnClickOutsideOnly = true;
+                SetOutsideClickHook(IsPanel(_mode));
+            }));
+            access.Items.Add(Radio("Cerrar al sacar el ratón", !st.CloseOnClickOutsideOnly, () =>
+            {
+                st.CloseOnClickOutsideOnly = false;
+                SetOutsideClickHook(false);
+            }));
+            access.Items.Add(new Separator());
+            var hover = new MenuItem { Header = "Abrir al pasar el ratón", IsCheckable = true, IsChecked = st.ExpandOnHover };
+            hover.Click += (_, _) => { st.ExpandOnHover = hover.IsChecked; AppRef.Store.Save(); };
+            access.Items.Add(hover);
+            m.Items.Add(access);
             m.Items.Add(new Separator());
             Add("Abrir carpeta de datos", () => System.Diagnostics.Process.Start(
                 new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true }));
