@@ -78,6 +78,7 @@ namespace CoucouWin.Views
             };
 
             ChatScroll.ScrollChanged += ChatScroll_ScrollChanged;
+            TaskScroll.ScrollChanged += TaskScroll_ScrollChanged;
             Deactivated += (_, _) =>
             {
                 if (_mode is Mode.Overview or Mode.Chat && !_pinned && !_modalOpen && !Shell.IsMouseOver
@@ -464,6 +465,7 @@ namespace CoucouWin.Views
             }
             UpdateEmptyChat();
             _autoScroll = true;
+            _taskAutoScroll = true;
             ScrollToEnd();
         }
 
@@ -527,7 +529,29 @@ namespace CoucouWin.Views
             else if (_autoScroll) ChatScroll.ScrollToVerticalOffset(ChatScroll.ExtentHeight);
         }
 
-        private void ScrollToEnd() => Dispatcher.BeginInvoke(() => ChatScroll.ScrollToEnd(), DispatcherPriority.Background);
+        private void ScrollToEnd() => Dispatcher.BeginInvoke(() => { ChatScroll.ScrollToEnd(); TaskScroll.ScrollToEnd(); }, DispatcherPriority.Background);
+
+        private bool _taskAutoScroll = true;
+
+        /// <summary>
+        /// La lista de tareas se queda siempre al final (lo más reciente) y difumina los bordes que tienen
+        /// contenido oculto: arriba las tareas antiguas, abajo las nuevas si el usuario subió.
+        /// </summary>
+        private void TaskScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.ExtentHeightChange == 0) _taskAutoScroll = TaskScroll.VerticalOffset >= TaskScroll.ScrollableHeight - 2;
+            else if (_taskAutoScroll) TaskScroll.ScrollToVerticalOffset(TaskScroll.ExtentHeight);
+
+            bool hiddenAbove = TaskScroll.VerticalOffset > 1;
+            bool hiddenBelow = TaskScroll.VerticalOffset < TaskScroll.ScrollableHeight - 1;
+            if (!hiddenAbove && !hiddenBelow) { TaskScroll.OpacityMask = null; return; }
+            var mask = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+            mask.GradientStops.Add(new GradientStop(hiddenAbove ? Colors.Transparent : Colors.Black, 0));
+            mask.GradientStops.Add(new GradientStop(Colors.Black, hiddenAbove ? 0.28 : 0));
+            mask.GradientStops.Add(new GradientStop(Colors.Black, hiddenBelow ? 0.8 : 1));
+            mask.GradientStops.Add(new GradientStop(hiddenBelow ? Colors.Transparent : Colors.Black, 1));
+            TaskScroll.OpacityMask = mask;
+        }
 
         // =============================================================== ratón / hover
         private void Shell_MouseEnter(object sender, MouseEventArgs e)

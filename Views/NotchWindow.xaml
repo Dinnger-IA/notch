@@ -158,6 +158,15 @@
                     <Setter TargetName="Ic" Property="Text" Value="&#xE76C;"/>
                     <Setter TargetName="Ic" Property="Foreground" Value="#5E5E6A"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Schedule}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#8EB8FF"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#C8C8D2"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Next}">
+                    <Setter TargetName="Ic" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
+                    <Setter TargetName="Tx" Property="FontSize" Value="14"/>
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -352,8 +361,12 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
+                        <!-- Personaje, a la altura de las pestañas -->
+                        <c:MochiView x:Name="ChatMochi" Grid.Row="0" Grid.Column="0" Width="46" Height="46"
+                                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,-4,0,2"/>
+
                         <!-- Barra superior -->
-                        <Grid Grid.ColumnSpan="2" Margin="0,0,0,6">
+                        <Grid Grid.Column="1" Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -385,14 +398,11 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Lista de tareas -->
-                        <ScrollViewer Grid.Row="1" Grid.RowSpan="2" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
-                                      Padding="2,4,10,70">
+                        <!-- Tareas debajo del personaje: hasta la mitad, siempre lo más reciente, el resto difuminado -->
+                        <ScrollViewer x:Name="TaskScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
+                                      VerticalAlignment="Top" MaxHeight="210" Padding="2,2,10,2" Margin="0,2,0,0">
                             <ItemsControl ItemsSource="{Binding TaskLines}" ItemTemplate="{StaticResource TaskLineTemplate}"/>
                         </ScrollViewer>
-
-                        <c:MochiView x:Name="ChatMochi" Grid.Row="2" Grid.RowSpan="2" Width="64" Height="64" HorizontalAlignment="Left"
-                                     VerticalAlignment="Bottom" Margin="-30,0,0,-6"/>
 
                         <!-- Conversación -->
                         <Grid Grid.Row="1" Grid.Column="1">

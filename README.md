@@ -42,7 +42,8 @@ a la derecha**.
   - **Código**: el último estado de cada workspace (`▶ demo-api · Leer server.js`, `✓ demo-blog · <resultado>`,
     `✗ … · falló`). El contador es **pestañas activas / total**.
   - **Chat**: el resultado de la última tarea y lo que hace ahora (el contador son sus pasos, p. ej. `2/5`).
-  - **Programado**: lo último que escribió, cuándo, y la próxima ejecución, con botones *Ejecutar ahora* y *Pausar*.
+  - **Programado**: su **horario**, **qué hará en la próxima ejecución** (hora + instrucción) y cuándo fue la última,
+    con botones *Ejecutar ahora* y *Pausar*.
 - Chips: insignia roja si su última tarea falló, naranja si piden permiso, borde ámbar si están trabajando.
 - **Pulsar un chip** lo pasa a la tarjeta grande (el que estaba ahí baja a los chips; «‹» vuelve al principal).
 - **Pulsar la tarjeta grande** (o ↗) abre el chat. El chip *+ Nuevo* crea agentes, workspaces o recordatorios.
@@ -56,10 +57,18 @@ a la derecha**.
   ✗ falló, ! permiso) y el botón **Nuevo workspace**. La carpeta de una pestaña **no se puede cambiar**: se cierra
   (×) y se abre otra. Arrastrar una carpeta sobre el notch abre un workspace nuevo. Desde un script:
   `CoucouWin.exe --code D:\mi\proyecto` (si ya hay una pestaña para esa carpeta, la abre).
-- **Lista de tareas a la izquierda**, mínima: un listado con iconos (✓ hecha, ! fallida, × detenida,
+- El **personaje** está arriba a la izquierda, a la altura de las pestañas, y debajo su **lista de tareas**
+  (hasta media altura, siempre mostrando lo más reciente, con desplazamiento y lo que no cabe difuminado), mínima: un listado con iconos (✓ hecha, ! fallida, × detenida,
   ▶ en curso, ○ pendiente) y los pasos de la tarea en curso. Cada mensaje es una tarea; si escribes mientras
   trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Coucou pide al agente (se oculta del chat)
   o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
+
+### Ejemplo: agente del clima
+
+Un programado que cada 12 horas (06:00 y 18:00) consulta el clima con `WebFetch` a wttr.in y te avisa:
+tipo *Programado*, permisos *Solo lectura*, argumentos extra `--allowedTools WebFetch,WebSearch` (para que pueda
+usar la web sin pedir permiso) e instrucción del estilo «Consulta el clima actual y de las próximas 12 horas para
+Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 
 ### Principal y horarios
 

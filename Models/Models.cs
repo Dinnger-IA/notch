@@ -204,7 +204,7 @@ namespace CoucouWin.Models
     public enum AgentTaskStatus { Pending, Running, Done, Failed, Cancelled }
 
     /// <summary>Tono visual de una línea de la lista de tareas (solo icono + color).</summary>
-    public enum TaskTone { Done, Failed, Cancelled, Running, Pending, StepDone, StepActive, StepPending }
+    public enum TaskTone { Done, Failed, Cancelled, Running, Pending, StepDone, StepActive, StepPending, Schedule, Next }
 
     /// <summary>Una línea de la lista lateral: tarea o paso de la tarea actual.</summary>
     public sealed class TaskLine
@@ -219,6 +219,8 @@ namespace CoucouWin.Models
             TaskTone.Failed => "\uE783",                         // !
             TaskTone.Cancelled => "\uE711",                      // ×
             TaskTone.Running or TaskTone.StepActive => "\uE768", // ▶
+            TaskTone.Schedule => "\uE823",                       // reloj
+            TaskTone.Next => "\uE893",                           // siguiente
             _ => "\uEA3A"                                         // ○
         };
     }

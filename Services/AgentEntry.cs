@@ -136,13 +136,22 @@ namespace CoucouWin.Services
             if (s == null) return;
             if (IsScheduled)
             {
-                Lines.Add(new TaskLine
-                {
-                    Text = s.IsBusy ? s.InfoLine : s.LastOutputText, Detail = s.LastOutputText,
-                    Tone = s.IsBusy ? TaskTone.Running : s.LastFailed ? TaskTone.Failed : TaskTone.Done
-                });
-                var when = string.Join("   ", new[] { s.LastOutputTimeLabel, s.NextRunLabel }.Where(x => !string.IsNullOrEmpty(x)));
-                Lines.Add(new TaskLine { Text = when, Tone = TaskTone.Pending });
+                // No interactivo: su horario y lo que hará en la próxima ejecución
+                var sc = Profile.Schedule;
+                Lines.Add(new TaskLine { Text = (sc.Paused ? "En pausa · " : "") + sc.Summary, Detail = sc.Summary, Tone = TaskTone.Schedule });
+                var instr = sc.Instruction.Replace("\r", "").Replace("\n", " ").Trim();
+                if (s.IsBusy)
+                    Lines.Add(new TaskLine { Text = $"Ahora · {s.CurrentLine}", Detail = sc.Instruction, Tone = TaskTone.Running });
+                else if (!sc.Paused && sc.NextRun is { } next)
+                    Lines.Add(new TaskLine { Text = $"{FormatWhen(next)} · {instr}", Detail = sc.Instruction, Tone = TaskTone.Next });
+                else
+                    Lines.Add(new TaskLine { Text = instr, Detail = sc.Instruction, Tone = TaskTone.Next });
+                if (sc.LastRun is { } lr)
+                    Lines.Add(new TaskLine
+                    {
+                        Text = $"Última: {FormatWhen(lr)}" + (s.LastFailed ? " · falló" : ""),
+                        Detail = s.LastOutputText, Tone = s.LastFailed ? TaskTone.Failed : TaskTone.Pending
+                    });
                 return;
             }
 
@@ -160,6 +169,15 @@ namespace CoucouWin.Services
                 Lines.Add(new TaskLine { Text = s.LastOutputText, Detail = s.LastOutputText, Tone = TaskTone.Pending });
             if (Lines.Count == 0) Lines.Add(new TaskLine { Text = "Sin actividad todavía", Tone = TaskTone.Pending });
             if (s.PendingCount > 0) Lines.Add(new TaskLine { Text = $"{s.PendingCount} en cola", Tone = TaskTone.Pending });
+        }
+
+        private static string FormatWhen(DateTime t)
+        {
+            var today = DateTime.Today;
+            if (t.Date == today) return "Hoy " + t.ToString("HH:mm");
+            if (t.Date == today.AddDays(1)) return "Mañana " + t.ToString("HH:mm");
+            if (t.Date == today.AddDays(-1)) return "Ayer " + t.ToString("HH:mm");
+            return t.ToString("ddd dd, HH:mm");
         }
 
         // ------------------------------------------------------------ propagación de cambios
