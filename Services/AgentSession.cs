@@ -1,0 +1,451 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Windows.Media;
+using System.Windows.Threading;
+using CoucouWin.Controls;
+using CoucouWin.Models;
+using CoucouWin.Providers;
+
+namespace CoucouWin.Services
+{
+    public record TurnResult(bool Success, bool Cancelled, string Summary, TimeSpan Duration, bool FromSchedule);
+
+    /// <summary>Estado vivo de un agente: conversación, proceso CLI, aprobaciones pendientes y animación.</summary>
+    public class AgentSession : INotifyPropertyChanged
+    {
+        private readonly ConfigStore _store;
+        private readonly Func<RunContext> _contextFactory;
+        private Process? _proc;
+        private bool _cancelled;
+        private readonly DispatcherTimer _settleTimer;
+        private readonly List<ApprovalRequest> _approvals = new();
+
+        public AgentProfile Profile { get; private set; }
+        public ObservableCollection<ChatMessage> Messages { get; } = new();
+        public string? SessionId { get; private set; }
+        public HashSet<string> AlwaysAllow { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public event Action<AgentSession, TurnResult>? TurnFinished;
+        public event Action<AgentSession, ApprovalRequest>? ApprovalRequested;
+        public event Action<AgentSession, Reminder>? ReminderCreated;
+
+        public AgentSession(AgentProfile profile, ConfigStore store, Func<RunContext> contextFactory)
+        {
+            Profile = profile;
+            _store = store;
+            _contextFactory = contextFactory;
+            _settleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+            _settleTimer.Tick += (_, _) => { _settleTimer.Stop(); if (!IsBusy) { State = MochiState.Idle; Activity = ""; } };
+
+            var h = store.LoadHistory(profile.Id);
+            SessionId = h.SessionId;
+            foreach (var m in h.Messages) Messages.Add(m);
+        }
+
+        // ---------------- Propiedades enlazables ----------------
+        private MochiState _state = MochiState.Idle;
+        public MochiState State { get => _state; set => Set(ref _state, value); }
+
+        private string _activity = "";
+        public string Activity { get => _activity; set { if (Set(ref _activity, value)) OnChanged(nameof(StatusLine)); } }
+
+        private bool _isBusy;
+        public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) OnChanged(nameof(IsIdle)); } }
+        public bool IsIdle => !_isBusy;
+
+        private bool _isSelected;
+        public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+
+        private bool _isBox;
+        public bool IsBox { get => _isBox; set => Set(ref _isBox, value); }
+
+        private ApprovalRequest? _pending;
+        public ApprovalRequest? PendingApproval { get => _pending; private set => Set(ref _pending, value); }
+
+        public Color Color => ParseColor(Profile.ColorHex);
+        public string ProviderLabel => ProviderFactory.Label(Profile.Provider);
+        public string StatusLine => string.IsNullOrEmpty(Activity) ? ProviderLabel : Activity;
+
+        public void UpdateProfile(AgentProfile p)
+        {
+            Profile = p;
+            OnChanged(nameof(Profile)); OnChanged(nameof(Color)); OnChanged(nameof(ProviderLabel)); OnChanged(nameof(StatusLine));
+        }
+
+        // ---------------- Conversación ----------------
+        public void NewConversation()
+        {
+            if (IsBusy) Cancel();
+            SessionId = null;
+            Messages.Clear();
+            AlwaysAllow.Clear();
+            Messages.Add(new ChatMessage(ChatRole.Notice, "Nueva conversación"));
+            SaveHistory();
+        }
+
+        public void AddNotice(string text, bool error = false)
+        {
+            Messages.Add(new ChatMessage(error ? ChatRole.Error : ChatRole.Notice, text));
+            SaveHistory();
+        }
+
+        public async Task SendAsync(string text, bool fromSchedule = false)
+        {
+            text = text.Trim();
+            if (text == "" || IsBusy) return;
+
+            if (!fromSchedule && TryHandleCommand(text)) return;
+
+            Messages.Add(new ChatMessage(ChatRole.User, fromSchedule ? "⏰ " + text : text));
+            IsBusy = true;
+            _cancelled = false;
+            _settleTimer.Stop();
+            State = MochiState.Thinking;
+            Activity = "Pensando…";
+            var started = DateTime.Now;
+            int firstNew = Messages.Count;
+
+            ChatMessage? streaming = null;
+            bool gotResult = false, success = true;
+            string? error = null;
+            var stderr = new StringBuilder();
+
+            try
+            {
+                var provider = ProviderFactory.Create(Profile.Provider);
+                var ctx = _contextFactory();
+                var spec = provider.Build(Profile, text, SessionId, ctx);
+                var psi = spec.Psi;
+                psi.Environment["COUCOU_PIPE"] = ctx.PipeName;
+                psi.Environment["COUCOU_AGENT_ID"] = Profile.Id;
+                psi.Environment["COUCOU_AGENT_NAME"] = Profile.Name;
+                psi.Environment["COUCOU_APPROVAL"] = Profile.Approval.ToString();
+
+                Log.Info($"[{Profile.Name}] {psi.FileName} {string.Join(" ", psi.ArgumentList.Select(a => a.Length > 60 ? a[..60] + "…" : a))}");
+                _proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                _proc.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (stderr) { if (stderr.Length < 20000) stderr.AppendLine(e.Data); } };
+                _proc.Start();
+                _proc.BeginErrorReadLine();
+
+                if (spec.StdinText != null) await _proc.StandardInput.WriteAsync(spec.StdinText);
+                _proc.StandardInput.Close();
+
+                string? line;
+                while ((line = await _proc.StandardOutput.ReadLineAsync()) != null)
+                {
+                    foreach (var ev in provider.Parse(line))
+                    {
+                        switch (ev)
+                        {
+                            case SessionEvent s:
+                                SessionId = s.SessionId;
+                                break;
+                            case DeltaEvent d:
+                                if (streaming == null)
+                                {
+                                    streaming = new ChatMessage(ChatRole.Agent, "");
+                                    Messages.Add(streaming);
+                                }
+                                streaming.Text += d.Text;
+                                if (State != MochiState.Waiting) { State = MochiState.Thinking; Activity = "Escribiendo…"; }
+                                break;
+                            case TextEvent t:
+                                if (streaming != null) { streaming.Text = t.Text; streaming = null; }
+                                else Messages.Add(new ChatMessage(ChatRole.Agent, t.Text));
+                                break;
+                            case ToolEvent tool:
+                                streaming = null;
+                                Messages.Add(new ChatMessage(ChatRole.Tool, $"{tool.Tool}  {tool.Detail}".Trim()));
+                                if (State != MochiState.Waiting) State = MochiState.Working;
+                                Activity = $"{tool.Tool}: {tool.Detail}";
+                                break;
+                            case NoticeEvent n:
+                                streaming = null;
+                                if (!string.IsNullOrWhiteSpace(n.Text))
+                                    Messages.Add(new ChatMessage(n.IsError ? ChatRole.Error : ChatRole.Notice, n.Text));
+                                break;
+                            case ResultEvent r:
+                                gotResult = true;
+                                success = r.Success;
+                                error = r.Error;
+                                break;
+                        }
+                    }
+                }
+
+                await _proc.WaitForExitAsync();
+                var code = _proc.ExitCode;
+                if (provider.PlainText)
+                {
+                    gotResult = true;
+                    success = code == 0;
+                    if (streaming != null) streaming.Text = streaming.Text.TrimEnd();
+                }
+                if (!gotResult && !_cancelled)
+                {
+                    success = code == 0;
+                    if (!success)
+                    {
+                        string err; lock (stderr) err = stderr.ToString().Trim();
+                        error = $"El CLI terminó con código {code}." + (err != "" ? "\n" + Tail(err, 900) : "");
+                    }
+                }
+                else if (!success && error == null && !_cancelled)
+                {
+                    string err; lock (stderr) err = stderr.ToString().Trim();
+                    if (err != "") error = Tail(err, 900);
+                }
+            }
+            catch (Exception ex)
+            {
+                success = false;
+                error = ex.Message;
+                Log.Error($"[{Profile.Name}] fallo al ejecutar", ex);
+            }
+            finally
+            {
+                try { _proc?.Dispose(); } catch { }
+                _proc = null;
+            }
+
+            if (_cancelled)
+            {
+                Messages.Add(new ChatMessage(ChatRole.Notice, "Detenido"));
+            }
+            else if (!success && !string.IsNullOrWhiteSpace(error))
+            {
+                Messages.Add(new ChatMessage(ChatRole.Error, error!));
+            }
+
+            ExtractSchedules(firstNew);
+
+            // Resolver aprobaciones que quedaron colgando
+            foreach (var a in _approvals.ToList()) a.Resolve(ApprovalDecision.Deny);
+            _approvals.Clear();
+            PendingApproval = null;
+
+            IsBusy = false;
+            var lastAgent = Messages.Skip(firstNew).LastOrDefault(m => m.Role == ChatRole.Agent)?.Text ?? error ?? "";
+            State = _cancelled ? MochiState.Idle : success ? MochiState.Done : MochiState.Error;
+            Activity = _cancelled ? "" : success ? "¡Listo!" : "Algo salió mal";
+            _settleTimer.Interval = TimeSpan.FromSeconds(success ? 4 : 8);
+            _settleTimer.Start();
+            SaveHistory();
+
+            TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule));
+        }
+
+        public void Cancel()
+        {
+            if (_proc == null) return;
+            _cancelled = true;
+            try { _proc.Kill(entireProcessTree: true); } catch { }
+        }
+
+        // ---------------- Aprobaciones ----------------
+        /// <summary>Llamado desde el ApprovalServer (hilo UI). Devuelve la decisión cuando el usuario elige.</summary>
+        public Task<ApprovalDecision> RequestApproval(ApprovalRequest req)
+        {
+            if (AlwaysAllow.Contains(req.Tool)) return Task.FromResult(ApprovalDecision.Allow);
+            _approvals.Add(req);
+            if (PendingApproval == null) ShowNextApproval();
+            return req.Tcs.Task;
+        }
+
+        private void ShowNextApproval()
+        {
+            var next = _approvals.FirstOrDefault();
+            PendingApproval = next;
+            if (next != null)
+            {
+                State = MochiState.Waiting;
+                Activity = $"Necesita permiso: {next.Tool}";
+                ApprovalRequested?.Invoke(this, next);
+            }
+            else if (IsBusy)
+            {
+                State = MochiState.Working;
+                Activity = "Trabajando…";
+            }
+        }
+
+        public void Decide(ApprovalDecision d)
+        {
+            var req = PendingApproval;
+            if (req == null) return;
+            if (d == ApprovalDecision.AllowAlways) AlwaysAllow.Add(req.Tool);
+            _approvals.Remove(req);
+            Messages.Add(new ChatMessage(ChatRole.Notice, d == ApprovalDecision.Deny ? $"✋ Denegado: {req.Tool}" : $"✅ Permitido: {req.Tool}"));
+            req.Resolve(d);
+
+            // Si eligió "siempre", libera las demás pendientes de la misma herramienta
+            if (d == ApprovalDecision.AllowAlways)
+                foreach (var other in _approvals.Where(a => a.Tool.Equals(req.Tool, StringComparison.OrdinalIgnoreCase)).ToList())
+                { _approvals.Remove(other); other.Resolve(ApprovalDecision.Allow); }
+
+            PendingApproval = null;
+            ShowNextApproval();
+        }
+
+        // ---------------- Comandos de chat ----------------
+        private bool TryHandleCommand(string text)
+        {
+            if (!text.StartsWith('/')) return false;
+            var parts = text.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            var cmd = parts[0].ToLowerInvariant();
+            var rest = parts.Length > 1 ? parts[1] : "";
+            switch (cmd)
+            {
+                case "/nuevo":
+                case "/new":
+                case "/clear":
+                    NewConversation();
+                    return true;
+                case "/recordar":
+                case "/remind":
+                case "/tarea":
+                case "/task":
+                    {
+                        var kind = cmd is "/tarea" or "/task" ? ReminderKind.RunPrompt : ReminderKind.Notify;
+                        // /recordar 10m texto   |   /recordar 15:30 texto
+                        var sp = rest.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                        if (sp.Length < 2 || !TimeParser.TryParse(sp[0], out var due))
+                        {
+                            AddNotice("Uso: /recordar <10m | 2h | 15:30 | 2026-10-02T09:00> <texto>   ·   /tarea <cuándo> <instrucción para el agente>");
+                            return true;
+                        }
+                        var rem = new Reminder { Text = sp[1], DueAt = due, Kind = kind, AgentId = Profile.Id };
+                        ReminderCreated?.Invoke(this, rem);
+                        AddNotice($"⏰ {(kind == ReminderKind.Notify ? "Recordatorio" : "Tarea")} programado para {due:ddd dd MMM HH:mm}: {sp[1]}");
+                        return true;
+                    }
+                case "/ayuda":
+                case "/help":
+                    AddNotice("Comandos: /nuevo · /recordar <cuándo> <texto> · /tarea <cuándo> <instrucción> · /ayuda");
+                    return true;
+            }
+            return false;
+        }
+
+        // [[reminder: 10m | texto]]   [[task: 2026-10-02T09:00 | instrucción]]
+        private static readonly Regex ScheduleTag = new(@"\[\[\s*(?<k>reminder|recordatorio|task|tarea)\s*:\s*(?<when>[^|\]]+?)\s*\|\s*(?<text>[^\]]+?)\s*\]\]",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private void ExtractSchedules(int fromIndex)
+        {
+            var notices = new List<string>();
+            for (int i = fromIndex; i < Messages.Count; i++)
+            {
+                var m = Messages[i];
+                if (m.Role != ChatRole.Agent || !m.Text.Contains("[[")) continue;
+                var cleaned = ScheduleTag.Replace(m.Text, match =>
+                {
+                    var k = match.Groups["k"].Value.ToLowerInvariant();
+                    var kind = k is "task" or "tarea" ? ReminderKind.RunPrompt : ReminderKind.Notify;
+                    if (TimeParser.TryParse(match.Groups["when"].Value, out var due))
+                    {
+                        var text = match.Groups["text"].Value.Trim();
+                        ReminderCreated?.Invoke(this, new Reminder { Text = text, DueAt = due, Kind = kind, AgentId = Profile.Id });
+                        notices.Add($"⏰ {(kind == ReminderKind.Notify ? "Recordatorio" : "Tarea")} para {due:ddd dd MMM HH:mm}: {text}");
+                    }
+                    return "";
+                });
+                m.Text = cleaned.Trim();
+            }
+            foreach (var n in notices) Messages.Add(new ChatMessage(ChatRole.Notice, n));
+        }
+
+        private void SaveHistory() => _store.SaveHistory(Profile.Id, new AgentHistory { SessionId = SessionId, Messages = Messages.ToList() });
+
+        private static string Tail(string s, int max) => s.Length <= max ? s : "…" + s[^max..];
+
+        private static string Summarize(string s)
+        {
+            s = Regex.Replace(s, @"[#*`>_]+", "").Replace("\r", "").Trim();
+            var first = s.Split('\n').FirstOrDefault(l => l.Trim() != "")?.Trim() ?? "";
+            return first.Length > 140 ? first[..140] + "…" : first;
+        }
+
+        public static Color ParseColor(string hex)
+        {
+            try { return (Color)ColorConverter.ConvertFromString(hex); }
+            catch { return Color.FromRgb(0xFF, 0x8A, 0x65); }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnChanged([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+        private bool Set<T>(ref T field, T value, [CallerMemberName] string? n = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+            field = value; OnChanged(n); return true;
+        }
+    }
+
+    /// <summary>Interpreta "10m", "1h30m", "2 horas", "15:30", "mañana 9:00", ISO-8601...</summary>
+    public static class TimeParser
+    {
+        private static readonly Regex Part = new(@"(?<n>\d+(?:[.,]\d+)?)\s*(?<u>d(?:ías?|ias?)?|h(?:oras?|rs?)?|m(?:in(?:utos?|s)?)?|s(?:eg(?:undos?)?)?)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        public static bool TryParse(string input, out DateTime due)
+        {
+            due = default;
+            var s = input.Trim().ToLowerInvariant();
+            if (s.StartsWith("en ")) s = s[3..];
+            if (s == "") return false;
+            var now = DateTime.Now;
+
+            // Duraciones: "10m", "1h30m", "2 horas"
+            var stripped = Part.Replace(s, "").Replace("y", "").Trim(' ', ',');
+            if (stripped == "" && Part.IsMatch(s))
+            {
+                double secs = 0;
+                foreach (Match m in Part.Matches(s))
+                {
+                    var n = double.Parse(m.Groups["n"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
+                    var u = m.Groups["u"].Value;
+                    secs += u[0] switch { 'd' => n * 86400, 'h' => n * 3600, 'm' => n * 60, _ => n };
+                }
+                if (secs <= 0) return false;
+                due = now.AddSeconds(secs);
+                return true;
+            }
+
+            bool tomorrow = false;
+            if (s.StartsWith("mañana") || s.StartsWith("manana")) { tomorrow = true; s = s[6..].Trim(); if (s.StartsWith("a las ")) s = s[6..]; }
+            if (s.StartsWith("a las ")) s = s[6..];
+
+            // Hora sola: "15:30", "9:00", "9am"
+            var hm = Regex.Match(s, @"^(?<h>\d{1,2})(?::(?<m>\d{2}))?\s*(?<ap>am|pm|a\.m\.|p\.m\.)?$");
+            if (hm.Success && (hm.Groups["m"].Success || hm.Groups["ap"].Success || tomorrow))
+            {
+                int h = int.Parse(hm.Groups["h"].Value);
+                int mi = hm.Groups["m"].Success ? int.Parse(hm.Groups["m"].Value) : 0;
+                var ap = hm.Groups["ap"].Value;
+                if (ap.StartsWith("p") && h < 12) h += 12;
+                if (ap.StartsWith("a") && h == 12) h = 0;
+                if (h > 23 || mi > 59) return false;
+                due = now.Date.AddHours(h).AddMinutes(mi);
+                if (tomorrow) due = due.AddDays(1);
+                else if (due <= now) due = due.AddDays(1);
+                return true;
+            }
+            if (tomorrow && s == "") { due = now.Date.AddDays(1).AddHours(9); return true; }
+
+            var formats = new[] { "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss", "dd/MM/yyyy HH:mm", "yyyy-MM-dd" };
+            if (DateTime.TryParseExact(input.Trim(), formats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out due)) return true;
+            if (DateTime.TryParse(input.Trim(), CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out due)) return true;
+            if (DateTime.TryParse(input.Trim(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out due)) return true;
+            return false;
+        }
+    }
+}
