@@ -51,6 +51,7 @@ namespace AgentManagerNotch.Views
         public NotchWindow()
         {
             InitializeComponent();
+            Markdown.EnableWheelPassThrough();
 
             foreach (var a in AppRef.Agents) a.PropertyChanged += Entry_PropertyChanged;
             AppRef.Agents.CollectionChanged += Agents_CollectionChanged;

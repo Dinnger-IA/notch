@@ -42,8 +42,15 @@
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
-                    <TextBlock x:Name="Md" v:Markdown.Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5"
-                               Foreground="#ECECF2" LineHeight="20"/>
+                    <RichTextBox x:Name="Md" Style="{StaticResource SelectableDoc}" FontSize="13.5"
+                                 Foreground="#ECECF2" Block.LineHeight="20" v:Markdown.Text="{Binding Text}">
+                        <RichTextBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copiar selección" Command="ApplicationCommands.Copy"/>
+                                <MenuItem Header="Copiar mensaje" Click="CopyMessage_Click"/>
+                            </ContextMenu>
+                        </RichTextBox.ContextMenu>
+                    </RichTextBox>
                     <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"
                              FontSize="13.5" Visibility="Collapsed"/>
                 </Grid>

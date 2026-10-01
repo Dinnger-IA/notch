@@ -101,6 +101,28 @@
         </Setter>
     </Style>
 
+    <!-- Markdown seleccionable (respuestas del agente). IsDocumentEnabled: enlaces y botón de copiar -->
+    <Style x:Key="SelectableDoc" TargetType="RichTextBox">
+        <Setter Property="IsReadOnly" Value="True"/>
+        <Setter Property="IsDocumentEnabled" Value="True"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        <Setter Property="SelectionBrush" Value="#667A8CFF"/>
+        <Setter Property="CaretBrush" Value="Transparent"/>
+        <Setter Property="Cursor" Value="IBeam"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RichTextBox">
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Caja de entrada del chat -->
     <Style x:Key="ChatInput" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent"/>
