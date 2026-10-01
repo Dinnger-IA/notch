@@ -186,7 +186,7 @@ Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
 Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas
-Views/Markdown.cs          Markdown ligero en las burbujas
+Views/Markdown.cs          Markdown ligero en las burbujas (seleccionable, tablas, bloques de código con copiar)
 ```
 
 ## Notas

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,7 +15,7 @@ namespace AgentManagerNotch.Views
 {
     /// <summary>
     /// Renderizador Markdown mínimo para un RichTextBox de solo lectura (texto seleccionable):
-    /// títulos, listas, **negrita**, *cursiva*, `código`, bloques ``` con botón de copiar y
+    /// títulos, listas, tablas, **negrita**, *cursiva*, `código`, bloques ``` con botón de copiar y
     /// [enlaces](url). Uso: v:Markdown.Text="{Binding Text}".
     /// </summary>
     public static class Markdown
@@ -96,8 +97,9 @@ namespace AgentManagerNotch.Views
                 para = null;
             }
 
-            foreach (var raw in lines)
+            for (int i = 0; i < lines.Length; i++)
             {
+                var raw = lines[i];
                 if (raw.TrimStart().StartsWith("```"))
                 {
                     if (inCode) FlushCode();
@@ -105,6 +107,17 @@ namespace AgentManagerNotch.Views
                     continue;
                 }
                 if (inCode) { code.Add(raw); continue; }
+
+                // Tabla: fila de encabezado + separador |---|:---:| + filas mientras empiecen por |
+                if (raw.TrimStart().StartsWith('|') && i + 1 < lines.Length && TableSepRx.IsMatch(lines[i + 1]))
+                {
+                    var rows = new List<string> { raw };
+                    var sep = lines[++i];
+                    while (i + 1 < lines.Length && lines[i + 1].TrimStart().StartsWith('|')) rows.Add(lines[++i]);
+                    doc.Blocks.Add(TableBlock(rows, sep, rtb.FontSize));
+                    para = null;
+                    continue;
+                }
 
                 var line = raw;
                 var h = Regex.Match(line, @"^(#{1,6})\s+(.*)$");
@@ -165,6 +178,91 @@ namespace AgentManagerNotch.Views
                 pos = m.Index + m.Length;
             }
             if (pos < text.Length) target.Add(new Run(text[pos..]));
+        }
+
+        private static readonly Regex TableSepRx = new(@"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$", RegexOptions.Compiled);
+        private static readonly Brush TableBorder = Freeze(new SolidColorBrush(Color.FromRgb(0x2E, 0x2E, 0x3A)));
+        private static readonly Brush TableHeadBg = Freeze(new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x26)));
+        private static readonly Brush TableAltBg = Freeze(new SolidColorBrush(Color.FromArgb(0x0C, 0xFF, 0xFF, 0xFF)));
+
+        private static List<string> SplitRow(string row)
+        {
+            var s = row.Trim();
+            if (s.StartsWith('|')) s = s[1..];
+            if (s.EndsWith('|') && !s.EndsWith("\\|")) s = s[..^1];
+            var cells = new List<string>();
+            foreach (var c in Regex.Split(s, @"(?<!\\)\|")) cells.Add(c.Replace("\\|", "|").Trim());
+            return cells;
+        }
+
+        /// <summary>Tabla Markdown: encabezado resaltado, filas alternas, alineación por columna y
+        /// anchos según el contenido (las tablas de FlowDocument no admiten ancho automático).</summary>
+        private static Block TableBlock(List<string> rows, string sepLine, double fontSize)
+        {
+            var header = SplitRow(rows[0]);
+            var sep = SplitRow(sepLine);
+            var body = rows.Skip(1).Select(SplitRow).ToList();
+            int cols = Math.Max(header.Count, body.Count == 0 ? 0 : body.Max(r => r.Count));
+
+            var align = new TextAlignment[cols];
+            var weight = new double[cols];
+            for (int c = 0; c < cols; c++)
+            {
+                var s = c < sep.Count ? sep[c] : "";
+                align[c] = s.StartsWith(':') && s.EndsWith(':') ? TextAlignment.Center
+                         : s.EndsWith(':') ? TextAlignment.Right : TextAlignment.Left;
+                // Peso = palabra más larga (para no partir palabras) + padding + algo por el texto
+                // restante (amortiguado: las columnas largas igual se ajustan en varias líneas).
+                int len = 0, word = 0;
+                foreach (var r in body.Prepend(header))
+                {
+                    if (c >= r.Count) continue;
+                    len = Math.Max(len, r[c].Length);
+                    foreach (var w in r[c].Split(' ', StringSplitOptions.RemoveEmptyEntries)) word = Math.Max(word, w.Length);
+                }
+                word = Math.Min(word, 25);
+                weight[c] = word * 1.15 + 4 + Math.Sqrt(Math.Max(0, len - word)) * 2;
+            }
+
+            var table = new Table
+            {
+                CellSpacing = 0,
+                BorderBrush = TableBorder,
+                BorderThickness = new Thickness(1, 1, 0, 0),
+                Margin = new Thickness(0, 6, 0, 6),
+                FontSize = fontSize - 1,
+                LineHeight = double.NaN
+            };
+            for (int c = 0; c < cols; c++) table.Columns.Add(new TableColumn { Width = new GridLength(weight[c], GridUnitType.Star) });
+
+            var group = new TableRowGroup();
+            table.RowGroups.Add(group);
+            void AddRow(List<string> cells, bool head, bool alt)
+            {
+                var row = new TableRow();
+                if (head) { row.Background = TableHeadBg; row.FontWeight = FontWeights.SemiBold; }
+                else if (alt) row.Background = TableAltBg;
+                for (int c = 0; c < cols; c++)
+                {
+                    var p = new Paragraph { Margin = new Thickness(0), TextAlignment = align[c] };
+                    var parts = Regex.Split(c < cells.Count ? cells[c] : "", @"<br\s*/?>", RegexOptions.IgnoreCase);
+                    for (int k = 0; k < parts.Length; k++)
+                    {
+                        if (k > 0) p.Inlines.Add(new LineBreak());
+                        AddInlines(p.Inlines, parts[k]);
+                    }
+                    row.Cells.Add(new TableCell(p)
+                    {
+                        Padding = new Thickness(8, 4, 8, 4),
+                        BorderBrush = TableBorder,
+                        BorderThickness = new Thickness(0, 0, 1, 1)
+                    });
+                }
+                group.Rows.Add(row);
+            }
+            AddRow(header, true, false);
+            for (int r = 0; r < body.Count; r++) AddRow(body[r], false, r % 2 == 1);
+            return table;
         }
 
         /// <summary>Bloque ``` : texto seleccionable y botón de copiar arriba a la derecha.</summary>
