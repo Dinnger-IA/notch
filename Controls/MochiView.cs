@@ -53,6 +53,9 @@ namespace CoucouWin.Controls
         private double _lastCursorMove;
         private Point _lastCursor;
         private double _glanceUntil; private double _glanceX, _glanceY;
+        // Mirada al ratón "de vez en cuando": cada personaje tiene su propia curiosidad
+        private double _curiosity = -1;          // 0..1, se calcula a partir del color (estable por agente)
+        private double _watchUntil = -1, _nextWatchCheck;
         private readonly List<Particle> _particles = new();
         private bool _hooked;
 
@@ -66,7 +69,6 @@ namespace CoucouWin.Controls
         private static readonly Brush BoxBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xC8, 0x9B, 0x6D)));
         private static readonly Brush BoxDarkBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xA6, 0x7C, 0x52)));
         private static readonly Brush TapeBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x90, 0xF2, 0xE2, 0xC4)));
-        private Brush _blushBrush = Brushes.Pink;
 
         private record struct Particle(double X, double Y, double VX, double VY, double Life, double Max, Color C, double Rot);
 
@@ -106,7 +108,6 @@ namespace CoucouWin.Controls
             g.GradientStops.Add(new GradientStop(Mix(c, Colors.Black, 0.28), 1));
             _bodyBrush = Frozen(g);
             _shadowBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x55, 0, 0, 0)));
-            _blushBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x70, 0xFF, 0x6F, 0x91)));
             _eyePen = new Pen(EyeBrush, 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
             _eyePen.Freeze();
         }
@@ -224,17 +225,41 @@ namespace CoucouWin.Controls
             double len = Math.Sqrt(dx * dx + dy * dy);
             if (len > 1) { dx /= len; dy /= len; }
 
-            // Si el cursor lleva quieto un rato, mira a su alrededor de vez en cuando
-            if (_t - _lastCursorMove > 5)
+            // Si pasas el ratón muy cerca (o encima), siempre te mira
+            double dist = Math.Sqrt(Math.Pow(local.X - cx, 2) + Math.Pow(local.Y - cy, 2));
+            bool near = dist < size * 1.6;
+
+            // Solo de vez en cuando se fija en el ratón: según su curiosidad, al moverse el cursor
+            // decide si mirarlo durante 1.5–3.5 s; el resto del tiempo mira al frente o a su alrededor.
+            if (_curiosity < 0) _curiosity = CuriosityFor(BodyColor);
+            bool cursorMoving = _t - _lastCursorMove < 0.4;
+            if (!near && _t >= _watchUntil && cursorMoving && _t >= _nextWatchCheck)
             {
-                if (_t > _glanceUntil + 2.5 && _rng.NextDouble() < 0.01)
+                _nextWatchCheck = _t + 1.5 + _rng.NextDouble() * 2.5;
+                if (_rng.NextDouble() < _curiosity) _watchUntil = _t + 1.5 + _rng.NextDouble() * 2.0;
+            }
+            bool watching = near || _t < _watchUntil;
+
+            if (!watching)
+            {
+                // Mirada propia: casi al frente, con vistazos ocasionales a otro lado
+                if (_t > _glanceUntil + 1.5 && _rng.NextDouble() < 0.012)
                 {
-                    _glanceUntil = _t + 0.9 + _rng.NextDouble();
-                    _glanceX = (_rng.NextDouble() - 0.5) * 1.6; _glanceY = (_rng.NextDouble() - 0.5) * 0.8;
+                    _glanceUntil = _t + 0.8 + _rng.NextDouble() * 1.2;
+                    _glanceX = (_rng.NextDouble() - 0.5) * 1.4; _glanceY = (_rng.NextDouble() - 0.5) * 0.7;
                 }
                 if (_t < _glanceUntil) { dx = _glanceX; dy = _glanceY; }
+                else { dx = Math.Sin(_t * 0.31 + _phase) * 0.12; dy = 0.05; }
             }
             _lookTX = dx; _lookTY = dy;
+        }
+
+        /// <summary>Curiosidad estable por agente (derivada de su color): unos miran mucho, otros casi nunca.</summary>
+        private static double CuriosityFor(Color c)
+        {
+            int h = (c.R * 73856093) ^ (c.G * 19349663) ^ (c.B * 83492791);
+            double u = (Math.Abs(h) % 1000) / 1000.0;
+            return 0.15 + u * 0.6; // entre 15 % y 75 % de probabilidad de fijarse cada vez
         }
 
         private MochiState EffectiveState()
@@ -317,17 +342,10 @@ namespace CoucouWin.Controls
             // brillo
             dc.DrawEllipse(GlossBrush, null, new Point(bcx - bodyW * 0.2, bcy - bodyH * 0.27), bodyW * 0.13, bodyH * 0.07);
 
-            // --- mejillas
+            // --- posición de los ojos (sin rubor en las mejillas)
             double eyeY = bcy - bodyH * 0.04 + _lookY * bodyH * 0.07;
             double spacing = bodyW * 0.2;
             double lx = _lookX * bodyW * 0.13;
-            if (st is not MochiState.Error and not MochiState.Sleeping)
-            {
-                dc.PushOpacity(st == MochiState.Done || annoyed ? 1 : 0.6);
-                dc.DrawEllipse(_blushBrush, null, new Point(bcx - spacing * 1.55 + lx * 0.5, eyeY + bodyH * 0.17), bodyW * 0.08, bodyH * 0.05);
-                dc.DrawEllipse(_blushBrush, null, new Point(bcx + spacing * 1.55 + lx * 0.5, eyeY + bodyH * 0.17), bodyW * 0.08, bodyH * 0.05);
-                dc.Pop();
-            }
 
             // --- ojos
             double eyeRX = size * 0.05, eyeRY = size * 0.085;

@@ -114,8 +114,8 @@ namespace CoucouWin.Views
                     OverviewView.Measure(new Size(820, double.PositiveInfinity));
                     return new Size(840, Math.Clamp(OverviewView.DesiredSize.Height + 4 + 40, 180, 560));
                 default:
-                    CollapsedContent.Measure(new Size(double.PositiveInfinity, 44));
-                    return new Size(Math.Max(110, CollapsedContent.DesiredSize.Width + 34), 44);
+                    CollapsedContent.Measure(new Size(double.PositiveInfinity, 34));
+                    return new Size(Math.Max(96, CollapsedContent.DesiredSize.Width + 30), 34);
             }
         }
 
@@ -556,7 +556,7 @@ namespace CoucouWin.Views
             var principal = Principal;
             if (principal != null)
             {
-                var big = Mini(principal, 36);
+                var big = Mini(principal, 28);
                 CollapsedAgents.Children.Add(big);
             }
             var others = AppRef.Agents.Where(a => a != principal)
@@ -568,15 +568,15 @@ namespace CoucouWin.Views
             {
                 CollapsedAgents.Children.Add(new Border
                 {
-                    Width = 1, Height = 18, Margin = new Thickness(8, 0, 8, 0),
+                    Width = 1, Height = 14, Margin = new Thickness(14, 0, 14, 0),
                     Background = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF))
                 });
                 var grid = new System.Windows.Controls.Primitives.UniformGrid
                 {
-                    Rows = 2, Columns = others.Count == 1 ? 1 : 2, Width = others.Count == 1 ? 19 : 38, Height = 36,
+                    Rows = 2, Columns = others.Count == 1 ? 1 : 2, Width = others.Count == 1 ? 14 : 28, Height = 28,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                foreach (var a in others.Take(4)) grid.Children.Add(Mini(a, 18));
+                foreach (var a in others.Take(4)) grid.Children.Add(Mini(a, 14));
                 var host = new Grid { ToolTip = string.Join(", ", others.Select(a => a.Name)) };
                 host.Children.Add(grid);
                 if (others.Count > 4)
