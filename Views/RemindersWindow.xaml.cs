@@ -25,8 +25,8 @@ namespace CoucouWin.Views
             KindBox.Items.Add(new ComboBoxItem { Content = "Que el agente lo ejecute", Tag = ReminderKind.RunPrompt });
             KindBox.SelectedIndex = 0;
 
-            AgentBox.ItemsSource = App.Current.Sessions;
-            AgentBox.SelectedItem = App.Current.Sessions.FirstOrDefault(s => s.IsSelected) ?? App.Current.Sessions.FirstOrDefault();
+            AgentBox.ItemsSource = App.Current.Agents;
+            AgentBox.SelectedItem = App.Current.Agents.FirstOrDefault(a => a.IsDefault) ?? App.Current.Agents.FirstOrDefault();
 
             App.Current.Reminders.Changed += Refresh;
             Closed += (_, _) => App.Current.Reminders.Changed -= Refresh;
@@ -58,7 +58,7 @@ namespace CoucouWin.Views
                 DueAt = due,
                 Recurrence = RecurrenceBox.SelectedItem is ComboBoxItem rc ? (Recurrence)rc.Tag : Recurrence.None,
                 Kind = KindBox.SelectedItem is ComboBoxItem k ? (ReminderKind)k.Tag : ReminderKind.Notify,
-                AgentId = (AgentBox.SelectedItem as AgentSession)?.Profile.Id
+                AgentId = (AgentBox.SelectedItem as AgentEntry)?.Profile.Id
             };
             App.Current.Reminders.Add(r);
             WhatBox.Clear();

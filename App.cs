@@ -42,6 +42,9 @@ namespace CoucouWin
         public new static App Current => (App)Application.Current;
 
         public ConfigStore Store { get; } = new();
+        /// <summary>Agentes tal como se ven en la interfaz (los de código agrupan sus pestañas).</summary>
+        public ObservableCollection<AgentEntry> Agents { get; } = new();
+        /// <summary>Todas las sesiones (una por agente, o una por pestaña en los de código).</summary>
         public ObservableCollection<AgentSession> Sessions { get; } = new();
         public ApprovalServer Approvals { get; } = new();
         public ReminderService Reminders { get; private set; } = null!;
@@ -74,20 +77,20 @@ namespace CoucouWin
             Store.Save();
             HookSettingsPath = HookBridge.WriteClaudeHookSettings();
 
-            foreach (var p in Store.Config.Agents) Sessions.Add(CreateSession(p));
+            foreach (var p in Store.Config.Agents) Agents.Add(CreateEntry(p));
             ApplyDefault();
-            Sessions.CollectionChanged += (_, _) => ApplyDefault();
+            Agents.CollectionChanged += (_, _) => ApplyDefault();
 
             Approvals.Handler = req => Dispatcher.InvokeAsync(() =>
             {
-                var s = Sessions.FirstOrDefault(x => x.Profile.Id == req.AgentId);
+                var s = Sessions.FirstOrDefault(x => x.Key == req.AgentId);
                 return s != null ? s.RequestApproval(req) : Task.FromResult(ApprovalDecision.Deny);
             }).Task.Unwrap();
             Approvals.Start();
 
             Notifier = new NotificationService(() => Store.Config.Settings);
             Notifier.ShowRequested += () => Notch.Expand(focusInput: true);
-            Notifier.NotificationClicked += id => Notch.Expand(focusInput: true, agentId: id);
+            Notifier.NotificationClicked += key => Notch.Expand(focusInput: true, sessionKey: key);
             Notifier.NewAgentRequested += () => Notch.OpenEditor(null);
             Notifier.RemindersRequested += () => Notch.OpenReminders();
             Notifier.ExitRequested += ExitApp;
@@ -104,15 +107,36 @@ namespace CoucouWin
             Log.Info("Coucou iniciado");
         }
 
-        public AgentSession CreateSession(AgentProfile p)
+        // =============================================================== agentes, pestañas y sesiones
+        private AgentEntry CreateEntry(AgentProfile p)
+        {
+            var entry = new AgentEntry(p);
+            if (p.Kind == AgentKind.Code)
+            {
+                foreach (var ws in p.Workspaces) AddSession(entry, CreateSession(p, ws));
+            }
+            else AddSession(entry, CreateSession(p, null));
+            entry.RaiseAll();
+            return entry;
+        }
+
+        private void AddSession(AgentEntry entry, AgentSession s)
+        {
+            entry.Tabs.Add(s);
+            Sessions.Add(s);
+        }
+
+        private AgentSession CreateSession(AgentProfile p, WorkspaceInfo? ws)
         {
             AgentSession? s = null;
-            s = new AgentSession(p, Store, () => BuildContext(s!));
+            s = new AgentSession(p, Store, () => BuildContext(s!), ws);
             s.TurnFinished += OnTurnFinished;
             s.ApprovalRequested += OnApprovalRequested;
             s.ReminderCreated += (_, r) => Reminders.Add(r);
             return s;
         }
+
+        public AgentEntry? EntryOf(AgentSession s) => Agents.FirstOrDefault(a => a.Tabs.Contains(s));
 
         private RunContext BuildContext(AgentSession s)
         {
@@ -126,19 +150,19 @@ namespace CoucouWin
                 "[[task: <cuándo> | <instrucción que debes ejecutar>]]. <cuándo> puede ser una duración (10m, 2h, 1d) o una " +
                 "fecha-hora local ISO (2026-10-02T09:00). Coucou elimina la etiqueta y programa el aviso; confirma brevemente al usuario.";
             if (s.IsCode)
-                addendum += $"\nEres un agente de código. Tu carpeta de trabajo es «{s.Profile.WorkingDirectory}»: trabaja solo dentro de ella.";
+                addendum += $"\nEres un agente de código. Tu carpeta de trabajo (workspace) es «{s.WorkDir}»: trabaja solo dentro de ella.";
             else if (s.IsScheduled)
                 addendum += "\nEsta es una ejecución PROGRAMADA y automática: nadie va a responder preguntas. Haz la tarea de principio a fin " +
                             "y termina con un resumen de 1 a 3 líneas que sirva como notificación.";
             if (s.IsConversational)
-                addendum += "\nPROGRESO: Coucou muestra al usuario una barra lateral con tus pasos. Si la petición tiene 2 o más pasos, " +
+                addendum += "\nPROGRESO: Coucou muestra al usuario una lista con tus pasos. Si la petición tiene 2 o más pasos, " +
                             "escribe al empezar tu plan en este formato exacto (en su propio mensaje, antes de usar herramientas):\n" +
                             "[[tasks]]\n- [~] primer paso (en curso)\n- [ ] siguiente paso\n[[/tasks]]\n" +
                             "Cada vez que termines un paso, vuelve a escribir el bloque completo actualizado: [x] hecho, [~] en curso, [ ] pendiente. " +
                             "Coucou oculta el bloque del chat, así que no lo menciones. Para peticiones simples de un paso no lo uses.";
             return new RunContext
             {
-                AgentId = s.Profile.Id,
+                AgentId = s.Key,
                 AgentName = s.Profile.Name,
                 PipeName = Approvals.PipeName,
                 HookSettingsPath = HookSettingsPath,
@@ -147,17 +171,156 @@ namespace CoucouWin
             };
         }
 
+        public void SaveAgents()
+        {
+            Store.Config.Agents = Agents.Select(x => x.Profile).ToList();
+            Store.Save();
+        }
+
+        private void MigrateConfig()
+        {
+            var st = Store.Config.Settings;
+            // Agente de código por defecto (solo una vez)
+            if (!st.SeededCodeAgent)
+            {
+                if (!Store.Config.Agents.Any(a => a.Kind == AgentKind.Code))
+                {
+                    var code = ConfigStore.NewCodeAgent(null, "Código", "#FF9E5E");
+                    Store.Config.Agents.Insert(0, code);
+                    st.DefaultAgentId = code.Id;
+                }
+                st.SeededCodeAgent = true;
+            }
+            // Versión anterior: un agente de código por carpeta → ahora la carpeta es un workspace (pestaña)
+            foreach (var a in Store.Config.Agents.Where(a => a.Kind == AgentKind.Code))
+            {
+                if (!string.IsNullOrWhiteSpace(a.WorkingDirectory) && a.Workspaces.Count == 0)
+                    a.Workspaces.Add(new WorkspaceInfo { Id = WorkspaceInfo.LegacyId, Folder = a.WorkingDirectory });
+                a.WorkingDirectory = "";
+            }
+        }
+
+        /// <summary>Marca el agente principal; si no existe, el primero pasa a serlo.</summary>
+        private void ApplyDefault()
+        {
+            var st = Store.Config.Settings;
+            if (Agents.Count > 0 && !Agents.Any(x => x.Profile.Id == st.DefaultAgentId))
+                st.DefaultAgentId = Agents[0].Profile.Id;
+            foreach (var x in Agents)
+            {
+                x.IsDefault = x.Profile.Id == st.DefaultAgentId;
+                foreach (var t in x.Tabs) t.IsDefault = x.IsDefault;
+            }
+        }
+
+        public void SetDefault(AgentEntry e)
+        {
+            Store.Config.Settings.DefaultAgentId = e.Profile.Id;
+            ApplyDefault();
+            Store.Save();
+        }
+
+        public AgentEntry AddAgent(AgentProfile p)
+        {
+            var e = CreateEntry(p);
+            Agents.Add(e);
+            foreach (var s in e.Tabs.Where(x => x.IsScheduled)) ScheduleService.Reschedule(s);
+            SaveAgents();
+            return e;
+        }
+
+        /// <summary>
+        /// Abre un workspace (pestaña) para una carpeta en un agente de código: el indicado, el principal si es de
+        /// código, o el primero de código (se crea uno si no hay). Si ya hay una pestaña con esa carpeta, la devuelve.
+        /// </summary>
+        public AgentSession AddWorkspace(string folder, AgentEntry? target = null)
+        {
+            folder = System.IO.Path.GetFullPath(folder).TrimEnd('\\');
+            var existing = Sessions.FirstOrDefault(s => s.IsCode && s.Workspace != null &&
+                string.Equals(System.IO.Path.GetFullPath(s.WorkDir).TrimEnd('\\'), folder, StringComparison.OrdinalIgnoreCase)
+                && (target == null || target.Tabs.Contains(s)));
+            if (existing != null) return existing;
+
+            target ??= Agents.FirstOrDefault(a => a.IsDefault && a.IsCode) ?? Agents.FirstOrDefault(a => a.IsCode)
+                       ?? AddAgent(ConfigStore.NewCodeAgent(null, "Código", "#FF9E5E"));
+            var ws = new WorkspaceInfo { Folder = folder };
+            target.Profile.Workspaces.Add(ws);
+            var s = CreateSession(target.Profile, ws);
+            AddSession(target, s);
+            target.ActiveTab = s;
+            SaveAgents();
+            s.AddNotice($"📁 Workspace: {folder}");
+            return s;
+        }
+
+        /// <summary>Cierra una pestaña de un agente de código (detiene su CLI y borra su historial).</summary>
+        public void CloseWorkspace(AgentSession s)
+        {
+            var entry = EntryOf(s);
+            s.Cancel();
+            if (entry != null)
+            {
+                entry.Tabs.Remove(s);
+                if (s.Workspace != null) entry.Profile.Workspaces.RemoveAll(w => w.Id == s.Workspace.Id);
+            }
+            Sessions.Remove(s);
+            Store.DeleteHistory(s.Key);
+            SaveAgents();
+        }
+
+        /// <summary>
+        /// Aplica cambios del editor. Si cambia el tipo de agente se recrea (sus pestañas cambian de forma);
+        /// si cambia el CLI, las conversaciones empiezan de nuevo.
+        /// </summary>
+        public AgentEntry UpdateAgent(AgentEntry e, AgentProfile p)
+        {
+            if (e.Profile.Kind != p.Kind)
+            {
+                int idx = Agents.IndexOf(e);
+                foreach (var s in e.Tabs.ToList()) { s.Cancel(); Sessions.Remove(s); }
+                Agents.Remove(e);
+                var ne = CreateEntry(p);
+                Agents.Insert(Math.Max(0, Math.Min(idx, Agents.Count)), ne);
+                foreach (var s in ne.Tabs.Where(x => x.IsScheduled)) ScheduleService.Reschedule(s);
+                SaveAgents();
+                return ne;
+            }
+            bool providerChanged = e.Profile.Provider != p.Provider;
+            e.UpdateProfile(p);
+            foreach (var s in e.Tabs)
+            {
+                if (providerChanged) s.NewConversation();
+                if (s.IsScheduled) ScheduleService.Reschedule(s);
+            }
+            SaveAgents();
+            return e;
+        }
+
+        /// <summary>Elimina un agente con todas sus pestañas.</summary>
+        public void RemoveAgent(AgentEntry e)
+        {
+            foreach (var s in e.Tabs.ToList())
+            {
+                s.Cancel();
+                Sessions.Remove(s);
+                Store.DeleteHistory(s.Key);
+            }
+            Agents.Remove(e);
+            SaveAgents();
+        }
+
+        // =============================================================== notificaciones
         private void OnTurnFinished(AgentSession s, TurnResult r)
         {
             if (r.Cancelled) return;
-            var title = r.Success ? $"{s.Profile.Name} terminó" : $"{s.Profile.Name} tuvo un problema";
+            var title = r.Success ? $"{s.DisplayName} terminó" : $"{s.DisplayName} tuvo un problema";
             var body = string.IsNullOrWhiteSpace(r.Summary) ? (r.Success ? "Tarea completada" : "Revisa la conversación") : r.Summary;
             if (r.Duration.TotalSeconds >= 15) body += $"  ·  {FormatDuration(r.Duration)}";
 
             bool userIsLooking = Notch.IsLookingAt(s);
             if (!userIsLooking) Notch.ShowBanner(s, title, body);
             if (Store.Config.Settings.NotifyOnDone && (!userIsLooking || r.FromSchedule))
-                Notifier.Toast(title, body, s.Profile.Id);
+                Notifier.Toast(title, body, s.Key);
             Notifier.Play(r.Success ? NotificationService.SoundKind.Done : NotificationService.SoundKind.Error);
         }
 
@@ -166,14 +329,21 @@ namespace CoucouWin
             Notifier.Play(NotificationService.SoundKind.Attention);
             if (!Notch.IsLookingAt(s))
             {
-                Notch.ShowBanner(s, $"{s.Profile.Name} necesita permiso", $"{req.Tool}: {FirstLine(req.Detail)}", sticky: true);
-                Notifier.Toast($"{s.Profile.Name} necesita permiso", $"{req.Tool}: {FirstLine(req.Detail)}", s.Profile.Id, System.Windows.Forms.ToolTipIcon.Warning);
+                Notch.ShowBanner(s, $"{s.DisplayName} necesita permiso", $"{req.Tool}: {FirstLine(req.Detail)}", sticky: true);
+                Notifier.Toast($"{s.DisplayName} necesita permiso", $"{req.Tool}: {FirstLine(req.Detail)}", s.Key, System.Windows.Forms.ToolTipIcon.Warning);
             }
+        }
+
+        /// <summary>Sesión de un agente por id de perfil (la pestaña activa en los de código).</summary>
+        private AgentSession? SessionOfAgent(string? agentId)
+        {
+            var e = Agents.FirstOrDefault(a => a.Profile.Id == agentId);
+            return e?.ActiveTab ?? Sessions.FirstOrDefault(x => x.Key == agentId);
         }
 
         private void OnReminderFired(Reminder r)
         {
-            var s = Sessions.FirstOrDefault(x => x.Profile.Id == r.AgentId) ?? Sessions.FirstOrDefault();
+            var s = SessionOfAgent(r.AgentId) ?? Sessions.FirstOrDefault(x => !x.IsScheduled) ?? Sessions.FirstOrDefault();
             if (r.Kind == ReminderKind.RunPrompt && s != null)
             {
                 if (s.IsBusy)
@@ -182,14 +352,14 @@ namespace CoucouWin
                     Reminders.Add(new Reminder { Text = r.Text, DueAt = DateTime.Now.AddMinutes(1), Kind = r.Kind, AgentId = r.AgentId });
                     return;
                 }
-                Notifier.Toast($"⏰ {s.Profile.Name} empieza una tarea programada", r.Text, s.Profile.Id);
+                Notifier.Toast($"⏰ {s.DisplayName} empieza una tarea programada", r.Text, s.Key);
                 _ = s.SendAsync(r.Text, fromSchedule: true);
                 return;
             }
 
-            var name = s?.Profile.Name ?? "Coucou";
+            var name = s?.DisplayName ?? "Coucou";
             Notifier.Play(NotificationService.SoundKind.Reminder);
-            Notifier.Toast($"⏰ Recordatorio de {name}", r.Text, s?.Profile.Id);
+            Notifier.Toast($"⏰ Recordatorio de {name}", r.Text, s?.Key);
             if (s != null)
             {
                 s.AddNotice($"⏰ Recordatorio: {r.Text}");
@@ -204,10 +374,16 @@ namespace CoucouWin
             }
         }
 
-        private AgentSession? FindAgent(string? name) =>
-            string.IsNullOrWhiteSpace(name) ? null :
-            Sessions.FirstOrDefault(x => x.Profile.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase))
-            ?? Sessions.FirstOrDefault(x => x.Profile.Id == name);
+        /// <summary>Busca por nombre de agente, por nombre de carpeta de una pestaña o por clave.</summary>
+        private AgentSession? FindSession(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            name = name.Trim();
+            var e = Agents.FirstOrDefault(a => a.Profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (e != null) return e.ActiveTab;
+            return Sessions.FirstOrDefault(s => s.IsCode && s.FolderName.Equals(name, StringComparison.OrdinalIgnoreCase))
+                   ?? Sessions.FirstOrDefault(s => s.Key == name);
+        }
 
         /// <summary>Mensajes que llegan por el canal de control (scripts, otras apps, hooks globales).</summary>
         private void HandleControl(System.Text.Json.Nodes.JsonObject msg)
@@ -224,15 +400,8 @@ namespace CoucouWin
                         {
                             var folder = msg["folder"]?.GetValue<string>() ?? "";
                             if (!System.IO.Directory.Exists(folder)) break;
-                            // Si ya hay un agente para esa carpeta, se muestra ese
-                            var existing = Sessions.FirstOrDefault(x => x.IsCode &&
-                                string.Equals(System.IO.Path.GetFullPath(x.FolderPath.Length > 0 ? x.FolderPath : "?").TrimEnd('\\'),
-                                              folder.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
-                            // Si hay un agente de código esperando carpeta, se le asigna a él
-                            var empty = existing == null ? Sessions.FirstOrDefault(x => x.NeedsFolder) : null;
-                            if (empty != null && empty.TrySetFolder(folder, out _)) SaveAgents();
-                            var s = existing ?? empty ?? AddCodeAgent(folder);
-                            Notch.Expand(focusInput: true, agentId: s.Profile.Id);
+                            var s = AddWorkspace(folder);
+                            Notch.Expand(focusInput: true, sessionKey: s.Key);
                             break;
                         }
                     case "new-agent":
@@ -245,22 +414,22 @@ namespace CoucouWin
                         {
                             var title = msg["title"]?.GetValue<string>() ?? "Coucou";
                             var body = msg["body"]?.GetValue<string>() ?? "";
-                            var s = FindAgent(msg["agent"]?.GetValue<string>()) ?? Sessions.FirstOrDefault();
+                            var s = FindSession(msg["agent"]?.GetValue<string>()) ?? Sessions.FirstOrDefault();
                             if (s != null)
                             {
                                 s.AddNotice($"🔔 {title}: {body}");
-                                Notch.ShowBannerRaw(s.Color, MochiState.Done, title, body, s.Profile.Id, sticky: false);
+                                Notch.ShowBannerRaw(s.Color, MochiState.Done, title, body, s.Key, sticky: false);
                             }
-                            Notifier.Toast(title, body, s?.Profile.Id);
+                            Notifier.Toast(title, body, s?.Key);
                             Notifier.Play(NotificationService.SoundKind.Done);
                             break;
                         }
                     case "ask":
                         {
-                            var s = FindAgent(msg["agent"]?.GetValue<string>());
+                            var s = FindSession(msg["agent"]?.GetValue<string>());
                             var text = msg["text"]?.GetValue<string>() ?? "";
                             if (s == null) { Log.Info("ask: agente no encontrado"); break; }
-                            _ = s.SendAsync(text); // si está ocupado, queda en Pendientes
+                            _ = s.SendAsync(text); // si está ocupado, queda en la cola
                             break;
                         }
                     case "claude-event":
@@ -291,74 +460,6 @@ namespace CoucouWin
                 Notifier.Toast($"Claude Code · {project}", m, null, System.Windows.Forms.ToolTipIcon.Warning);
                 Notifier.Play(NotificationService.SoundKind.Attention);
             }
-        }
-
-        public void SaveAgents()
-        {
-            Store.Config.Agents = Sessions.Select(x => x.Profile).ToList();
-            Store.Save();
-        }
-
-        /// <summary>Añade el agente de código por defecto a configuraciones antiguas (solo una vez).</summary>
-        private void MigrateConfig()
-        {
-            var st = Store.Config.Settings;
-            if (!st.SeededCodeAgent)
-            {
-                if (!Store.Config.Agents.Any(a => a.Kind == AgentKind.Code))
-                {
-                    var code = ConfigStore.NewCodeAgent(null, "Código", "#FF9E5E");
-                    Store.Config.Agents.Insert(0, code);
-                    st.DefaultAgentId = code.Id;
-                }
-                st.SeededCodeAgent = true;
-            }
-        }
-
-        /// <summary>Marca el agente principal; si no existe, el primero pasa a serlo.</summary>
-        private void ApplyDefault()
-        {
-            var st = Store.Config.Settings;
-            if (Sessions.Count > 0 && !Sessions.Any(x => x.Profile.Id == st.DefaultAgentId))
-                st.DefaultAgentId = Sessions[0].Profile.Id;
-            foreach (var x in Sessions) x.IsDefault = x.Profile.Id == st.DefaultAgentId;
-        }
-
-        public void SetDefault(AgentSession s)
-        {
-            Store.Config.Settings.DefaultAgentId = s.Profile.Id;
-            ApplyDefault();
-            Store.Save();
-        }
-
-        public AgentSession AddAgent(AgentProfile p)
-        {
-            var s = CreateSession(p);
-            Sessions.Add(s);
-            if (s.IsScheduled) ScheduleService.Reschedule(s);
-            SaveAgents();
-            return s;
-        }
-
-        /// <summary>Crea un agente de código para una carpeta (no se puede cambiar después).</summary>
-        public AgentSession AddCodeAgent(string folder)
-        {
-            var used = Sessions.Select(x => x.Profile.ColorHex).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var color = ConfigStore.CodePalette.FirstOrDefault(c => !used.Contains(c)) ?? ConfigStore.CodePalette[Sessions.Count % ConfigStore.CodePalette.Length];
-            var name = System.IO.Path.GetFileName(folder.TrimEnd('\\', '/'));
-            var p = ConfigStore.NewCodeAgent(folder, string.IsNullOrEmpty(name) ? "Código" : name, color);
-            var s = AddAgent(p);
-            s.AddNotice($"📁 Trabajando en {folder}");
-            return s;
-        }
-
-        /// <summary>Cierra un agente (detiene su CLI y borra su historial).</summary>
-        public void RemoveAgent(AgentSession s)
-        {
-            s.Cancel();
-            Sessions.Remove(s);
-            Store.DeleteHistory(s.Profile.Id);
-            SaveAgents();
         }
 
         public void ExitApp()

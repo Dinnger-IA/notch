@@ -47,13 +47,27 @@ namespace CoucouWin.Models
         public string CustomCommand { get; set; } = "";
         /// <summary>Solo para Kind=Scheduled.</summary>
         public ScheduleSpec Schedule { get; set; } = new();
+        /// <summary>Solo para Kind=Code: cada workspace es una pestaña con su carpeta fija y su sesión del CLI.</summary>
+        public List<WorkspaceInfo> Workspaces { get; set; } = new();
 
         public AgentProfile Clone()
         {
             var c = (AgentProfile)MemberwiseClone();
             c.Schedule = Schedule.Clone();
+            c.Workspaces = Workspaces.Select(w => w.Clone()).ToList();
             return c;
         }
+    }
+
+    /// <summary>Pestaña de un agente de código: una carpeta (no se puede cambiar; se cierra y se abre otra).</summary>
+    public class WorkspaceInfo
+    {
+        /// <summary>Id "legacy" = workspace migrado de la versión anterior (reutiliza el historial del agente).</summary>
+        public const string LegacyId = "legacy";
+        public string Id { get; set; } = Guid.NewGuid().ToString("N")[..10];
+        public string Folder { get; set; } = "";
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public WorkspaceInfo Clone() => (WorkspaceInfo)MemberwiseClone();
     }
 
     public enum ScheduleMode { Interval, FixedTimes }
@@ -229,6 +243,10 @@ namespace CoucouWin.Models
         public DateTime Created { get; set; } = DateTime.Now;
         public DateTime? Finished { get; set; }
         public bool FromSchedule { get; set; }
+        /// <summary>Resultado en una línea (primera línea de la respuesta final o el error).</summary>
+        public string Summary { get; set; } = "";
+        /// <summary>Resumen si existe; si no, lo que se pidió.</summary>
+        [JsonIgnore] public string ResultOrTitle => string.IsNullOrWhiteSpace(Summary) ? Title : Summary;
 
         public AgentTaskStatus Status
         {

@@ -28,54 +28,55 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
 
 | Tipo | Qué hace | Al abrirlo |
 |---|---|---|
-| **Código** | Conversacional y atado a **una carpeta fija**: ahí se abren sus CLI. Puedes tener varios, uno por proyecto. | Chat estilo coucou + lista de tareas a la izquierda |
-| **Chat** | Conversacional, sin carpeta de proyecto. | Chat estilo coucou + lista de tareas a la izquierda |
-| **Programado** | No interactivo: ejecuta una **instrucción** según un **horario** y te avisa con el resultado. | Barra informativa: lo último que escribió, cuándo y la próxima ejecución |
+| **Código** | Chat con **pestañas de workspace**: cada pestaña es una carpeta donde se abre el CLI, con su propia conversación. | Chat estilo coucou + pestañas + lista de tareas |
+| **Chat** | Conversacional, sin carpeta de proyecto. | Chat estilo coucou + lista de tareas |
+| **Programado** | No interactivo: ejecuta una **instrucción** según un **horario** y te avisa con el resultado. | Su estado en la tarjeta grande de la vista general |
 
-### Navegación
+### Vista general (al pasar el ratón o con el primer clic)
 
-1. **Píldora**: el principal en grande con los agentes de código asomando detrás; luego los de chat y los
-   programados, pequeños y agrupados.
-2. **Vista general** (al pasar el ratón o con el primer clic): **solo información**. Cada agente muestra su
-   tarea o paso actual, o lo último que dijo; los programados, su próxima hora. No hay chat ni tareas aquí.
-   - El **principal y todos los agentes de código van juntos** en una sola tarjeta. Si hay más de uno,
-     al pulsarla se **desglosan** para elegir cuál abrir.
-3. **Agente abierto**: pulsa una tarjeta. Los interactivos abren el chat; los programados, la barra informativa.
-   El botón 💬 vuelve a la vista general.
+Igual que coucou: **una tarjeta grande a la izquierda** con el agente enfocado y **el resto en chips pequeños
+a la derecha**.
 
-### Chat (interactivos)
+- Tarjeta grande: personaje, nombre, CLI, chip de estado (*Error*, *Permiso*, *Trabajando*, *En pausa*),
+  contador y botón ↗. Debajo, hasta tres líneas de detalle:
+  - **Código**: el último estado de cada workspace (`▶ demo-api · Leer server.js`, `✓ demo-blog · <resultado>`,
+    `✗ … · falló`). El contador es **pestañas activas / total**.
+  - **Chat**: el resultado de la última tarea y lo que hace ahora (el contador son sus pasos, p. ej. `2/5`).
+  - **Programado**: lo último que escribió, cuándo, y la próxima ejecución, con botones *Ejecutar ahora* y *Pausar*.
+- Chips: insignia roja si su última tarea falló, naranja si piden permiso, borde ámbar si están trabajando.
+- **Pulsar un chip** lo pasa a la tarjeta grande (el que estaba ahí baja a los chips; «‹» vuelve al principal).
+- **Pulsar la tarjeta grande** (o ↗) abre el chat. El chip *+ Nuevo* crea agentes, workspaces o recordatorios.
 
-- Estilo coucou: barra superior mínima (💬 volver · + nueva conversación · ⚙ ajustes), píldora de contexto
-  `● agente · carpeta/CLI`, tus mensajes en burbuja a la derecha, las respuestas como texto suelto, fondo
-  oscuro con halo violeta y el personaje asomando abajo a la izquierda. Entrada «Continuar…».
-- **Lista de tareas a la izquierda**, mínima: un único listado con iconos de estado
-  (✓ hecha, ! fallida, × detenida, ▶ en curso, ○ pendiente) y, bajo la tarea en curso, sus pasos.
-  No se añaden tareas a mano: cada mensaje es una tarea, y si escribes mientras trabaja se **encola**.
-  Si detienes una tarea, la cola espera hasta tu siguiente mensaje (o clic derecho → *Reanudar cola*).
-- Los pasos salen del propio agente: Coucou le pide que publique su plan como un bloque
-  `[[tasks]] - [x] hecho / - [~] en curso / - [ ] pendiente [[/tasks]]`, que se oculta del chat.
-  Funciona con cualquier CLI; además se leen las listas nativas cuando existen (`todo_list` de Codex,
-  `TodoWrite` de Claude Code, `write_todos` de Gemini).
+### Chat (interactivos y código)
 
-### Principal, carpetas y horarios
+- Estilo coucou: barra superior mínima (💬 volver · + nueva conversación · ⚙ ajustes), píldora de contexto,
+  tus mensajes en burbuja a la derecha, las respuestas como texto suelto, fondo oscuro con halo violeta y el
+  personaje asomando abajo a la izquierda. Entrada «Continuar…».
+- **Código**: en lugar de «+» aparecen las **pestañas de workspace** (carpeta + estado: ▶ activa, ✓ terminó,
+  ✗ falló, ! permiso) y el botón **Nuevo workspace**. La carpeta de una pestaña **no se puede cambiar**: se cierra
+  (×) y se abre otra. Arrastrar una carpeta sobre el notch abre un workspace nuevo. Desde un script:
+  `CoucouWin.exe --code D:\mi\proyecto` (si ya hay una pestaña para esa carpeta, la abre).
+- **Lista de tareas a la izquierda**, mínima: un listado con iconos (✓ hecha, ! fallida, × detenida,
+  ▶ en curso, ○ pendiente) y los pasos de la tarea en curso. Cada mensaje es una tarea; si escribes mientras
+  trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Coucou pide al agente (se oculta del chat)
+  o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
 
-- **Agente principal**: cualquiera (clic derecho → *Establecer como principal*, o la casilla del editor).
-  Por defecto es un agente de código. Cualquier agente se puede **eliminar**, incluido el principal.
-- **Carpeta de un agente de código**: arrástrala sobre el notch o pulsa *Seleccionar carpeta*.
-  **No se puede cambiar**: para otra carpeta, cierra el agente (✕) y abre otro. Soltar una carpeta crea un
-  agente de código nuevo; también `CoucouWin.exe --code D:\mi\proyecto` (si ya existe, lo abre).
-- **Horario de un programado**: *cada N horas* (mínimo 1 h) dentro de una franja (p. ej. de 09:00 a 18:00),
-  o *a horas fijas* (separadas al menos 1 h), en los **días** que elijas. Se puede pausar o ejecutar a mano
-  desde su barra. Si el PC estuvo apagado, recupera una ejecución perdida de las últimas 12 h.
-  Como nadie puede aprobar permisos, usa *Solo lectura* o *Automático*.
+### Principal y horarios
+
+- **Agente principal**: cualquiera (clic derecho → *Establecer como principal*, o la casilla del editor). Es el
+  que aparece en la tarjeta grande al abrir y en grande en la píldora. Por defecto, el agente de código.
+  Cualquier agente se puede **eliminar**.
+- **Horario de un programado**: *cada N horas* (mínimo 1 h) dentro de una franja, o *a horas fijas* (separadas
+  al menos 1 h), en los **días** que elijas. Si el PC estuvo apagado, recupera una ejecución perdida de las
+  últimas 12 h. Como nadie puede aprobar permisos, usa *Solo lectura* o *Automático*.
 
 ## Cómo se usa
 
 | Acción | Cómo |
 |---|---|
 | Ver los agentes | pasar el ratón por la píldora, clic en ella, o **Ctrl + Alt + Espacio** |
-| Abrir un agente | clic en su tarjeta (clic derecho: editar, principal, nueva conversación, cola, carpeta, eliminar) |
-| Crear un agente | botón **+** de la vista general → código / chat / programado |
+| Abrir un agente | clic en su chip (pasa a la tarjeta grande) y clic en la tarjeta para el chat; clic derecho = menú |
+| Crear | chip **+ Nuevo** → workspace de código / chat / programado; o arrastra una carpeta |
 | Enviar | **Enter** (Shift+Enter = salto de línea); si está ocupado, se encola. Botón rojo = detener |
 | Adjuntar archivos | arrastrarlos sobre el notch (el personaje se convierte en caja 📦) o con el clip |
 | Fijar el panel abierto | chincheta; **Esc** lo cierra |
@@ -149,13 +150,14 @@ Desmarcarlo los quita. Es opcional y no se activa solo.
 App.cs                     Main, arranque, coordinación de notificaciones/recordatorios/canal de control
 Controls/MochiView.cs      el personaje y todas sus animaciones
 Providers/Providers.cs     Claude Code, Codex, Gemini, Personalizado → eventos normalizados
-Services/AgentSession.cs   conversación, cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
+Services/AgentEntry.cs     agente en la interfaz: pestañas, estado agregado y líneas de detalle
+Services/AgentSession.cs   una conversación (agente o pestaña de workspace): cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
 Services/Scheduler.cs      ejecuta los agentes programados según su horario
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
-Views/NotchWindow.*        el notch: píldora, aviso, vista general, chat y barra informativa
+Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas
 Views/Markdown.cs          Markdown ligero en las burbujas

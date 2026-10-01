@@ -56,11 +56,12 @@ namespace CoucouWin.Views
         /// <param name="profile">null para crear uno nuevo.</param>
         /// <param name="kindForNew">Tipo inicial cuando se crea uno nuevo.</param>
         /// <param name="folderLocked">Agente de código que ya tiene carpeta: no se puede cambiar.</param>
-        public AgentEditorWindow(AgentProfile? profile, AgentKind kindForNew = AgentKind.Interactive, bool folderLocked = false, bool isDefault = false)
+        /// <param name="kindLocked">El tipo no se puede cambiar (p. ej. agente de código con workspaces abiertos).</param>
+        public AgentEditorWindow(AgentProfile? profile, AgentKind kindForNew = AgentKind.Interactive, bool kindLocked = false, bool isDefault = false)
         {
             InitializeComponent();
             _isNew = profile == null;
-            _folderLocked = folderLocked;
+            _folderLocked = false;
             bool isNew = _isNew;
             _p = profile ?? new AgentProfile
             {
@@ -78,7 +79,7 @@ namespace CoucouWin.Views
                          (AgentKind.Scheduled, "Programado — ejecuta una instrucción según un horario")
                      })
                 KindBox.Items.Add(new ComboBoxItem { Content = label, Tag = k });
-            KindBox.IsEnabled = !folderLocked;
+            KindBox.IsEnabled = !kindLocked;
 
             for (int i = 0; i < 7; i++)
             {
@@ -171,11 +172,13 @@ namespace CoucouWin.Views
             SchedulePanel.Visibility = k == AgentKind.Scheduled ? Visibility.Visible : Visibility.Collapsed;
             KindHint.Text = k switch
             {
-                AgentKind.Code => "Tiene chat y lista de tareas. Los CLI se abren en su carpeta; puedes tener varios, uno por proyecto.",
+                AgentKind.Code => "Chat con pestañas de workspace: cada pestaña es una carpeta donde se abre el CLI. Se crean desde el notch (arrastrando una carpeta o con «Nuevo workspace»).",
                 AgentKind.Scheduled => "No tiene chat: ejecuta la instrucción en los días y horas que elijas (mínimo cada 1 hora) y te avisa al terminar. Como nadie puede aprobar permisos, usa Solo lectura o Automático.",
                 _ => "Conversacional: chat con barra lateral de tarea actual, pendientes y completadas."
             };
-            FolderLabel.Text = k == AgentKind.Code ? "Carpeta del proyecto (se abren ahí los CLI)" : "Carpeta de trabajo (opcional)";
+            // Los agentes de código no tienen una carpeta: cada workspace (pestaña) tiene la suya
+            FolderSection.Visibility = k == AgentKind.Code ? Visibility.Collapsed : Visibility.Visible;
+            FolderLabel.Text = "Carpeta de trabajo (opcional)";
             DirBox.IsReadOnly = _folderLocked;
             BrowseButton.IsEnabled = !_folderLocked;
             FolderNote.Text = _folderLocked
@@ -386,7 +389,8 @@ namespace CoucouWin.Views
             _p.Provider = SelectedProvider;
             _p.Approval = ApprovalBox.SelectedItem is ComboBoxItem a ? (ApprovalMode)a.Tag : ApprovalMode.Ask;
             _p.Model = ModelBox.Text.Trim();
-            if (!_folderLocked) _p.WorkingDirectory = dir == "" ? "" : Path.GetFullPath(dir);
+            if (kind == AgentKind.Code) _p.WorkingDirectory = "";
+            else _p.WorkingDirectory = dir == "" ? "" : Path.GetFullPath(dir);
             _p.SystemPrompt = PromptBox.Text.Trim();
             _p.ExtraArgs = ExtraBox.Text.Trim();
             _p.CustomCommand = CustomBox.Text.Trim();

@@ -45,19 +45,34 @@ namespace CoucouWin.Services
         public event Action<AgentSession, ApprovalRequest>? ApprovalRequested;
         public event Action<AgentSession, Reminder>? ReminderCreated;
 
-        public AgentSession(AgentProfile profile, ConfigStore store, Func<RunContext> contextFactory)
+        /// <summary>Pestaña de workspace (solo agentes de código).</summary>
+        public WorkspaceInfo? Workspace { get; }
+        /// <summary>Identificador único de esta sesión (agente o agente + pestaña). Se usa para historial y aprobaciones.</summary>
+        public string Key => Workspace == null || Workspace.Id == WorkspaceInfo.LegacyId ? Profile.Id : $"{Profile.Id}_{Workspace.Id}";
+        /// <summary>Carpeta donde se abre el CLI.</summary>
+        public string WorkDir => Workspace?.Folder ?? Profile.WorkingDirectory;
+        /// <summary>Nombre para avisos: «Código · mi-proyecto» en pestañas.</summary>
+        public string DisplayName => Workspace != null ? $"{Profile.Name} · {FolderName}" : Profile.Name;
+
+        private DateTime _lastActivity = DateTime.MinValue;
+        /// <summary>Última vez que empezó o terminó una tarea (para ordenar pestañas).</summary>
+        public DateTime LastActivity { get => _lastActivity; private set => Set(ref _lastActivity, value); }
+
+        public AgentSession(AgentProfile profile, ConfigStore store, Func<RunContext> contextFactory, WorkspaceInfo? workspace = null)
         {
+            Workspace = workspace;
             Profile = profile;
             _store = store;
             _contextFactory = contextFactory;
             _settleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
             _settleTimer.Tick += (_, _) => { _settleTimer.Stop(); if (!IsBusy) { State = MochiState.Idle; Activity = ""; } };
 
-            var h = store.LoadHistory(profile.Id);
+            var h = store.LoadHistory(Key);
             SessionId = h.SessionId;
             foreach (var m in h.Messages) Messages.Add(m);
             foreach (var t in h.Pending) { t.Status = AgentTaskStatus.Pending; PendingTasks.Add(t); }
             foreach (var t in h.Completed) CompletedTasks.Add(t);
+            if (CompletedTasks.FirstOrDefault()?.Finished is { } lf) _lastActivity = lf;
             // Si había cola al cerrar, no arrancamos solos: el usuario decide con "Reanudar".
             _queuePaused = PendingTasks.Count > 0;
             PendingTasks.CollectionChanged += (_, _) => { OnChanged(nameof(PendingCount)); OnChanged(nameof(CanResumeQueue)); RebuildTaskLines(); OnChanged(nameof(OverviewBadge)); };
@@ -155,6 +170,7 @@ namespace CoucouWin.Services
         private void RaiseOverview()
         {
             OnChanged(nameof(OverviewLine)); OnChanged(nameof(OverviewBadge)); OnChanged(nameof(InfoLine));
+            RaiseTabState();
         }
 
         // ---------------- Propiedades enlazables ----------------
@@ -186,17 +202,17 @@ namespace CoucouWin.Services
         public bool IsScheduled => Profile.Kind == AgentKind.Scheduled;
         public bool IsConversational => Profile.Kind != AgentKind.Scheduled;
         /// <summary>Agente de código que todavía no tiene carpeta asignada.</summary>
-        public bool NeedsFolder => IsCode && string.IsNullOrWhiteSpace(Profile.WorkingDirectory);
+        public bool NeedsFolder => IsCode && string.IsNullOrWhiteSpace(WorkDir);
         public bool HasFolder => IsCode && !NeedsFolder;
         public bool CanType => IsConversational && !NeedsFolder;
-        public string FolderPath => Profile.WorkingDirectory;
+        public string FolderPath => WorkDir;
         public string FolderName
         {
             get
             {
-                if (string.IsNullOrWhiteSpace(Profile.WorkingDirectory)) return "sin carpeta";
-                var n = Path.GetFileName(Profile.WorkingDirectory.TrimEnd('\\', '/'));
-                return string.IsNullOrEmpty(n) ? Profile.WorkingDirectory : n;
+                if (string.IsNullOrWhiteSpace(WorkDir)) return "sin carpeta";
+                var n = Path.GetFileName(WorkDir.TrimEnd('\\', '/'));
+                return string.IsNullOrEmpty(n) ? WorkDir : n;
             }
         }
         /// <summary>Texto de la píldora de contexto del chat: carpeta (código) o CLI.</summary>
@@ -283,17 +299,42 @@ namespace CoucouWin.Services
                 OnChanged(n);
         }
 
-        /// <summary>Asigna la carpeta a un agente de código. Solo se puede hacer una vez.</summary>
-        public bool TrySetFolder(string path, out string? error)
+        /// <summary>Estado de la última tarea terminada (para chips y pestañas).</summary>
+        public AgentTaskStatus? LastTaskStatus => CompletedTasks.FirstOrDefault()?.Status;
+        public bool LastFailed => !IsBusy && LastTaskStatus == AgentTaskStatus.Failed;
+        /// <summary>Icono de estado de la pestaña: ▶ activa, ! permiso, ✓ terminó, ✗ falló, ○ sin tareas.</summary>
+        public string TabIcon => PendingApproval != null ? "\uE7BA" : IsBusy ? "\uE768" : LastTaskStatus switch
         {
-            error = null;
-            if (!IsCode) { error = "Solo los agentes de código tienen carpeta."; return false; }
-            if (!NeedsFolder) { error = "La carpeta no se puede cambiar: cierra este agente y abre otro."; return false; }
-            if (!Directory.Exists(path)) { error = "Esa carpeta no existe."; return false; }
-            Profile.WorkingDirectory = Path.GetFullPath(path);
-            RaiseProfileChanged();
-            AddNotice($"📁 Trabajando en {Profile.WorkingDirectory}");
-            return true;
+            AgentTaskStatus.Done => "\uE73E",
+            AgentTaskStatus.Failed => "\uE711",
+            AgentTaskStatus.Cancelled => "\uE71A",
+            _ => "\uEA3A"
+        };
+        /// <summary>Tono de la pestaña para colorear el icono.</summary>
+        public TaskTone TabTone => PendingApproval != null ? TaskTone.Running : IsBusy ? TaskTone.Running : LastTaskStatus switch
+        {
+            AgentTaskStatus.Done => TaskTone.Done,
+            AgentTaskStatus.Failed => TaskTone.Failed,
+            AgentTaskStatus.Cancelled => TaskTone.Cancelled,
+            _ => TaskTone.Pending
+        };
+
+        /// <summary>Paso o actividad actual en una línea (vacío si está libre).</summary>
+        public string CurrentLine
+        {
+            get
+            {
+                if (PendingApproval != null) return $"Necesita permiso · {PendingApproval.Tool}";
+                if (!IsBusy) return "";
+                var step = _current?.Steps.FirstOrDefault(s => s.Status == StepStatus.InProgress)?.Text;
+                return step ?? (string.IsNullOrEmpty(Activity) ? _current?.Title ?? "Trabajando…" : Activity);
+            }
+        }
+
+        private void RaiseTabState()
+        {
+            OnChanged(nameof(TabIcon)); OnChanged(nameof(TabTone)); OnChanged(nameof(LastTaskStatus));
+            OnChanged(nameof(LastFailed)); OnChanged(nameof(CurrentLine));
         }
 
         // ---------------- Conversación ----------------
@@ -388,11 +429,12 @@ namespace CoucouWin.Services
         {
             var text = task.Prompt;
             bool fromSchedule = task.FromSchedule;
-            if (IsCode && !System.IO.Directory.Exists(Profile.WorkingDirectory))
+            if (IsCode && !System.IO.Directory.Exists(WorkDir))
             {
-                AddNotice($"La carpeta {Profile.WorkingDirectory} ya no existe. Cierra este agente y abre uno nuevo.", true);
+                AddNotice($"La carpeta {WorkDir} ya no existe. Cierra esta pestaña y abre otra.", true);
                 return;
             }
+            LastActivity = DateTime.Now;
 
             task.Status = AgentTaskStatus.Running;
             task.Steps = new List<TaskStep>();
@@ -417,10 +459,13 @@ namespace CoucouWin.Services
             {
                 var provider = ProviderFactory.Create(Profile.Provider);
                 var ctx = _contextFactory();
-                var spec = provider.Build(Profile, text, SessionId, ctx);
+                // Cada pestaña usa el perfil del agente con su propia carpeta
+                var runProfile = Profile;
+                if (Workspace != null) { runProfile = Profile.Clone(); runProfile.WorkingDirectory = Workspace.Folder; }
+                var spec = provider.Build(runProfile, text, SessionId, ctx);
                 var psi = spec.Psi;
                 psi.Environment["COUCOU_PIPE"] = ctx.PipeName;
-                psi.Environment["COUCOU_AGENT_ID"] = Profile.Id;
+                psi.Environment["COUCOU_AGENT_ID"] = Key;
                 psi.Environment["COUCOU_AGENT_NAME"] = Profile.Name;
                 psi.Environment["COUCOU_APPROVAL"] = Profile.Approval.ToString();
 
@@ -547,6 +592,10 @@ namespace CoucouWin.Services
             if (success && !_cancelled && task.Steps.Any(x => x.Status == StepStatus.InProgress))
                 task.Steps = task.Steps.Select(x => new TaskStep { Text = x.Text, Status = x.Status == StepStatus.InProgress ? StepStatus.Completed : x.Status }).ToList();
             task.Finished = DateTime.Now;
+            {
+                var finalText = Messages.Skip(firstNew).LastOrDefault(m => m.Role == ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text))?.Text;
+                task.Summary = Summarize(success ? finalText ?? "" : error ?? finalText ?? "");
+            }
             CurrentTask = null;
             CompletedTasks.Insert(0, task);
             while (CompletedTasks.Count > MaxCompleted) CompletedTasks.RemoveAt(CompletedTasks.Count - 1);
@@ -561,6 +610,7 @@ namespace CoucouWin.Services
             _settleTimer.Start();
             SaveHistory();
 
+            LastActivity = DateTime.Now;
             RaiseOutputChanged();
             RaiseOverview();
             TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule));
@@ -729,7 +779,7 @@ namespace CoucouWin.Services
             foreach (var n in notices) Messages.Add(new ChatMessage(ChatRole.Notice, n));
         }
 
-        private void SaveHistory() => _store.SaveHistory(Profile.Id, new AgentHistory
+        private void SaveHistory() => _store.SaveHistory(Key, new AgentHistory
         {
             SessionId = SessionId,
             Messages = Messages.ToList(),
