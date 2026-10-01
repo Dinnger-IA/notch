@@ -6,11 +6,11 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
-using CoucouWin.Controls;
-using CoucouWin.Models;
-using CoucouWin.Providers;
+using AgentManagerNotch.Controls;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Providers;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     /// <summary>
     /// Un agente tal como se ve en la interfaz. Los agentes de código tienen varias pestañas (workspaces),

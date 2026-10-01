@@ -6,10 +6,10 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CoucouWin.Models;
-using CoucouWin.Services;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Services;
 
-namespace CoucouWin.Providers
+namespace AgentManagerNotch.Providers
 {
     // ---------- Eventos normalizados que emiten todos los CLI ----------
     public abstract record AgentEvent;
@@ -28,7 +28,7 @@ namespace CoucouWin.Providers
         public string AgentName { get; init; } = "";
         public string PipeName { get; init; } = "";
         public string HookSettingsPath { get; init; } = "";
-        /// <summary>System prompt del agente + instrucciones de Coucou (fecha, recordatorios).</summary>
+        /// <summary>System prompt del agente + instrucciones de Agent Manager Notch (fecha, recordatorios).</summary>
         public string FullSystemPrompt { get; init; } = "";
         public IReadOnlyList<ChatMessage> History { get; init; } = Array.Empty<ChatMessage>();
     }
@@ -91,7 +91,7 @@ namespace CoucouWin.Providers
                 WorkingDirectory = ResolveWorkDir(p.WorkingDirectory)
             };
             foreach (var a in r.PrefixArgs) psi.ArgumentList.Add(a);
-            // Si Coucou se lanzó desde una sesión de Claude Code, evitamos que el hijo se crea anidado.
+            // Si Agent Manager Notch se lanzó desde una sesión de Claude Code, evitamos que el hijo se crea anidado.
             psi.Environment.Remove("CLAUDECODE");
             psi.Environment.Remove("CLAUDE_CODE_ENTRYPOINT");
             psi.Environment["NO_COLOR"] = "1";

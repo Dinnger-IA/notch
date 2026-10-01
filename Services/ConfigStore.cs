@@ -3,15 +3,18 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CoucouWin.Models;
+using AgentManagerNotch.Models;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
-    /// <summary>Guarda configuración e historial en %APPDATA%\CoucouWin.</summary>
+    /// <summary>Guarda configuración e historial en %APPDATA%\AgentManagerNotch.</summary>
     public class ConfigStore
     {
         public static readonly string Root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CoucouWin");
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentManagerNotch");
+        /// <summary>Carpeta de datos del nombre anterior del proyecto (se migra una vez).</summary>
+        public static readonly string LegacyRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Coucou" + "Win");
         private static readonly string ConfigPath = Path.Combine(Root, "config.json");
         private static readonly string HistoryDir = Path.Combine(Root, "history");
 
@@ -26,6 +29,7 @@ namespace CoucouWin.Services
 
         public void Load()
         {
+            MigrateLegacyRoot();
             Directory.CreateDirectory(Root);
             Directory.CreateDirectory(HistoryDir);
             try
@@ -40,6 +44,25 @@ namespace CoucouWin.Services
                 Config = new AppConfig();
             }
             if (Config.Agents.Count == 0) Config.Agents.AddRange(DefaultAgents());
+        }
+
+        /// <summary>Copia los datos de la carpeta del nombre anterior (la original queda como respaldo).</summary>
+        private static void MigrateLegacyRoot()
+        {
+            try
+            {
+                if (Directory.Exists(Root) || !Directory.Exists(LegacyRoot)) return;
+                foreach (var dir in Directory.GetDirectories(LegacyRoot, "*", SearchOption.AllDirectories))
+                    Directory.CreateDirectory(dir.Replace(LegacyRoot, Root));
+                foreach (var file in Directory.GetFiles(LegacyRoot, "*", SearchOption.AllDirectories))
+                {
+                    var name = Path.GetFileName(file);
+                    if (name is "claude-hook-settings.json") continue; // se regenera con la ruta nueva
+                    File.Copy(file, file.Replace(LegacyRoot, Root), overwrite: false);
+                }
+                Log.Info($"Datos migrados desde {LegacyRoot}");
+            }
+            catch (Exception ex) { Log.Error("Migración de datos", ex); }
         }
 
         public void Save()
@@ -135,7 +158,7 @@ namespace CoucouWin.Services
                 lock (Gate)
                 {
                     Directory.CreateDirectory(ConfigStore.Root);
-                    File.AppendAllText(Path.Combine(ConfigStore.Root, "coucou.log"),
+                    File.AppendAllText(Path.Combine(ConfigStore.Root, "agent-manager-notch.log"),
                         $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{level}] {msg}{Environment.NewLine}");
                 }
             }

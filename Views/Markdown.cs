@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 
-namespace CoucouWin.Views
+namespace AgentManagerNotch.Views
 {
     /// <summary>
     /// Renderizador Markdown mínimo para TextBlock: títulos, listas, **negrita**, *cursiva*,

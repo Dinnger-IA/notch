@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     /// <summary>
     /// Encuentra un CLI en el PATH y lo convierte en algo que Process puede lanzar sin

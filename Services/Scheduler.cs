@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Threading;
-using CoucouWin.Models;
+using AgentManagerNotch.Models;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     /// <summary>
     /// Ejecuta los agentes programados cuando les toca. Si el equipo estuvo apagado, recupera

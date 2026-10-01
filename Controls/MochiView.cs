@@ -7,7 +7,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace CoucouWin.Controls
+namespace AgentManagerNotch.Controls
 {
     public enum MochiState { Idle, Thinking, Working, Waiting, Done, Error, Sleeping, Alarm }
 

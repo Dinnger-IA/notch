@@ -5,10 +5,10 @@ using System.Linq;
 using System.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using CoucouWin.Models;
+using AgentManagerNotch.Models;
 using WinForms = System.Windows.Forms;
 
-namespace CoucouWin.Services
+namespace AgentManagerNotch.Services
 {
     /// <summary>Icono en la bandeja del sistema + notificaciones nativas de Windows + sonidos.</summary>
     public sealed class NotificationService : IDisposable
@@ -26,7 +26,7 @@ namespace CoucouWin.Services
             _icon = new WinForms.NotifyIcon
             {
                 Icon = CreateMochiIcon(Color.FromArgb(0xFF, 0x8A, 0x65)),
-                Text = "Coucou · tus agentes",
+                Text = "Agent Manager Notch · tus agentes",
                 Visible = true
             };
             _icon.BalloonTipClicked += (_, _) => NotificationClicked?.Invoke(_lastAgentId);
@@ -113,16 +113,29 @@ namespace CoucouWin.Services
 
         // ---------------- Inicio con Windows (HKCU\...\Run) ----------------
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        /// <summary>Si estaba activado «Iniciar con Windows» con el nombre anterior, lo pasa al nuevo.</summary>
+        public static void MigrateStartupEntry()
+        {
+            try
+            {
+                using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+                if (k?.GetValue("Coucou" + "Win") == null) return;
+                k.DeleteValue("Coucou" + "Win", false);
+                k.SetValue("AgentManagerNotch", $"\"{Environment.ProcessPath}\"");
+            }
+            catch (Exception ex) { Log.Error("Migrar inicio con Windows", ex); }
+        }
+
         public static bool IsStartupEnabled()
         {
             using var k = Registry.CurrentUser.OpenSubKey(RunKey);
-            return k?.GetValue("CoucouWin") != null;
+            return k?.GetValue("AgentManagerNotch") != null;
         }
         public static void SetStartup(bool on)
         {
             using var k = Registry.CurrentUser.CreateSubKey(RunKey);
-            if (on) k.SetValue("CoucouWin", $"\"{Environment.ProcessPath}\"");
-            else k.DeleteValue("CoucouWin", false);
+            if (on) k.SetValue("AgentManagerNotch", $"\"{Environment.ProcessPath}\"");
+            else k.DeleteValue("AgentManagerNotch", false);
         }
 
         private static System.Windows.Media.ImageSource? _windowIcon;

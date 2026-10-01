@@ -5,12 +5,12 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using CoucouWin.Controls;
-using CoucouWin.Models;
-using CoucouWin.Providers;
-using CoucouWin.Services;
+using AgentManagerNotch.Controls;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Providers;
+using AgentManagerNotch.Services;
 
-namespace CoucouWin.Views
+namespace AgentManagerNotch.Views
 {
     public partial class AgentEditorWindow : Window
     {
@@ -185,7 +185,7 @@ namespace CoucouWin.Views
                 ? "🔒 La carpeta no se puede cambiar. Para otra carpeta, cierra este agente y abre uno nuevo."
                 : k == AgentKind.Code
                     ? "Puedes dejarla vacía y arrastrar la carpeta sobre el notch después. Una vez elegida, queda fija."
-                    : "Vacía = una carpeta propia de Coucou.";
+                    : "Vacía = una carpeta propia de Agent Manager Notch.";
         }
 
         private ScheduleSpec ReadSchedule()
@@ -366,7 +366,7 @@ namespace CoucouWin.Views
             var dir = DirBox.Text.Trim();
             if (!_folderLocked && dir != "" && !Directory.Exists(dir))
             {
-                MessageBox.Show(this, "Esa carpeta no existe.", "Coucou", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "Esa carpeta no existe.", "Agent Manager Notch", MessageBoxButton.OK, MessageBoxImage.Warning);
                 DirBox.Focus();
                 return;
             }

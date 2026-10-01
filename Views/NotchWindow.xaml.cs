@@ -13,11 +13,11 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using CoucouWin.Controls;
-using CoucouWin.Models;
-using CoucouWin.Services;
+using AgentManagerNotch.Controls;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Services;
 
-namespace CoucouWin.Views
+namespace AgentManagerNotch.Views
 {
     /// <summary>
     /// El notch. Modos:
@@ -762,7 +762,7 @@ namespace CoucouWin.Views
                     Color = a?.Color ?? Color.FromRgb(0x8C, 0x8C, 0x99),
                     Title = r.Text,
                     When = ScheduledItem.FormatWhen(r.DueAt),
-                    Meta = string.Join(" · ", new[] { a?.Name ?? "Coucou", r.KindLabel, r.RecurrenceLabel }),
+                    Meta = string.Join(" · ", new[] { a?.Name ?? "Agent Manager Notch", r.KindLabel, r.RecurrenceLabel }),
                     Tooltip = $"{r.Text}\n{r.DueLabel} · {r.RecurrenceLabel} · {r.KindLabel}",
                     SortKey = r.DueAt
                 };
@@ -804,7 +804,7 @@ namespace CoucouWin.Views
 
         private void NewReminder_Click(object sender, RoutedEventArgs e) => OpenReminders();
 
-        /// <summary>Configuración: ajustes del agente y opciones generales de Coucou.</summary>
+        /// <summary>Configuración: ajustes del agente y opciones generales de Agent Manager Notch.</summary>
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
             var st = AppRef.Store.Config.Settings;
@@ -866,7 +866,7 @@ namespace CoucouWin.Views
             m.Items.Add(new Separator());
             Add("Abrir carpeta de datos", () => System.Diagnostics.Process.Start(
                 new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true }));
-            Add("Salir de Coucou", AppRef.ExitApp);
+            Add("Salir de Agent Manager Notch", AppRef.ExitApp);
             OpenMenu(m);
         }
         private void BackToOverview_Click(object sender, RoutedEventArgs e) { if (_openEntry != null) SetFocused(_openEntry); ShowOverview(); }
@@ -909,7 +909,7 @@ namespace CoucouWin.Views
             if (s.IsBusy)
             {
                 _modalOpen = true;
-                var ok = MessageBox.Show(this, $"{s.FolderName} está trabajando. ¿Detenerlo y cerrar el workspace?", "Coucou",
+                var ok = MessageBox.Show(this, $"{s.FolderName} está trabajando. ¿Detenerlo y cerrar el workspace?", "Agent Manager Notch",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
                 _modalOpen = false;
                 Activate();
@@ -1088,7 +1088,7 @@ namespace CoucouWin.Views
             var what = a.IsCode && a.Tabs.Count > 0
                 ? $"¿Eliminar {a.Name} y sus {a.Tabs.Count} workspace(s)?\nSe borran las conversaciones; las carpetas no se tocan."
                 : $"¿Eliminar a {a.Name} y su conversación?";
-            var ok = MessageBox.Show(this, what, "Coucou", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+            var ok = MessageBox.Show(this, what, "Agent Manager Notch", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
             _modalOpen = false;
             Activate();
             if (!ok) return;

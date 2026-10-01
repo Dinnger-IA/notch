@@ -2,10 +2,10 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using CoucouWin.Models;
-using CoucouWin.Services;
+using AgentManagerNotch.Models;
+using AgentManagerNotch.Services;
 
-namespace CoucouWin.Views
+namespace AgentManagerNotch.Views
 {
     public partial class RemindersWindow : Window
     {
