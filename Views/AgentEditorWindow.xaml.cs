@@ -17,6 +17,8 @@ namespace AgentManagerNotch.Views
         public AgentProfile? Result { get; private set; }
         /// <summary>El usuario marcó «Usar como agente principal».</summary>
         public bool MakeDefault { get; private set; }
+        /// <summary>El usuario pulsó «Eliminar agente» y lo confirmó.</summary>
+        public bool DeleteRequested { get; private set; }
         private readonly AgentProfile _p;
         private readonly bool _isNew, _folderLocked;
         private readonly List<CheckBox> _dayChecks = new();
@@ -71,6 +73,7 @@ namespace AgentManagerNotch.Views
             };
             Title = isNew ? "Nuevo agente" : $"Editar · {_p.Name}";
             DefaultCheck.IsChecked = isDefault;
+            DeleteButton.Visibility = isNew ? Visibility.Collapsed : Visibility.Visible;
 
             foreach (var (k, label) in new[]
                      {
@@ -347,6 +350,18 @@ namespace AgentManagerNotch.Views
             var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Carpeta de trabajo del agente" };
             if (!string.IsNullOrWhiteSpace(DirBox.Text) && System.IO.Directory.Exists(DirBox.Text)) dlg.InitialDirectory = DirBox.Text;
             if (dlg.ShowDialog(this) == true) DirBox.Text = dlg.FolderName;
+        }
+
+        private void Delete_Click(object sender, RoutedEventArgs e)
+        {
+            var what = _p.Workspaces.Count > 0
+                ? $"¿Eliminar a {_p.Name} y sus {_p.Workspaces.Count} workspace(s)?\nSe borran las conversaciones; las carpetas no se tocan."
+                : $"¿Eliminar a {_p.Name} y su conversación?";
+            var ok = MessageBox.Show(this, what + "\n\nEsta acción no se puede deshacer.", "Eliminar agente",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
+            if (!ok) return;
+            DeleteRequested = true;
+            DialogResult = true;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)

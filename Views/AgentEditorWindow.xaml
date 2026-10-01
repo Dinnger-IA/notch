@@ -158,6 +158,9 @@
             </StackPanel>
         </ScrollViewer>
 
+        <Button x:Name="DeleteButton" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="0,16,0,0"
+                Content="Eliminar agente" MinWidth="120" Click="Delete_Click" Visibility="Collapsed"
+                Foreground="{StaticResource ErrorFg}" ToolTip="Elimina el agente y sus conversaciones (pide confirmación)"/>
         <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancelar" MinWidth="100" IsCancel="True" Margin="0,0,8,0"/>
             <Button x:Name="SaveButton" Content="Guardar" MinWidth="120" IsDefault="True" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}"/>

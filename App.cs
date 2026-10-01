@@ -325,6 +325,7 @@ namespace AgentManagerNotch
                 Store.DeleteHistory(s.Key);
             }
             Agents.Remove(e);
+            ApplyDefault(); // si era el principal, el primero pasa a serlo
             SaveAgents();
         }
 

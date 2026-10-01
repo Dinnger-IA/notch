@@ -91,7 +91,7 @@ Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 
 - **Agente principal**: cualquiera (pulsando su chip, clic derecho → *Establecer como principal*, o la casilla del editor). Es el
   que aparece en la tarjeta grande al abrir y en grande en la píldora. Por defecto, el agente de código.
-  Cualquier agente se puede **eliminar**.
+  Cualquier agente se puede **eliminar** (clic derecho → *Eliminar*, o el botón *Eliminar agente* de sus ajustes), siempre con confirmación.
 - **Horario de un programado**: *cada N horas* (mínimo 1 h) dentro de una franja, o *a horas fijas* (separadas
   al menos 1 h), en los **días** que elijas. Si el PC estuvo apagado, recupera una ejecución perdida de las
   últimas 12 h. Como nadie puede aprobar permisos, usa *Solo lectura* o *Automático*.

@@ -1099,8 +1099,15 @@ namespace AgentManagerNotch.Views
             _modalOpen = false;
             Activate();
             if (!ok) return;
+            RemoveAgent(a);
+        }
+
+        private void RemoveAgent(AgentEntry a)
+        {
             AppRef.RemoveAgent(a);
+            if (_openEntry == a) { _openEntry = null; ShowOverview(); }
             if (_focused == a) SetFocused(Principal);
+            QueueRebuild();
         }
 
         private void Duplicate(AgentEntry a)
@@ -1121,7 +1128,9 @@ namespace AgentManagerNotch.Views
             {
                 var win = new AgentEditorWindow(entry?.Profile.Clone(), kindForNew, kindLocked: entry?.IsCode == true && entry.Tabs.Count > 0,
                                                 entry?.IsDefault ?? false) { Owner = this };
-                if (win.ShowDialog() != true || win.Result == null) return;
+                if (win.ShowDialog() != true) return;
+                if (win.DeleteRequested && entry != null) { RemoveAgent(entry); return; }
+                if (win.Result == null) return;
                 var p = win.Result;
                 if (entry == null)
                 {
