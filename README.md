@@ -59,7 +59,7 @@ a la derecha**.
   - **Programado**: su **horario**, **qué hará en la próxima ejecución** (hora + instrucción) y cuándo fue la última,
     con botones *Ejecutar ahora* y *Pausar*.
 - Chips: insignia roja si su última tarea falló, naranja si piden permiso, borde ámbar si están trabajando.
-- **Pulsar un chip** lo pasa a la tarjeta grande (el que estaba ahí baja a los chips; «‹» vuelve al principal).
+- **Pulsar un chip** lo pasa a la tarjeta grande y **queda como principal** (se recuerda al cerrar y sale en grande en la píldora); el que estaba ahí baja a los chips.
 - **Pulsar la tarjeta grande** (o ↗) abre el chat. En un **programado**, la tarjeta se **expande** con más
   detalle: último resultado completo, instrucción, próximas 3 ejecuciones, última ejecución y permisos.
   El chip *+ Nuevo* crea agentes, workspaces o recordatorios.
@@ -89,7 +89,7 @@ Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 
 ### Principal y horarios
 
-- **Agente principal**: cualquiera (clic derecho → *Establecer como principal*, o la casilla del editor). Es el
+- **Agente principal**: cualquiera (pulsando su chip, clic derecho → *Establecer como principal*, o la casilla del editor). Es el
   que aparece en la tarjeta grande al abrir y en grande en la píldora. Por defecto, el agente de código.
   Cualquier agente se puede **eliminar**.
 - **Horario de un programado**: *cada N horas* (mínimo 1 h) dentro de una franja, o *a horas fijas* (separadas

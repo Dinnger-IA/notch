@@ -452,8 +452,14 @@ namespace AgentManagerNotch.Views
 
         private void Chip_Click(object sender, MouseButtonEventArgs e)
         {
-            // El agente del chip pasa a la tarjeta grande; el que estaba ahí baja a los chips
-            if ((sender as FrameworkElement)?.DataContext is AgentEntry a) { SetFocused(a); e.Handled = true; }
+            // El agente del chip pasa a la tarjeta grande y queda como principal (se recuerda al cerrar
+            // y sale en grande en la píldora); el que estaba ahí baja a los chips
+            if ((sender as FrameworkElement)?.DataContext is AgentEntry a)
+            {
+                if (!a.IsDefault) { AppRef.SetDefault(a); RebuildPill(); }
+                SetFocused(a);
+                e.Handled = true;
+            }
         }
 
         private void Chip_RightClick(object sender, MouseButtonEventArgs e)
