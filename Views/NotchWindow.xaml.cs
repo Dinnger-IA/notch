@@ -111,6 +111,19 @@ namespace AgentManagerNotch.Views
         /// <summary>Accesibilidad «Ocultar el notch»: plegado es solo una línea.</summary>
         private static bool HideNotch => App.Current.Store.Config.Settings.HideNotch;
         private bool _lineHover; // el ratón está cerca de la línea: crece un poco
+        // Gris medio: la línea se distingue tanto sobre fondos oscuros como claros
+        private static readonly Brush LineBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xEE, 0x74, 0x74, 0x84)));
+        private static Brush Freeze(Brush b) { b.Freeze(); return b; }
+
+        /// <summary>Forma del notch plegado: píldora normal o línea (accesibilidad «Ocultar el notch»).</summary>
+        private void ApplyCollapsedLook(bool collapsed)
+        {
+            bool line = collapsed && HideNotch;
+            Shell.CornerRadius = IsPanel(_mode) ? new CornerRadius(0, 0, 16, 16) : line ? new CornerRadius(0, 0, 5, 5) : new CornerRadius(0, 0, 10, 10);
+            Shell.Background = line ? LineBrush : (Brush)FindResource("NotchBg");
+            Shell.BorderThickness = line ? new Thickness(0) : new Thickness(1, 0, 1, 1);
+            CollapsedContent.Visibility = HideNotch ? Visibility.Collapsed : Visibility.Visible;
+        }
 
         private Size TargetSize(Mode m)
         {
@@ -175,9 +188,7 @@ namespace AgentManagerNotch.Views
                 Shell.BeginAnimation(HeightProperty, null);
                 Shell.Width = size.Width; Shell.Height = size.Height;
             }
-            Shell.CornerRadius = IsPanel(m) ? new CornerRadius(0, 0, 16, 16)
-                               : m == Mode.Collapsed && HideNotch ? new CornerRadius(0, 0, 5, 5) : new CornerRadius(0, 0, 10, 10);
-            CollapsedContent.Visibility = HideNotch ? Visibility.Collapsed : Visibility.Visible;
+            ApplyCollapsedLook(m == Mode.Collapsed);
             if (m == Mode.Collapsed) foreach (var a in AppRef.Agents) a.IsBox = false;
             SetOutsideClickHook(IsPanel(m) && ClickOutsideOnly);
         }
@@ -386,8 +397,7 @@ namespace AgentManagerNotch.Views
                 Shell.BeginAnimation(WidthProperty, new DoubleAnimation(size.Width, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
             if (Math.Abs(Shell.ActualHeight - size.Height) > 1)
                 Shell.BeginAnimation(HeightProperty, new DoubleAnimation(size.Height, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
-            Shell.CornerRadius = HideNotch ? new CornerRadius(0, 0, 5, 5) : new CornerRadius(0, 0, 10, 10);
-            CollapsedContent.Visibility = HideNotch ? Visibility.Collapsed : Visibility.Visible;
+            ApplyCollapsedLook(true);
         }
 
         // =============================================================== vista general
