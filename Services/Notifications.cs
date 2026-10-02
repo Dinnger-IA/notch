@@ -20,7 +20,7 @@ namespace AgentManagerNotch.Services
         private readonly Func<AppSettings> _settings;
 
         public event Action<string?>? NotificationClicked;
-        public event Action? ShowRequested, NewAgentRequested, RemindersRequested, ExitRequested;
+        public event Action? ShowRequested, NewAgentRequested, RemindersRequested, ReleaseNotesRequested, ExitRequested;
 
         public NotificationService(Func<AppSettings> settings)
         {
@@ -38,6 +38,7 @@ namespace AgentManagerNotch.Services
             menu.Items.Add("Mostrar panel  (Ctrl+Alt+Espacio)", null, (_, _) => ShowRequested?.Invoke());
             menu.Items.Add("Nuevo agente…", null, (_, _) => NewAgentRequested?.Invoke());
             menu.Items.Add("Recordatorios y tareas…", null, (_, _) => RemindersRequested?.Invoke());
+            menu.Items.Add("Notas de la versión…", null, (_, _) => ReleaseNotesRequested?.Invoke());
             menu.Items.Add(new WinForms.ToolStripSeparator());
 
             var sounds = new WinForms.ToolStripMenuItem("Sonidos") { CheckOnClick = true, Checked = settings().Sounds };

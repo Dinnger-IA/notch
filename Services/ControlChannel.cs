@@ -89,6 +89,9 @@ namespace AgentManagerNotch.Services
                     return Send(new { cmd = "new-agent" }) ? 0 : 1;
                 case "--reminders":
                     return Send(new { cmd = "reminders" }) ? 0 : 1;
+                case "--release-notes":
+                    // Notas de la versión (opcionalmente de una concreta: --release-notes 0.3.0)
+                    return Send(new { cmd = "release-notes", version = args.Length > 1 ? args[1] : null }) ? 0 : 1;
                 case "--ask":
                     {
                         if (args.Length < 3) return 2;

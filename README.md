@@ -58,6 +58,10 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
   repositorio y abre la copia recién publicada (`publish\AgentManagerNotch.exe`, y «Iniciar con Windows» pasa a
   apuntar a ella), solo si el repositorio está en esa rama y sin cambios locales; si no, explica el motivo.
   Registro en `%APPDATA%\AgentManagerNotch\update.log`.
+- **Notas de la versión** (⚙ → *Versión* → *Notas de la versión*, menú de la bandeja o `--release-notes [X.Y.Z]`):
+  ventana con una pestaña por versión en la barra lateral (la instalada marcada) y, a la derecha, sus novedades y,
+  si la versión cambió algo visual, un GIF que lo enseña (`versiones/X.Y.Z.gif`). Las notas van dentro del
+  ejecutable, así que no necesita red. Tras actualizar, el notch abre solo las notas de la versión nueva.
 - **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
   con su hora, agente, tipo y repetición, que se pueden borrar; y los agentes programados con su próxima
   ejecución. Pulsar un elemento abre su agente.
@@ -176,7 +180,7 @@ bloquea** a Claude Code.
 AgentManagerNotch.exe --notify "Build terminado" "npm run build OK" --agent Codi   # aviso en el notch + toast
 AgentManagerNotch.exe --ask Nube "Resume mi día"                                   # le habla a un agente
 AgentManagerNotch.exe --code D:\proyecto                                         # agente de código para esa carpeta
-AgentManagerNotch.exe --show | --new-agent | --reminders
+AgentManagerNotch.exe --show | --new-agent | --reminders | --release-notes [X.Y.Z]
 ```
 
 Ejemplo: `npm run build; AgentManagerNotch.exe --notify "Build" "Terminó con código $LASTEXITCODE"`.
@@ -205,6 +209,8 @@ Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
 Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas
+Views/ReleaseNotesWindow.* notas de la versión: una pestaña por versión, con su GIF (Controls/GifPlayer.cs)
+Services/ReleaseNotes.cs   lee las notas y GIF de versiones/ incrustados en el ejecutable
 Views/Markdown.cs          Markdown ligero en las burbujas (seleccionable, tablas, bloques de código con copiar)
 ```
 

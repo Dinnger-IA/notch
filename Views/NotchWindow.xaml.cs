@@ -38,6 +38,7 @@ namespace AgentManagerNotch.Views
         private AgentSession? _bannerSession;
         private string? _bannerKey;
         private RemindersWindow? _reminders;
+        private ReleaseNotesWindow? _releaseNotes;
 
         private readonly DispatcherTimer _hoverTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
         private readonly DispatcherTimer _bannerTimer = new() { Interval = TimeSpan.FromSeconds(5) };
@@ -1028,6 +1029,7 @@ namespace AgentManagerNotch.Views
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true });
         private void SetExit_Click(object sender, RoutedEventArgs e) => AppRef.ExitApp();
         private async void SetCheckUpdates_Click(object sender, RoutedEventArgs e) => await AppRef.Updates.CheckAsync();
+        private void SetReleaseNotes_Click(object sender, RoutedEventArgs e) => OpenReleaseNotes();
 
         private async void SetUpdateNow_Click(object sender, RoutedEventArgs e)
         {
@@ -1394,6 +1396,19 @@ namespace AgentManagerNotch.Views
                 _modalOpen = false;
                 Activate();
             }
+        }
+
+        /// <summary>Ventana de notas de la versión (por defecto, la instalada).</summary>
+        public void OpenReleaseNotes(Version? version = null)
+        {
+            if (_releaseNotes == null || !_releaseNotes.IsLoaded)
+            {
+                _releaseNotes = new ReleaseNotesWindow(version);
+                _releaseNotes.Closed += (_, _) => _releaseNotes = null;
+                _releaseNotes.Show();
+            }
+            else if (version != null) _releaseNotes.Select(version);
+            _releaseNotes.Activate();
         }
 
         public void OpenReminders()
