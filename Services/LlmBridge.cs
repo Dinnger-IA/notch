@@ -11,8 +11,10 @@ namespace AgentManagerNotch.Services
 {
     /// <summary>
     /// Modo <c>--llm</c>: puente entre un agente con proveedor «Agent Manager» y el ruteador de Agent Manager
-    /// (POST /api/notch/notch-agent con {"messages":[…]}; responde {success, data:{conversationId, response}}).
-    /// También entiende respuestas estilo OpenAI (JSON o SSE) por compatibilidad.
+    /// (POST /api/notch/notch-agent con {"messages":[…], "stream": true}). Pide streaming SSE; si el servidor aún
+    /// responde JSON entero ({success, data:{conversationId, response}}) también lo entiende. El lector SSE acepta
+    /// fragmentos estilo OpenAI (choices[0].delta.content) o campos delta/text/content/token, y una respuesta
+    /// completa final (data.response) sin duplicar lo ya recibido.
     /// stdin: {"messages":[{role,content}…]}. stdout: una línea JSON por evento:
     /// {"type":"delta","text":…} y al final {"type":"result","ok":true|false,"error":…}.
     /// Usa el token de la sesión guardada (DPAPI), así funciona igual que los demás CLI: un proceso que se puede detener.
@@ -33,18 +35,21 @@ namespace AgentManagerNotch.Services
                 using (var sr = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)))
                     input = sr.ReadToEnd();
                 var body = JsonNode.Parse(input) as JsonObject ?? throw new InvalidDataException("Entrada vacía");
+                body["stream"] = true;
 
                 var token = AuthService.LoadSavedToken();
                 if (token == null) return Fail("No hay sesión de Agent Manager. Inicia sesión en el notch.");
 
                 using var http = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
-                using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+                // AMN_LLM_ENDPOINT: solo para desarrollo (probar contra un servidor local)
+                var url = Environment.GetEnvironmentVariable("AMN_LLM_ENDPOINT") is { Length: > 0 } dev ? dev : Endpoint;
+                using var req = new HttpRequestMessage(HttpMethod.Post, url)
                 {
                     Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
                 };
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                req.Headers.Accept.ParseAdd("application/json");
                 req.Headers.Accept.ParseAdd("text/event-stream");
+                req.Headers.Accept.ParseAdd("application/json");
                 using var res = http.Send(req, HttpCompletionOption.ResponseHeadersRead);
 
                 if (!res.IsSuccessStatusCode)
@@ -70,20 +75,40 @@ namespace AgentManagerNotch.Services
                     return 0;
                 }
 
+                // Streaming SSE
+                var received = new StringBuilder();
+                void Append(string? text)
+                {
+                    if (string.IsNullOrEmpty(text)) return;
+                    received.Append(text);
+                    Emit(new { type = "delta", text });
+                }
                 string? line;
                 while ((line = reader.ReadLine()) != null)
                 {
                     if (!line.StartsWith("data:")) continue;
-                    var data = line[5..].Trim();
-                    if (data == "[DONE]") break;
-                    if (data == "") continue;
+                    var data = line[5..].TrimStart();
+                    if (data.Trim() == "[DONE]") break;
+                    if (data.Trim() == "") continue;
                     JsonNode? chunk;
-                    try { chunk = JsonNode.Parse(data); } catch (JsonException) { continue; }
-                    if (chunk?["error"] is JsonNode err)
-                        return Fail(err["message"]?.GetValue<string>() ?? err.ToJsonString());
-                    var text = Content(chunk, "delta");
-                    if (!string.IsNullOrEmpty(text)) Emit(new { type = "delta", text });
+                    try { chunk = JsonNode.Parse(data); }
+                    catch (JsonException) { Append(data); continue; } // texto plano
+                    if (chunk is not JsonObject) { Append(chunk?.ToString()); continue; }
+                    if (chunk["success"]?.GetValueKind() == JsonValueKind.False || chunk["error"] is JsonNode)
+                    {
+                        var err = chunk["error"];
+                        return Fail((err is JsonObject eo ? eo["message"]?.ToString() : null) ?? err?.ToString() ?? "Agent Manager no pudo responder.");
+                    }
+                    var delta = Content(chunk, "delta") ?? Str(chunk, "delta") ?? Str(chunk, "text") ?? Str(chunk, "content") ?? Str(chunk, "token");
+                    if (delta != null) { Append(delta); continue; }
+                    // Respuesta completa (p. ej. evento final): solo lo que falte por mostrar
+                    var full = Str(chunk["data"], "response") ?? Str(chunk, "response") ?? Content(chunk, "message");
+                    if (full == null) continue;
+                    var sofar = received.ToString();
+                    if (sofar == "") Append(full);
+                    else if (full.StartsWith(sofar, StringComparison.Ordinal)) Append(full[sofar.Length..]);
                 }
+                if (received.Length == 0) return Fail("Agent Manager respondió sin contenido.");
                 Emit(new { type = "result", ok = true });
                 return 0;
             }
@@ -92,6 +117,10 @@ namespace AgentManagerNotch.Services
                 return Fail(ex is HttpRequestException ? "No se pudo conectar con Agent Manager: " + ex.Message : ex.Message);
             }
         }
+
+        /// <summary>Propiedad de texto (solo si es string).</summary>
+        private static string? Str(JsonNode? n, string name) =>
+            n is JsonObject o && o[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 
         /// <summary>choices[0].{delta|message}.content</summary>
         private static string? Content(JsonNode? n, string part)
