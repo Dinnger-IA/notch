@@ -28,7 +28,7 @@ namespace AgentManagerNotch.Views
     /// </summary>
     public partial class NotchWindow : Window
     {
-        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule, Settings, Login }
+        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule, Settings, Login, Update }
 
         private Mode _mode = Mode.Collapsed;
         private bool _pinned, _modalOpen, _autoScroll = true, _rebuildQueued, _scheduledExpanded;
@@ -45,7 +45,7 @@ namespace AgentManagerNotch.Views
         private static bool ClickOutsideOnly => App.Current.Store.Config.Settings.CloseOnClickOutsideOnly;
 
         private static App AppRef => App.Current;
-        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Settings or Mode.Login;
+        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Settings or Mode.Login or Mode.Update;
         /// <summary>Sin sesión de Agent Manager solo se muestra el inicio de sesión.</summary>
         private static bool Authed => AppRef.Auth.IsAuthenticated;
         private AgentEntry? Principal => AppRef.Agents.FirstOrDefault(a => a.IsDefault) ?? AppRef.Agents.FirstOrDefault();
@@ -135,6 +135,7 @@ namespace AgentManagerNotch.Views
                     return new Size(640, Math.Clamp(ScheduleContent.DesiredSize.Height + 40 + 36, 200, 520));
                 case Mode.Banner: return new Size(450, 74);
                 case Mode.Login: return new Size(560, 200);
+                case Mode.Update: return new Size(580, 210);
                 case Mode.Settings:
                     SettingsContent.Measure(new Size(700, double.PositiveInfinity));
                     return new Size(740, Math.Clamp(SettingsContent.DesiredSize.Height + 40 + 12, 200, 580));
@@ -165,6 +166,7 @@ namespace AgentManagerNotch.Views
                 // Sin sesión, la barra superior solo deja la configuración (con «Salir»)
                 var nav = m == Mode.Login ? Visibility.Collapsed : Visibility.Visible;
                 HomePill.Visibility = PinButton.Visibility = SchedulePill.Visibility = nav;
+                ShowView(UpdateView, m == Mode.Update);
                 // La barra superior marca dónde estás
                 HomePill.Background = new SolidColorBrush(m == Mode.Overview ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
                 SchedulePill.Background = new SolidColorBrush(m == Mode.Schedule ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
@@ -283,6 +285,7 @@ namespace AgentManagerNotch.Views
         private void ShowOverview()
         {
             if (!Authed) { ShowLogin(); return; }
+            if (UpdatePending) { ShowUpdate(); return; }
             RefreshOverview();
             if (_mode != Mode.Overview) SetMode(Mode.Overview);
             else Resize();
@@ -695,6 +698,15 @@ namespace AgentManagerNotch.Views
                 UpdateCollapsedSize();
                 return;
             }
+            if (UpdatePending)
+            {
+                // Agente de actualización: aparece en la píldora mientras haya una versión nueva sin atender
+                CollapsedAgents.Children.Add(new MochiView
+                {
+                    Width = 22, Height = 22, Interactive = false, BodyColor = Color.FromRgb(0x7C, 0x6C, 0xF0), State = MochiState.Waiting,
+                    ToolTip = "Hay una versión nueva", Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center
+                });
+            }
             var principal = Principal;
             if (principal != null)
             {
@@ -876,7 +888,7 @@ namespace AgentManagerNotch.Views
         private void Banner_Click(object sender, MouseButtonEventArgs e)
         {
             if (e.OriginalSource is DependencyObject d && FindAncestor<Button>(d) != null) return;
-            if (_bannerKey == UpdateBannerKey) { _bannerTimer.Stop(); Settings_Click(this, e); return; }
+            if (_bannerKey == UpdateBannerKey) { _bannerTimer.Stop(); ShowUpdate(); Activate(); return; }
             Expand(focusInput: true, sessionKey: _bannerKey);
         }
 
@@ -1064,6 +1076,11 @@ namespace AgentManagerNotch.Views
             var ok = MessageBox.Show(this, msg, "Actualizar Agent Manager Notch", MessageBoxButton.OKCancel, MessageBoxImage.Information, MessageBoxResult.OK) == MessageBoxResult.OK;
             _modalOpen = false;
             if (!ok) return;
+            await RunUpdateAsync();
+        }
+
+        private async System.Threading.Tasks.Task RunUpdateAsync()
+        {
             var error = await AppRef.Updates.StartUpdateAsync();
             if (error == null) { AppRef.ExitApp(); return; }
             _modalOpen = true;
@@ -1141,6 +1158,44 @@ namespace AgentManagerNotch.Views
             if (IsPanel(_mode)) ShowLogin();
             else if (_mode == Mode.Banner) Collapse();
         }
+        // =============================================================== agente de actualización
+        private string? _updateDismissedFor;
+        /// <summary>Hay una versión nueva que el usuario no ha pospuesto con «Más tarde».</summary>
+        private bool UpdatePending => AppRef.Updates.UpdateAvailable && _updateDismissedFor != AppRef.Updates.RemoteCommit;
+
+        /// <summary>Se encontró una versión nueva: aparece el agente de actualización en la píldora.</summary>
+        public void OnUpdateFound()
+        {
+            RebuildPill();
+            ShowUpdateBanner();
+        }
+
+        private void ShowUpdate()
+        {
+            var u = AppRef.Updates;
+            var busy = AppRef.Sessions.Count(s => s.IsBusy);
+            UpdateText.Text = $"Tienes {UpdateService.Short(u.LocalCommit)} y en «{u.Branch}» ya está {UpdateService.Short(u.RemoteCommit)}. " +
+                              "Se descarga, se compila y el notch se vuelve a abrir solo." +
+                              (busy > 0 ? $" Hay {busy} agente(s) trabajando: se detendrán." : "");
+            UpdateNowButton.IsEnabled = true;
+            if (_mode != Mode.Update) SetMode(Mode.Update);
+        }
+
+        private async void UpdateNow_Click(object sender, RoutedEventArgs e)
+        {
+            UpdateNowButton.IsEnabled = false;
+            UpdateText.Text = "Preparando la actualización…";
+            await RunUpdateAsync();
+            if (_mode == Mode.Update) ShowUpdate(); // no se pudo: vuelve a mostrar la tarjeta
+        }
+
+        private void UpdateLater_Click(object sender, RoutedEventArgs e)
+        {
+            _updateDismissedFor = AppRef.Updates.RemoteCommit;
+            RebuildPill();
+            ShowOverview();
+        }
+
         private void BackToOverview_Click(object sender, RoutedEventArgs e) { if (_openEntry != null) SetFocused(_openEntry); ShowOverview(); }
 
         private void Tabs_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -1391,30 +1446,46 @@ namespace AgentManagerNotch.Views
         {
             if (!Authed) { Expand(focusInput: true); return; }
             _modalOpen = true;
+            Rect? placement = null;
             try
             {
-                var win = new AgentEditorWindow(entry?.Profile.Clone(), kindForNew, kindLocked: entry?.IsCode == true && entry.Tabs.Count > 0,
-                                                entry?.IsDefault ?? false) { Owner = this };
-                if (win.ShowDialog() != true) return;
-                if (win.DeleteRequested && entry != null) { RemoveAgent(entry); return; }
-                if (win.Result == null) return;
-                var p = win.Result;
-                if (entry == null)
+                // Desde la franja superior del editor se puede pasar a otro agente: se vuelve a abrir en el mismo sitio
+                while (true)
                 {
-                    var ne = AppRef.AddAgent(p);
-                    if (win.MakeDefault) AppRef.SetDefault(ne);
-                    ne.Tabs.FirstOrDefault()?.AddNotice($"¡Hola! Soy {p.Name}. Funciono con {ne.ProviderLabel}.");
-                    SetFocused(ne);
-                    ShowOverview();
+                    var chips = AppRef.Agents.Select(a => new AgentEditorWindow.AgentChip(a.Profile.Id, a.Name, a.Color)).ToList();
+                    var win = new AgentEditorWindow(entry?.Profile.Clone(), kindForNew, kindLocked: entry?.IsCode == true && entry.Tabs.Count > 0,
+                                                    entry?.IsDefault ?? false, chips) { Owner = this };
+                    if (placement is Rect r)
+                    {
+                        win.WindowStartupLocation = WindowStartupLocation.Manual;
+                        win.Left = r.X; win.Top = r.Y; win.Width = r.Width; win.Height = r.Height;
+                    }
+                    bool ok = win.ShowDialog() == true;
+                    placement = new Rect(win.Left, win.Top, win.ActualWidth, win.ActualHeight);
+                    if (ok && win.DeleteRequested && entry != null) { RemoveAgent(entry); break; }
+                    if (ok && win.Result is AgentProfile p)
+                    {
+                        if (entry == null)
+                        {
+                            var ne = AppRef.AddAgent(p);
+                            if (win.MakeDefault) AppRef.SetDefault(ne);
+                            ne.Tabs.FirstOrDefault()?.AddNotice($"¡Hola! Soy {p.Name}. Funciono con {ne.ProviderLabel}.");
+                            SetFocused(ne);
+                            ShowOverview();
+                        }
+                        else
+                        {
+                            var updated = AppRef.UpdateAgent(entry, p);
+                            if (win.MakeDefault && !updated.IsDefault) AppRef.SetDefault(updated);
+                            if (_openEntry == entry && updated != entry) { _openEntry = null; ShowOverview(); }
+                            SetFocused(updated);
+                        }
+                        QueueRebuild();
+                    }
+                    var next = win.SwitchToId == null ? null : AppRef.Agents.FirstOrDefault(a => a.Profile.Id == win.SwitchToId);
+                    if (next == null) break;
+                    entry = next;
                 }
-                else
-                {
-                    var updated = AppRef.UpdateAgent(entry, p);
-                    if (win.MakeDefault && !updated.IsDefault) AppRef.SetDefault(updated);
-                    if (_openEntry == entry && updated != entry) { _openEntry = null; ShowOverview(); }
-                    SetFocused(updated);
-                }
-                QueueRebuild();
             }
             finally
             {

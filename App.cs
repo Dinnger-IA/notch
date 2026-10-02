@@ -115,7 +115,7 @@ namespace AgentManagerNotch
             Updates.Changed += Notch.RefreshUpdateInfo;
             Updates.Found += () =>
             {
-                Notch.ShowUpdateBanner();
+                Notch.OnUpdateFound();
                 Notifier.Toast("Nueva versión de Agent Manager Notch", "Abre el notch → ⚙ Configuración → Actualizar.", null);
             };
             Updates.Start();
