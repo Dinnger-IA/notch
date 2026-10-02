@@ -194,7 +194,7 @@ namespace AgentManagerNotch.Services
         /// <summary>Las novedades («- …») de un archivo de versión, como texto plano para la tarjeta.</summary>
         private static string[] NoteLines(string md) => md.Split('\n')
             .Select(l => l.Trim()).Where(l => l.StartsWith("- "))
-            .Select(l => l[2..].Replace("**", "").Replace("`", "").Trim()).ToArray();
+            .Select(l => l[2..].Replace("*", "").Replace("`", "").Trim()).ToArray();
 
         /// <summary>Borra una carpeta aunque git haya dejado archivos de solo lectura.</summary>
         private static void ForceDelete(string dir)
