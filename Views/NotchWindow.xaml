@@ -284,7 +284,7 @@
 
     <Grid>
         <Border x:Name="Shell" VerticalAlignment="Top" HorizontalAlignment="Center"
-                Width="150" Height="34" CornerRadius="0,0,10,10"
+                Width="150" Height="30" CornerRadius="0,0,10,10"
                 Background="{StaticResource NotchBg}" BorderBrush="{StaticResource NotchBorder}" BorderThickness="1,0,1,1"
                 AllowDrop="True" MouseEnter="Shell_MouseEnter" MouseLeave="Shell_MouseLeave"
                 DragEnter="Shell_DragEnter" DragLeave="Shell_DragLeave" Drop="Shell_Drop">
@@ -362,9 +362,9 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <c:MochiView Width="84" Height="84" VerticalAlignment="Center" Interactive="True"
+                            <c:MochiView x:Name="FocusMochi" Width="84" Height="84" VerticalAlignment="Center" Interactive="True"
                                          BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
-                            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <StackPanel x:Name="FocusInfo" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
                                         <Button x:Name="BackToPrincipal" Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="10"
@@ -430,6 +430,9 @@
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
+
+                    <!-- Capa para la animación de intercambio entre el principal y el chip pulsado -->
+                    <Canvas x:Name="SwapLayer" Grid.ColumnSpan="3" IsHitTestVisible="False"/>
                 </Grid>
 
                 <!-- ============ Chat ============ -->
