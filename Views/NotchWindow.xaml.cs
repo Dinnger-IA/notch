@@ -90,6 +90,7 @@ namespace AgentManagerNotch.Views
                 if (IsPanel(_mode) && !_pinned && !_modalOpen && !Shell.IsMouseOver && _selected?.PendingApproval == null) Collapse();
             };
             SourceInitialized += OnSourceInitialized;
+            Shell.MouseLeftButtonUp += (_, e) => { if (_mode == Mode.Collapsed && HideNotch && !e.Handled) Collapsed_Click(Shell, e); };
             _hitTimer.Tick += (_, _) => UpdateClickThrough();
             _hitTimer.Start();
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.Invoke(PositionOnScreen);
@@ -105,6 +106,9 @@ namespace AgentManagerNotch.Views
         }
 
         private const double PillHeight = 30;
+        /// <summary>Accesibilidad «Ocultar el notch»: plegado es solo una línea.</summary>
+        private static bool HideNotch => App.Current.Store.Config.Settings.HideNotch;
+        private bool _lineHover; // el ratón está cerca de la línea: crece un poco
 
         private Size TargetSize(Mode m)
         {
@@ -122,6 +126,7 @@ namespace AgentManagerNotch.Views
                     OverviewView.Measure(new Size(820, double.PositiveInfinity));
                     return new Size(840, Math.Clamp(OverviewView.DesiredSize.Height + 4 + 40, 180, 560));
                 default:
+                    if (HideNotch) return _lineHover ? new Size(200, 10) : new Size(120, 5);
                     CollapsedContent.Measure(new Size(double.PositiveInfinity, PillHeight));
                     return new Size(Math.Max(96, CollapsedContent.DesiredSize.Width + 30), PillHeight);
             }
@@ -163,7 +168,9 @@ namespace AgentManagerNotch.Views
                 Shell.BeginAnimation(HeightProperty, null);
                 Shell.Width = size.Width; Shell.Height = size.Height;
             }
-            Shell.CornerRadius = IsPanel(m) ? new CornerRadius(0, 0, 16, 16) : new CornerRadius(0, 0, 10, 10);
+            Shell.CornerRadius = IsPanel(m) ? new CornerRadius(0, 0, 16, 16)
+                               : m == Mode.Collapsed && HideNotch ? new CornerRadius(0, 0, 5, 5) : new CornerRadius(0, 0, 10, 10);
+            CollapsedContent.Visibility = HideNotch ? Visibility.Collapsed : Visibility.Visible;
             if (m == Mode.Collapsed) foreach (var a in AppRef.Agents) a.IsBox = false;
             SetOutsideClickHook(IsPanel(m) && ClickOutsideOnly);
         }
@@ -336,6 +343,12 @@ namespace AgentManagerNotch.Views
         public void ShowBannerRaw(Color color, MochiState state, string title, string body, string? sessionKey, bool sticky)
         {
             if (_mode is not (Mode.Collapsed or Mode.Banner)) return;
+            if (HideNotch)
+            {
+                AppRef.Notifier.Toast(title, body, sessionKey,
+                    state is MochiState.Waiting or MochiState.Alarm ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.None);
+                return;
+            }
             _bannerSession = null;
             _bannerKey = sessionKey;
             BannerMochi.BodyColor = color;
@@ -358,11 +371,13 @@ namespace AgentManagerNotch.Views
             CollapsedStatus.Visibility = busy == null ? Visibility.Collapsed : Visibility.Visible;
             if (_mode != Mode.Collapsed) return;
             var size = TargetSize(Mode.Collapsed);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             if (Math.Abs(Shell.ActualWidth - size.Width) > 3)
-            {
-                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
                 Shell.BeginAnimation(WidthProperty, new DoubleAnimation(size.Width, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
-            }
+            if (Math.Abs(Shell.ActualHeight - size.Height) > 1)
+                Shell.BeginAnimation(HeightProperty, new DoubleAnimation(size.Height, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+            Shell.CornerRadius = HideNotch ? new CornerRadius(0, 0, 5, 5) : new CornerRadius(0, 0, 10, 10);
+            CollapsedContent.Visibility = HideNotch ? Visibility.Collapsed : Visibility.Visible;
         }
 
         // =============================================================== vista general
@@ -803,7 +818,7 @@ namespace AgentManagerNotch.Views
         private void Shell_MouseEnter(object sender, MouseEventArgs e)
         {
             _leaveTimer.Stop();
-            if (_mode is Mode.Collapsed or Mode.Banner) _hoverTimer.Start();
+            if (_mode is Mode.Collapsed or Mode.Banner && !HideNotch) _hoverTimer.Start();
         }
 
         private void Shell_MouseLeave(object sender, MouseEventArgs e)
@@ -927,6 +942,7 @@ namespace AgentManagerNotch.Views
             SetNotifyDone.IsChecked = st.NotifyOnDone;
             SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled();
             SetHover.IsChecked = st.ExpandOnHover;
+            SetHideNotch.IsChecked = st.HideNotch;
             SetCloseOutside.IsChecked = st.CloseOnClickOutsideOnly;
             SetCloseLeave.IsChecked = !st.CloseOnClickOutsideOnly;
             SetStartup.IsChecked = NotificationService.IsStartupEnabled();
@@ -957,6 +973,7 @@ namespace AgentManagerNotch.Views
                 case var c when c == SetSounds: st.Sounds = SetSounds.IsChecked == true; break;
                 case var c when c == SetNotifyDone: st.NotifyOnDone = SetNotifyDone.IsChecked == true; break;
                 case var c when c == SetHover: st.ExpandOnHover = SetHover.IsChecked == true; break;
+                case var c when c == SetHideNotch: st.HideNotch = SetHideNotch.IsChecked == true; _lineHover = false; break;
                 case var c when c == SetStartup: NotificationService.SetStartup(SetStartup.IsChecked == true); break;
                 case var c when c == SetClaudeHooks:
                     try { ControlChannel.SetClaudeIntegration(SetClaudeHooks.IsChecked == true); }
@@ -1339,11 +1356,29 @@ namespace AgentManagerNotch.Views
         {
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero || !GetCursorPos(out var pt)) return;
+            UpdateLineHover(new Point(pt.X, pt.Y));
             bool through = !IsInsideShell(new Point(pt.X, pt.Y));
             // Se compara con el estilo real: WPF puede reescribir los estilos extendidos de la ventana
             var ex = GetWindowLong(hwnd, GWL_EXSTYLE);
             if (((ex & WS_EX_TRANSPARENT) != 0) == through) return;
             SetWindowLong(hwnd, GWL_EXSTYLE, through ? ex | WS_EX_TRANSPARENT | WS_EX_LAYERED : ex & ~WS_EX_TRANSPARENT);
+        }
+
+        /// <summary>Notch oculto: la línea crece un poco cuando el ratón se acerca (no hace falta tocarla).</summary>
+        private void UpdateLineHover(Point screenPt)
+        {
+            bool near = false;
+            if (_mode == Mode.Collapsed && HideNotch && PresentationSource.FromVisual(Shell) != null)
+            {
+                var tl = Shell.PointToScreen(new Point(0, 0));
+                var br = Shell.PointToScreen(new Point(Shell.ActualWidth, Shell.ActualHeight));
+                double scale = (br.X - tl.X) / Math.Max(1, Shell.ActualWidth); // píxeles por unidad (DPI)
+                double mx = 40 * scale, my = 24 * scale;
+                near = screenPt.X >= tl.X - mx && screenPt.X <= br.X + mx && screenPt.Y >= tl.Y && screenPt.Y <= br.Y + my;
+            }
+            if (near == _lineHover) return;
+            _lineHover = near;
+            UpdateCollapsedSize();
         }
 
         private void OnSourceInitialized(object? sender, EventArgs e)
