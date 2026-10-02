@@ -39,6 +39,14 @@ funcionando en segundo plano, pero no se muestran avisos).
 Al arrancar se revalida el token; si caducó, se vuelve a pedir el login (sin conexión se confía en el guardado).
 ⚙ → *Cerrar sesión* lo invalida en Agent Manager y lo borra.
 
+**MCP de Agent Manager en los CLI.** Cada vez que se valida la sesión se revisan los CLI instalados
+(Claude Code, Codex, Gemini CLI). Si alguno no tiene un MCP llamado `agent-manager` (o que apunte a
+`https://agent-manager.distelsa.net/mcp`) en su configuración de usuario (`~/.claude.json`,
+`~/.codex/config.toml`, `~/.gemini/settings.json`), se instala con su propio comando
+(`claude mcp add --transport http --scope user …`, `codex mcp add … --url …`, `gemini mcp add …`) usando
+`https://agent-manager.distelsa.net/mcp?t=<token>`. Si ya existe, no se toca. El notch avisa si instaló algo
+o si falló, y el resultado queda en el registro (sin el token).
+
 ## Tipos de agente
 
 | Tipo | Qué hace | Al abrirlo |
@@ -195,6 +203,7 @@ Services/AgentEntry.cs     agente en la interfaz: pestañas, estado agregado y l
 Services/AgentSession.cs   una conversación (agente o pestaña de workspace): cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
 Services/Scheduler.cs      ejecuta los agentes programados según su horario
 Services/AuthService.cs    inicio de sesión con Agent Manager (callback en localhost:5454, token cifrado con DPAPI)
+Services/McpSetup.cs       instala el MCP de Agent Manager en los CLI que no lo tengan
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios

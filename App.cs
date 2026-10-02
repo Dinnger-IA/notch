@@ -106,11 +106,28 @@ namespace AgentManagerNotch
             Notch = new NotchWindow();
             Notch.Show();
             Auth.Changed += Notch.OnAuthChanged;
+            Auth.Changed += () => { if (Auth.Token is string t) _ = EnsureMcpAsync(t); };
             _ = Auth.RestoreAsync();
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);
             Log.Info("Agent Manager Notch iniciado");
+        }
+
+        /// <summary>Tras validar la sesión: el MCP de Agent Manager en los CLI instalados (solo avisa si cambió algo).</summary>
+        private async Task EnsureMcpAsync(string token)
+        {
+            var results = await McpSetup.EnsureAsync(token);
+            var installed = results.Where(r => r.Status == McpSetup.Status.Installed).Select(r => ProviderFactory.Label(r.Cli)).ToList();
+            var failed = results.Where(r => r.Status == McpSetup.Status.Failed).Select(r => ProviderFactory.Label(r.Cli)).ToList();
+            if (installed.Count == 0 && failed.Count == 0) return;
+            var body = string.Join(" · ", new[]
+            {
+                installed.Count > 0 ? "Instalado en " + string.Join(", ", installed) : null,
+                failed.Count > 0 ? "Falló en " + string.Join(", ", failed) + " (ver registro)" : null
+            }.Where(x => x != null));
+            Notch.ShowBannerRaw(ClaudeColor, failed.Count > 0 ? MochiState.Error : MochiState.Done,
+                "MCP de Agent Manager", body, null, sticky: failed.Count > 0);
         }
 
         // =============================================================== agentes, pestañas y sesiones

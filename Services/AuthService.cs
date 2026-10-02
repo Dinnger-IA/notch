@@ -32,6 +32,8 @@ namespace AgentManagerNotch.Services
         private CancellationTokenSource? _loginCts;
 
         public bool IsAuthenticated => _token != null;
+        /// <summary>Token de la sesión (para instalar el MCP de Agent Manager en los CLI). Nunca se registra.</summary>
+        public string? Token => _token;
         public string? UserName { get; private set; }
         public bool IsLoggingIn => _loginCts != null;
 
