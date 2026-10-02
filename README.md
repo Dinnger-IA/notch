@@ -179,6 +179,7 @@ Providers/Providers.cs     Claude Code, Codex, Gemini, Personalizado → eventos
 Services/AgentEntry.cs     agente en la interfaz: pestañas, estado agregado y líneas de detalle
 Services/AgentSession.cs   una conversación (agente o pestaña de workspace): cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
 Services/Scheduler.cs      ejecuta los agentes programados según su horario
+Services/UpdateService.cs  busca versiones nuevas (git ls-remote cada 2 h) y actualiza
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
