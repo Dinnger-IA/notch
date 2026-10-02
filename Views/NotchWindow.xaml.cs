@@ -104,6 +104,8 @@ namespace AgentManagerNotch.Views
             Top = 0;
         }
 
+        private const double PillHeight = 30;
+
         private Size TargetSize(Mode m)
         {
             switch (m)
@@ -118,8 +120,8 @@ namespace AgentManagerNotch.Views
                     OverviewView.Measure(new Size(820, double.PositiveInfinity));
                     return new Size(840, Math.Clamp(OverviewView.DesiredSize.Height + 4 + 40, 180, 560));
                 default:
-                    CollapsedContent.Measure(new Size(double.PositiveInfinity, 34));
-                    return new Size(Math.Max(96, CollapsedContent.DesiredSize.Width + 30), 34);
+                    CollapsedContent.Measure(new Size(double.PositiveInfinity, PillHeight));
+                    return new Size(Math.Max(96, CollapsedContent.DesiredSize.Width + 30), PillHeight);
             }
         }
 
@@ -466,10 +468,83 @@ namespace AgentManagerNotch.Views
             // y sale en grande en la píldora); el que estaba ahí baja a los chips
             if ((sender as FrameworkElement)?.DataContext is AgentEntry a)
             {
+                var old = _focused;
+                var fromChip = BoundsInSwapLayer(ChipMochiFor(a));
+                var fromCard = BoundsInSwapLayer(FocusMochi);
                 if (!a.IsDefault) { AppRef.SetDefault(a); RebuildPill(); }
                 SetFocused(a);
+                AnimateSwap(a, old, fromChip, fromCard);
                 e.Handled = true;
             }
+        }
+
+        // =============================================================== animación de intercambio
+        private MochiView? ChipMochiFor(AgentEntry? a) =>
+            a == null ? null : Descendants<MochiView>(ChipList).FirstOrDefault(m => m.DataContext == a);
+
+        private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            {
+                var c = VisualTreeHelper.GetChild(root, i);
+                if (c is T t) yield return t;
+                foreach (var d in Descendants<T>(c)) yield return d;
+            }
+        }
+
+        private Rect? BoundsInSwapLayer(FrameworkElement? el)
+        {
+            if (el == null || !el.IsVisible || el.ActualWidth <= 0) return null;
+            try { return el.TransformToAncestor(SwapLayer).TransformBounds(new Rect(el.RenderSize)); }
+            catch (InvalidOperationException) { return null; }
+        }
+
+        /// <summary>
+        /// El personaje del chip vuela a la tarjeta grande y el principal anterior vuela a su sitio entre los
+        /// chips. Se usan copias sobre una capa mientras los reales quedan ocultos; el texto de la tarjeta se funde.
+        /// </summary>
+        private void AnimateSwap(AgentEntry now, AgentEntry? old, Rect? fromChip, Rect? fromCard)
+        {
+            var dur = TimeSpan.FromMilliseconds(420);
+            FocusInfo.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(140) });
+            if (fromChip == null) return;
+            OverviewView.UpdateLayout();
+            var toCard = BoundsInSwapLayer(FocusMochi);
+            var oldChip = ChipMochiFor(old);
+            var toChip = BoundsInSwapLayer(oldChip);
+            if (toCard == null) return;
+
+            var hidden = new List<UIElement> { FocusMochi };
+            if (oldChip != null && fromCard != null && toChip != null) hidden.Add(oldChip);
+            foreach (var h in hidden) h.Opacity = 0;
+
+            int pending = 0;
+            void Fly(AgentEntry agent, Rect from, Rect to, double arc)
+            {
+                var ghost = new MochiView { BodyColor = agent.Color, State = agent.State, Interactive = false, Width = from.Width, Height = from.Height };
+                Canvas.SetLeft(ghost, from.X);
+                Canvas.SetTop(ghost, from.Y);
+                SwapLayer.Children.Add(ghost);
+                pending++;
+                var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                var x = new DoubleAnimation(from.X, to.X, dur) { EasingFunction = ease };
+                // Trayectoria en arco: uno pasa por encima y el otro por debajo
+                var y = new DoubleAnimationUsingKeyFrames { Duration = dur };
+                y.KeyFrames.Add(new EasingDoubleKeyFrame(from.Y, KeyTime.FromPercent(0)));
+                y.KeyFrames.Add(new EasingDoubleKeyFrame((from.Y + to.Y) / 2 + arc, KeyTime.FromPercent(0.5)) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } });
+                y.KeyFrames.Add(new EasingDoubleKeyFrame(to.Y, KeyTime.FromPercent(1)) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseIn } });
+                x.Completed += (_, _) =>
+                {
+                    SwapLayer.Children.Remove(ghost);
+                    if (--pending == 0) foreach (var h in hidden) h.Opacity = 1;
+                };
+                ghost.BeginAnimation(Canvas.LeftProperty, x);
+                ghost.BeginAnimation(Canvas.TopProperty, y);
+                ghost.BeginAnimation(WidthProperty, new DoubleAnimation(from.Width, to.Width, dur) { EasingFunction = ease });
+                ghost.BeginAnimation(HeightProperty, new DoubleAnimation(from.Height, to.Height, dur) { EasingFunction = ease });
+            }
+            Fly(now, fromChip.Value, toCard.Value, -28);
+            if (old != null && fromCard != null && toChip != null) Fly(old, fromCard.Value, toChip.Value, 28);
         }
 
         private void Chip_RightClick(object sender, MouseButtonEventArgs e)
@@ -591,7 +666,7 @@ namespace AgentManagerNotch.Views
             var principal = Principal;
             if (principal != null)
             {
-                var big = Mini(principal, 28);
+                var big = Mini(principal, 26);
                 CollapsedAgents.Children.Add(big);
             }
             var others = AppRef.Agents.Where(a => a != principal)
@@ -611,7 +686,7 @@ namespace AgentManagerNotch.Views
                     Rows = 2, Columns = others.Count == 1 ? 1 : 2, Width = others.Count == 1 ? 14 : 28, Height = 28,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                foreach (var a in others.Take(4)) grid.Children.Add(Mini(a, 14));
+                foreach (var a in others.Take(4)) grid.Children.Add(Mini(a, 13));
                 var host = new Grid { ToolTip = string.Join(", ", others.Select(a => a.Name)) };
                 host.Children.Add(grid);
                 if (others.Count > 4)

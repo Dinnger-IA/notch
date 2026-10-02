@@ -157,6 +157,23 @@ namespace AgentManagerNotch.Controls
         // ------------------------------------------------------------------ animación
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
         [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+        [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+        [StructLayout(LayoutKind.Sequential)] private struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+
+        private static double _idleCheckedAt = -1, _idleSeconds;
+        /// <summary>
+        /// Segundos sin teclado ni ratón en todo el sistema (compartido por todos los personajes, así la píldora
+        /// y la vista general coinciden aunque unos hayan estado ocultos).
+        /// </summary>
+        private static double SystemIdleSeconds()
+        {
+            var now = Clock.Elapsed.TotalSeconds;
+            if (now - _idleCheckedAt < 0.5) return _idleSeconds;
+            _idleCheckedAt = now;
+            var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+            _idleSeconds = GetLastInputInfo(ref info) ? unchecked((uint)Environment.TickCount - info.dwTime) / 1000.0 : 0;
+            return _idleSeconds;
+        }
 
         private void OnFrame(object? sender, EventArgs e)
         {
@@ -265,8 +282,8 @@ namespace AgentManagerNotch.Controls
         private MochiState EffectiveState()
         {
             var s = State;
-            // Se duerme si está ocioso y nadie mueve el ratón durante 2 minutos
-            if (s == MochiState.Idle && _lastCursorMove > 0 && _t - _lastCursorMove > 120) return MochiState.Sleeping;
+            // Se duerme si está ocioso y nadie toca el teclado ni el ratón durante 2 minutos
+            if (s == MochiState.Idle && SystemIdleSeconds() > 120) return MochiState.Sleeping;
             return s;
         }
 
