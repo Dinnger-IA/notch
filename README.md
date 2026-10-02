@@ -44,7 +44,8 @@ Al arrancar se revalida el token; si caducó, se vuelve a pedir el login (sin co
 `https://agent-manager.distelsa.net/mcp`) en su configuración de usuario (`~/.claude.json`,
 `~/.codex/config.toml`, `~/.gemini/settings.json`), se instala con su propio comando
 (`claude mcp add --transport http --scope user …`, `codex mcp add … --url …`, `gemini mcp add …`) usando
-`https://agent-manager.distelsa.net/mcp?t=<token>`. Si ya existe, no se toca. El notch avisa si instaló algo
+`https://agent-manager.distelsa.net/mcp?t=<token>`. Si ya existe con esa URL pero con otro token (cada inicio de sesión
+revoca el anterior), se reemplaza por el de la sesión actual; las entradas sin `?t=` (OAuth) no se tocan. El notch avisa si instaló algo
 o si falló, y el resultado queda en el registro (sin el token).
 
 **Primera configuración.** La primera vez (sin `config.json`) se crean los agentes según los CLI instalados:

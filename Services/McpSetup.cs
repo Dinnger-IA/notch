@@ -25,12 +25,15 @@ namespace AgentManagerNotch.Services
         private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(60);
         private static readonly SemaphoreSlim Gate = new(1, 1);
 
-        public enum Status { NotInstalled, AlreadyConfigured, Installed, Failed }
+        public enum Status { NotInstalled, AlreadyConfigured, Installed, Updated, Failed }
         public record Result(ProviderKind Cli, Status Status, string? Error = null);
 
         private static readonly ProviderKind[] Clis = { ProviderKind.ClaudeCode, ProviderKind.Codex, ProviderKind.Gemini };
 
-        /// <summary>Revisa e instala donde falte. Si ya hay una revisión en curso, no hace nada.</summary>
+        /// <summary>
+        /// Revisa e instala donde falte; si la entrada usa la URL con un token distinto al de la sesión (p. ej. tras
+        /// volver a iniciar sesión, que revoca el anterior), la reemplaza. Si ya hay una revisión en curso, no hace nada.
+        /// </summary>
         public static async Task<List<Result>> EnsureAsync(string token)
         {
             var results = new List<Result>();
@@ -56,36 +59,66 @@ namespace AgentManagerNotch.Services
             if (CliResolver.Find(exe) == null) return new Result(cli, Status.NotInstalled);
             try
             {
-                if (IsConfigured(cli)) return new Result(cli, Status.AlreadyConfigured);
-                var args = cli switch
+                var entry = FindEntry(cli);
+                bool stale = entry != null && TokenOf(entry.Url) is string old && old != token;
+                // Entradas sin ?t= (OAuth u otra configuración del usuario) no se tocan
+                if (entry != null && !stale) return new Result(cli, Status.AlreadyConfigured);
+
+                if (stale)
+                {
+                    var remove = cli switch
+                    {
+                        ProviderKind.ClaudeCode => new[] { "mcp", "remove", entry!.Name, "--scope", "user" },
+                        ProviderKind.Codex => new[] { "mcp", "remove", entry!.Name },
+                        _ => new[] { "mcp", "remove", "--scope", "user", entry!.Name }
+                    };
+                    var (rc, rout) = await RunAsync(exe, remove, () => SafeFind(cli) == null);
+                    if (FindEntry(cli) != null)
+                        return new Result(cli, Status.Failed, $"no se pudo quitar la entrada anterior (código {rc}): {Short(Mask(rout, token))}");
+                }
+
+                var add = cli switch
                 {
                     ProviderKind.ClaudeCode => new[] { "mcp", "add", "--transport", "http", "--scope", "user", ServerName, url },
                     ProviderKind.Codex => new[] { "mcp", "add", ServerName, "--url", url },
                     _ => new[] { "mcp", "add", "--scope", "user", "--transport", "http", ServerName, url }
                 };
-                var (code, output) = await RunAsync(exe, args, () => SafeIsConfigured(cli));
-                if (code == 0 && IsConfigured(cli)) return new Result(cli, Status.Installed);
-                // Nunca se registra el token
-                var msg = output.Replace(token, "***").Replace(Uri.EscapeDataString(token), "***").Trim();
-                return new Result(cli, Status.Failed, code == 0 ? "no aparece en la configuración tras instalarlo" : $"código {code}: {Short(msg)}");
+                var (code, output) = await RunAsync(exe, add, () => TokenOf(SafeFind(cli)?.Url) == token);
+                if (TokenOf(FindEntry(cli)?.Url) == token) return new Result(cli, stale ? Status.Updated : Status.Installed);
+                return new Result(cli, Status.Failed, code == 0 ? "no aparece en la configuración tras instalarlo" : $"código {code}: {Short(Mask(output, token))}");
             }
             catch (Exception ex) { return new Result(cli, Status.Failed, ex.Message); }
         }
 
+        /// <summary>Nunca se registra el token.</summary>
+        private static string Mask(string text, string token) =>
+            text.Replace(token, "***").Replace(Uri.EscapeDataString(token), "***").Trim();
+
         // =============================================================== detección
+        private record Entry(string Name, string? Url);
+
         private static string Home => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        private static bool IsConfigured(ProviderKind cli) => cli switch
+        /// <summary>Token de una URL del MCP de Agent Manager (…/mcp?t=…), o null si no es esa URL o no lleva token.</summary>
+        private static string? TokenOf(string? url)
         {
-            ProviderKind.ClaudeCode => JsonHasServer(ClaudeConfigPath()),
-            ProviderKind.Codex => TomlHasServer(Path.Combine(Environment.GetEnvironmentVariable("CODEX_HOME") is { Length: > 0 } ch ? ch : Path.Combine(Home, ".codex"), "config.toml")),
-            _ => JsonHasServer(Path.Combine(Home, ".gemini", "settings.json"))
+            if (url == null || !url.StartsWith(McpEndpoint + "?", StringComparison.OrdinalIgnoreCase)) return null;
+            foreach (var part in url[(McpEndpoint.Length + 1)..].Split('&'))
+                if (part.StartsWith("t=")) return Uri.UnescapeDataString(part[2..]);
+            return null;
+        }
+
+        private static Entry? FindEntry(ProviderKind cli) => cli switch
+        {
+            ProviderKind.ClaudeCode => JsonFind(ClaudeConfigPath()),
+            ProviderKind.Codex => TomlFind(Path.Combine(Environment.GetEnvironmentVariable("CODEX_HOME") is { Length: > 0 } ch ? ch : Path.Combine(Home, ".codex"), "config.toml")),
+            _ => JsonFind(Path.Combine(Home, ".gemini", "settings.json"))
         };
 
         /// <summary>Mientras el CLI escribe su configuración el archivo puede estar a medias.</summary>
-        private static bool SafeIsConfigured(ProviderKind cli)
+        private static Entry? SafeFind(ProviderKind cli)
         {
-            try { return IsConfigured(cli); } catch { return false; }
+            try { return FindEntry(cli); } catch { return null; }
         }
 
         /// <summary>MCP de ámbito usuario de Claude Code: ~/.claude.json (o $CLAUDE_CONFIG_DIR/.claude.json).</summary>
@@ -100,30 +133,46 @@ namespace AgentManagerNotch.Services
             || (url != null && url.StartsWith(McpEndpoint, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>Claude (~/.claude.json) y Gemini (settings.json): objeto "mcpServers" en la raíz.</summary>
-        private static bool JsonHasServer(string path)
+        private static Entry? JsonFind(string path)
         {
-            if (!File.Exists(path)) return false;
+            if (!File.Exists(path)) return null;
             using var doc = JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            if (!doc.RootElement.TryGetProperty("mcpServers", out var servers) || servers.ValueKind != JsonValueKind.Object) return false;
+            if (!doc.RootElement.TryGetProperty("mcpServers", out var servers) || servers.ValueKind != JsonValueKind.Object) return null;
             foreach (var s in servers.EnumerateObject())
             {
                 string? url = null;
                 if (s.Value.ValueKind == JsonValueKind.Object)
                     foreach (var key in new[] { "url", "httpUrl" })
                         if (s.Value.TryGetProperty(key, out var u) && u.ValueKind == JsonValueKind.String) { url = u.GetString(); break; }
-                if (IsAgentManager(s.Name, url)) return true;
+                if (IsAgentManager(s.Name, url)) return new Entry(s.Name, url);
             }
-            return false;
+            return null;
         }
 
-        /// <summary>Codex (~/.codex/config.toml): tabla [mcp_servers.agent-manager] o un servidor con su URL.</summary>
-        private static bool TomlHasServer(string path)
+        /// <summary>Codex (~/.codex/config.toml): tablas [mcp_servers.&lt;nombre&gt;] con su url.</summary>
+        private static Entry? TomlFind(string path)
         {
-            if (!File.Exists(path)) return false;
-            var toml = File.ReadAllText(path);
-            if (Regex.IsMatch(toml, @"^\s*\[\s*mcp_servers\.(""?)" + Regex.Escape(ServerName) + @"\1\s*\]", RegexOptions.Multiline | RegexOptions.IgnoreCase))
-                return true;
-            return Regex.IsMatch(toml, @"^\s*url\s*=\s*[""']" + Regex.Escape(McpEndpoint), RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            if (!File.Exists(path)) return null;
+            string? table = null, url = null;
+            Entry? found = null;
+            void Close() { if (table != null && found == null && IsAgentManager(table, url)) found = new Entry(table, url); }
+            foreach (var raw in File.ReadAllLines(path))
+            {
+                var line = raw.Trim();
+                if (line.StartsWith('['))
+                {
+                    Close();
+                    var m = Regex.Match(line, @"^\[\s*mcp_servers\.(""?)([^""\]]+)\1\s*\]$");
+                    table = m.Success ? m.Groups[2].Value : null;
+                    url = null;
+                    continue;
+                }
+                if (table == null) continue;
+                var u = Regex.Match(line, @"^url\s*=\s*[""']([^""']*)[""']");
+                if (u.Success) url = u.Groups[1].Value;
+            }
+            Close();
+            return found;
         }
 
         // =============================================================== ejecución
