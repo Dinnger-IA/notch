@@ -45,6 +45,9 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
   (o con Esc / Ctrl+Alt+Espacio); sacar el ratón no lo cierra. Alternativa: *Cerrar al sacar el ratón*.
   Ahí también está *Abrir al pasar el ratón*. Con 📌 fijado, o con un menú o diálogo abierto, nunca se cierra.
   Fuera del recuadro visible el notch deja pasar los clics a lo que hay debajo (también sobre su sombra).
+- **Ocultar el notch** (⚙ → *Panel · accesibilidad*): plegado, el notch es solo una línea gris arriba al centro;
+  crece un poco al acercar el ratón y se abre con un clic (pasar el ratón no lo abre). Con esta opción los avisos
+  de los agentes (terminó, necesita permiso, recordatorios…) llegan como notificaciones de Windows.
 - **Actualizaciones** (⚙ → *Versión*): cada compilación lleva su commit y su rama. Cada 2 horas el notch consulta
   `git ls-remote` de esa rama en el repositorio (solo la referencia, sin descargar nada); si hay un commit nuevo,
   avisa en el notch y con una notificación. *Actualizar* hace `git pull --ff-only` + `publish.ps1` en la carpeta del
