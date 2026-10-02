@@ -246,6 +246,9 @@ Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas
 Views/ReleaseNotesWindow.* notas de la versión: una pestaña por versión, con su GIF (Controls/GifPlayer.cs)
 Services/ReleaseNotes.cs   lee las notas y GIF de versiones/ incrustados en el ejecutable
+Services/GifWriter.cs      graba en GIF un elemento de la interfaz (RenderTargetBitmap, sin capturar la pantalla)
+Views/GifDemos.cs          vistas de --grabar-gif para los GIF de las versiones
+Views/UpdateCard.*         tarjeta de versión nueva (en el notch y en los GIF)
 Views/Markdown.cs          Markdown ligero en las burbujas (seleccionable, tablas, bloques de código con copiar)
 ```
 

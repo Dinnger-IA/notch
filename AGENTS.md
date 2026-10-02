@@ -48,7 +48,8 @@ Depende de Agent Manager y por tanto va en `agent-manager`:
   subido (`git log origin/<rama> -- versiones/`), añade las novedades a ese archivo en vez de crear otro. Sube el
   menor (Z) para correcciones y el intermedio (Y) para funciones nuevas.
 - **Si el cambio es visual** (algo que se ve distinto en el notch o en una ventana), graba un GIF que lo enseñe y
-  guárdalo como `versiones/X.Y.Z.gif` con `versiones\grabar-gif.ps1` (ver `versiones/README.md`). Se ve en la
+  guárdalo como `versiones/X.Y.Z.gif` con `AgentManagerNotch.exe --grabar-gif` (ver `versiones/README.md`;
+  dibuja la vista fuera de la pantalla, así que no graba la pantalla del usuario). Se ve en la
   ventana *Notas de la versión*, donde cada versión tiene su pestaña en la barra lateral.
 - La versión se añade en `main` y llega a `agent-manager` con el merge; si un cambio solo de `agent-manager`
   merece versión, súbela en esa rama sin volver a usar ese número en `main`.

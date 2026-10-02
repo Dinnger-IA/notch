@@ -24,6 +24,12 @@ namespace AgentManagerNotch
             if (args.Length > 0 && args[0] == "--llm") return LlmBridge.Run();
             // Comandos de control: --notify, --ask, --claude-event
             if (ControlChannel.TryRunCli(args) is int code) return code;
+            // GIF para las notas de la versión: proceso aparte, sin datos del usuario ni instancia única
+            if (args.Length > 0 && args[0] == "--grabar-gif")
+            {
+                if (args.Length < 3) { Console.Error.WriteLine(GifDemos.Help); return 2; }
+                return new App { RecordGifRequest = (args[1], args[2]) }.Run();
+            }
 
             using var mutex = new Mutex(true, "AgentManagerNotch.SingleInstance", out bool first);
             if (!first)
@@ -59,6 +65,8 @@ namespace AgentManagerNotch
         public NotchWindow Notch { get; private set; } = null!;
         public string HookSettingsPath { get; private set; } = "";
         private readonly CancellationTokenSource _cts = new();
+        /// <summary>Modo --grabar-gif (vista, salida).</summary>
+        internal (string view, string path)? RecordGifRequest { get; init; }
         private static readonly System.Windows.Media.Color ClaudeColor = System.Windows.Media.Color.FromRgb(0xD9, 0x77, 0x57);
 
         protected override void OnStartup(StartupEventArgs e)
@@ -70,6 +78,7 @@ namespace AgentManagerNotch
             {
                 Source = new Uri("pack://application:,,,/AgentManagerNotch;component/Themes/Theme.xaml")
             });
+            if (RecordGifRequest is { } rec) { RecordGif(rec.view, rec.path); return; }
 
             DispatcherUnhandledException += (_, ex) =>
             {
@@ -141,6 +150,15 @@ namespace AgentManagerNotch
             }.Where(x => x != null));
             Notch.ShowBannerRaw(ClaudeColor, failed.Count > 0 ? MochiState.Error : MochiState.Done,
                 "MCP de Agent Manager", body, null, sticky: failed.Count > 0);
+        }
+
+        /// <summary>Modo --grabar-gif: graba la vista y sale (código 0 si se guardó).</summary>
+        private async void RecordGif(string view, string path)
+        {
+            var code = 0;
+            try { await GifDemos.RunAsync(view, path); }
+            catch (Exception ex) { Log.Error("Grabar GIF", ex); code = 1; }
+            Shutdown(code);
         }
 
         /// <summary>Recién actualizado (la versión es mayor que la de la última vez): abre las notas de la nueva.</summary>

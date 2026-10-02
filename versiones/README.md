@@ -21,23 +21,22 @@ Cada vez que haya cambios nuevos se crea su versión (o se amplía la más alta 
 ## GIF de los cambios visuales
 
 Si la versión cambia algo que se ve, añade `X.Y.Z.gif` junto a su `.md`: la ventana *Notas de la versión* lo
-reproduce encima de las novedades. Se graba con `grabar-gif.ps1` (sin dependencias):
+reproduce encima de las novedades. Se graba con el propio ejecutable, que monta la vista en una ventana fuera de
+la pantalla y la dibuja (no captura la pantalla ni toca el notch abierto ni los datos del usuario):
 
 ```powershell
-# Una ventana por su título, durante 6 segundos
-.\versiones\grabar-gif.ps1 -Ventana "Notas de la versión" -Segundos 6 -Salida versiones\0.3.0.gif
-
-# Una zona de la pantalla (x, y, ancho, alto en píxeles), p. ej. el notch abierto arriba al centro
-.\versiones\grabar-gif.ps1 -Region 1100,0,1240,420 -Segundos 6 -Salida versiones\0.3.0.gif
-
-# Haciendo algo mientras graba (clics, teclas, comandos del notch...)
-.\versiones\grabar-gif.ps1 -Ventana "Notas de la versión" -Salida versiones\0.3.0.gif -Accion {
-    Start-Sleep 1; & .\publish\AgentManagerNotch.exe --release-notes 0.2.0; Start-Sleep 2
-}
+dotnet build -c Release -o $env:TEMP\amn-gif
+& $env:TEMP\amn-gif\AgentManagerNotch.exe --grabar-gif actualizacion=0.2.0 versiones\0.2.0.gif
+& $env:TEMP\amn-gif\AgentManagerNotch.exe --grabar-gif notas=0.3.0 versiones\0.3.0.gif
 ```
 
-Opciones: `-Fps` (10), `-AnchoMax` (760 px; se reduce si la captura es más ancha). Los fotogramas iguales se
-funden en uno, así que las pausas apenas ocupan. Intenta que el GIF quede por debajo de ~1,5 MB.
+| Vista | Qué graba |
+|---|---|
+| `actualizacion[=X.Y.Z]` | La tarjeta «Versión X.Y.Z disponible» con las novedades de esa versión. |
+| `notas[=X.Y.Z]` | La ventana de notas, recorriendo las pestañas desde esa versión (reproduce los GIF que ya haya). |
 
-Para grabar la tarjeta de actualización sin publicar nada, arranca el notch con
-`AGENT_MANAGER_NOTCH_SIMULAR_VERSION=9.9.9`: al minuto «encuentra» esa versión y `--show` abre la tarjeta.
+Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
+ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo
+en el guion lo que enseñe el cambio. Los fotogramas iguales se funden y cada uno solo guarda la zona que cambió;
+intenta que el GIF quede por debajo de ~1,5 MB. Compila antes de grabar la vista `notas` para que incluya los GIF
+nuevos, y revisa el resultado antes de subirlo.
