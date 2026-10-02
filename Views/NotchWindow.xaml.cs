@@ -900,7 +900,6 @@ namespace AgentManagerNotch.Views
 
         private void NewReminder_Click(object sender, RoutedEventArgs e) => OpenReminders();
 
-        /// <summary>Configuración: ajustes del agente y opciones generales de Agent Manager Notch.</summary>
         // =============================================================== configuración
         private AgentEntry? _settingsTarget;
 
