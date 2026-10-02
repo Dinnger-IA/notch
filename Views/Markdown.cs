@@ -90,11 +90,19 @@ namespace AgentManagerNotch.Views
                 else para.Inlines.Add(new LineBreak());
                 return para;
             }
+            // Tabla o bloque de código: ya llevan su propio margen, así que las líneas en blanco que los
+            // rodean no deben sumar renglones vacíos (el salto final del párrafo anterior se quita).
+            void AddBlock(Block block)
+            {
+                while (para?.Inlines.LastInline is LineBreak br) para.Inlines.Remove(br);
+                if (para is { Inlines.Count: 0 }) doc.Blocks.Remove(para);
+                doc.Blocks.Add(block);
+                para = null;
+            }
             void FlushCode()
             {
-                doc.Blocks.Add(CodeBlock(string.Join("\n", code)));
+                AddBlock(CodeBlock(string.Join("\n", code)));
                 code.Clear();
-                para = null;
             }
 
             for (int i = 0; i < lines.Length; i++)
@@ -114,12 +122,12 @@ namespace AgentManagerNotch.Views
                     var rows = new List<string> { raw };
                     var sep = lines[++i];
                     while (i + 1 < lines.Length && lines[i + 1].TrimStart().StartsWith('|')) rows.Add(lines[++i]);
-                    doc.Blocks.Add(TableBlock(rows, sep, rtb.FontSize));
-                    para = null;
+                    AddBlock(TableBlock(rows, sep, rtb.FontSize));
                     continue;
                 }
 
                 var line = raw;
+                if (para == null && doc.Blocks.LastBlock is Table or BlockUIContainer && string.IsNullOrWhiteSpace(line)) continue;
                 var h = Regex.Match(line, @"^(#{1,6})\s+(.*)$");
                 if (h.Success)
                 {
@@ -229,7 +237,7 @@ namespace AgentManagerNotch.Views
                 CellSpacing = 0,
                 BorderBrush = TableBorder,
                 BorderThickness = new Thickness(1, 1, 0, 0),
-                Margin = new Thickness(0, 6, 0, 6),
+                Margin = new Thickness(0, 8, 0, 8),
                 FontSize = fontSize - 1,
                 LineHeight = double.NaN
             };
