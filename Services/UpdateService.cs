@@ -74,7 +74,7 @@ namespace AgentManagerNotch.Services
             Changed?.Invoke();
             try
             {
-                var (version, notes, error) = Simulated() ?? await Task.Run(ReadRemote);
+                var (version, notes, error) = await Task.Run(ReadRemote);
                 LastError = error;
                 if (error != null) Log.Info($"Actualizaciones: {error}");
                 else
@@ -91,16 +91,6 @@ namespace AgentManagerNotch.Services
                 Changed?.Invoke();
                 if (UpdateAvailable && _notifiedFor != RemoteVersion) { _notifiedFor = RemoteVersion; Found?.Invoke(); }
             }
-        }
-
-        /// <summary>
-        /// Para grabar el GIF de la tarjeta de actualización: con AGENT_MANAGER_NOTCH_SIMULAR_VERSION=X.Y.Z el
-        /// repositorio «tiene» esa versión, con las novedades de la instalada.
-        /// </summary>
-        private (Version?, string[], string?)? Simulated()
-        {
-            if (!System.Version.TryParse(Environment.GetEnvironmentVariable("AGENT_MANAGER_NOTCH_SIMULAR_VERSION"), out var v)) return null;
-            return (Normalize(v), NoteLines(ReleaseNotes.All.FirstOrDefault(n => n.Version == LocalVersion)?.Body ?? ""), null);
         }
 
         /// <summary>Lee la mayor versión de <c>versiones\</c> en la rama del repositorio y sus novedades.</summary>
@@ -192,7 +182,7 @@ namespace AgentManagerNotch.Services
         private static Version Normalize(Version? v) => v == null ? new Version(0, 0, 0) : new Version(v.Major, v.Minor, Math.Max(v.Build, 0));
 
         /// <summary>Las novedades («- …») de un archivo de versión, como texto plano para la tarjeta.</summary>
-        private static string[] NoteLines(string md) => md.Split('\n')
+        public static string[] NoteLines(string md) => md.Split('\n')
             .Select(l => l.Trim()).Where(l => l.StartsWith("- "))
             .Select(l => l[2..].Replace("*", "").Replace("`", "").Trim()).ToArray();
 

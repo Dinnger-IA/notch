@@ -52,6 +52,8 @@ namespace AgentManagerNotch.Views
         public NotchWindow()
         {
             InitializeComponent();
+            UpdateView.NowClicked += UpdateNow_Click;
+            UpdateView.LaterClicked += UpdateLater_Click;
             Markdown.EnableWheelPassThrough();
 
             foreach (var a in AppRef.Agents) a.PropertyChanged += Entry_PropertyChanged;
@@ -1078,24 +1080,20 @@ namespace AgentManagerNotch.Views
         {
             var u = AppRef.Updates;
             var busy = AppRef.Sessions.Count(s => s.IsBusy);
-            UpdateTitle.Text = $"Versión {u.RemoteVersionText} disponible";
-            UpdateText.Text = $"Tienes la {u.Version}. Se descarga, se compila y el notch se vuelve a abrir solo." +
-                              (busy > 0 ? $" Hay {busy} agente(s) trabajando: se detendrán." : "");
-            UpdateNotes.Text = string.Join("\n", u.RemoteNotes.Take(5).Select(n => "•  " + n));
-            UpdateNotes.Visibility = u.RemoteNotes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            UpdateNowButton.IsEnabled = true;
+            UpdateView.Show(u.RemoteVersionText, u.RemoteNotes,
+                $"Tienes la {u.Version}. Se descarga, se compila y el notch se vuelve a abrir solo." +
+                (busy > 0 ? $" Hay {busy} agente(s) trabajando: se detendrán." : ""));
             if (_mode != Mode.Update) SetMode(Mode.Update);
         }
 
-        private async void UpdateNow_Click(object sender, RoutedEventArgs e)
+        private async void UpdateNow_Click()
         {
-            UpdateNowButton.IsEnabled = false;
-            UpdateText.Text = "Preparando la actualización…";
+            UpdateView.ShowBusy("Preparando la actualización…");
             await RunUpdateAsync();
             if (_mode == Mode.Update) ShowUpdate(); // no se pudo: vuelve a mostrar la tarjeta
         }
 
-        private void UpdateLater_Click(object sender, RoutedEventArgs e)
+        private void UpdateLater_Click()
         {
             _updateDismissedFor = AppRef.Updates.RemoteVersion;
             RebuildPill();
