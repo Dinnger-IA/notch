@@ -352,6 +352,12 @@ namespace AgentManagerNotch.Models
         public bool SeededCodeAgent { get; set; }
         /// <summary>Última versión con la que se abrió: si al arrancar la versión es mayor, se muestran sus notas.</summary>
         public string? LastSeenVersion { get; set; }
+        /// <summary>Leer en voz alta todas las respuestas (las que se piden hablando se leen siempre).</summary>
+        public bool SpeakReplies { get; set; }
+        /// <summary>Servidor de voz (TTS/STT compatible con la API de audio de OpenAI).</summary>
+        public string VoiceUrl { get; set; } = Services.VoiceService.DefaultUrl;
+        public string Voice { get; set; } = Services.VoiceService.DefaultVoice;
+        public double VoiceSpeed { get; set; } = 1.0;
     }
 
     public class AppConfig

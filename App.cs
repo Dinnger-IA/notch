@@ -62,6 +62,8 @@ namespace AgentManagerNotch
         public ReminderService Reminders { get; private set; } = null!;
         public ScheduleService Scheduler { get; private set; } = null!;
         public NotificationService Notifier { get; private set; } = null!;
+        /// <summary>Voz de los agentes: leer respuestas en voz alta y dictar mensajes.</summary>
+        public VoiceService Voice { get; private set; } = null!;
         public NotchWindow Notch { get; private set; } = null!;
         public string HookSettingsPath { get; private set; } = "";
         private readonly CancellationTokenSource _cts = new();
@@ -104,6 +106,8 @@ namespace AgentManagerNotch
             Approvals.Start();
 
             Notifier = new NotificationService(() => Store.Config.Settings);
+            Voice = new VoiceService(() => Store.Config.Settings);
+            Controls.MochiView.SpeechLevel = () => Voice.Level;
             NotificationService.MigrateStartupEntry();
             ControlChannel.RefreshClaudeIntegrationPath();
             Notifier.ShowRequested += () => Notch.Expand(focusInput: true);
@@ -404,6 +408,19 @@ namespace AgentManagerNotch
             if (Store.Config.Settings.NotifyOnDone && (!userIsLooking || r.FromSchedule))
                 Notifier.Toast(title, body, s.Key);
             Notifier.Play(r.Success ? NotificationService.SoundKind.Done : NotificationService.SoundKind.Error);
+
+            // Voz: se lee la respuesta si se pidió hablando o si está activado «Leer las respuestas en voz alta»
+            bool byVoice = s.ReplyByVoice;
+            s.ReplyByVoice = false;
+            if (r.Success && !r.FromSchedule && (byVoice || Store.Config.Settings.SpeakReplies) && !string.IsNullOrWhiteSpace(r.FinalText))
+                Speak(s, r.FinalText);
+        }
+
+        /// <summary>Lee en voz alta un texto del agente; si falla, lo avisa en su conversación.</summary>
+        public async void Speak(AgentSession s, string text)
+        {
+            try { await Voice.SpeakAsync(EntryOf(s), text); }
+            catch (Exception ex) { s.AddNotice(ex.Message, error: true); }
         }
 
         private void OnApprovalRequested(AgentSession s, ApprovalRequest req)
@@ -553,6 +570,7 @@ namespace AgentManagerNotch
             _cts.Cancel();
             Approvals.Stop();
             Notifier.Dispose();
+            Voice.Dispose();
             Shutdown();
         }
 

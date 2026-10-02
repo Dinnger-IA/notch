@@ -20,7 +20,7 @@ namespace AgentManagerNotch.Views
         public const string Help =
             "Vistas: notas[=X.Y.Z] (ventana de notas recorriendo las pestañas desde esa versión) · " +
             "actualizacion[=X.Y.Z] (tarjeta de versión nueva con las novedades de esa versión) · " +
-            "tabla (respuesta del chat con tablas Markdown)";
+            "tabla (respuesta del chat con tablas Markdown) · voz (el agente leyendo su respuesta en voz alta)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -35,6 +35,7 @@ namespace AgentManagerNotch.Views
                 "notas" => await ReleaseNotesAsync(version, path),
                 "actualizacion" => await UpdateCardAsync(version, path),
                 "tabla" => await ChatTableAsync(path),
+                "voz" => await VoiceAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
             Log.Info($"GIF guardado: {path} ({frames} fotogramas, {new FileInfo(path).Length / 1024} KB)");
@@ -125,6 +126,40 @@ namespace AgentManagerNotch.Views
                 await Task.Delay(4000);
             });
             win.Close();
+            return n;
+        }
+
+        /// <summary>El agente leyendo en voz alta su respuesta: boca y ondas al ritmo de la voz.</summary>
+        private static async Task<int> VoiceAsync(string path)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            // Volumen de ejemplo: sílabas (~6 por segundo) con una pausa breve entre frases
+            Controls.MochiView.SpeechLevel = () =>
+            {
+                var t = clock.Elapsed.TotalSeconds;
+                if (t % 2.2 > 1.9) return 0;
+                return Math.Max(0, Math.Sin(t * Math.PI * 6.4)) * (0.45 + 0.55 * Math.Abs(Math.Sin(t * 1.7)));
+            };
+            var mochi = new Controls.MochiView { Width = 84, Height = 84, BodyColor = Color.FromRgb(0xFF, 0x8A, 0x65), Interactive = false, VerticalAlignment = VerticalAlignment.Center };
+            var answer = new RichTextBox { FontSize = 13.5, Width = 380, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(18, 0, 0, 0) };
+            if (Application.Current.TryFindResource("SelectableDoc") is Style st) answer.Style = st;
+            answer.Foreground = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            System.Windows.Documents.Block.SetLineHeight(answer, 20);
+            Markdown.SetText(answer, "Revisé la documentación: el despliegue de **Hermes** falla porque falta la variable `DB_HOST` en el entorno de pruebas. Ya la añadí y el pod arranca bien.");
+            var panel = new StackPanel { Orientation = Orientation.Horizontal, Children = { mochi, answer } };
+            var host = new Border { Background = NotchBg, Padding = new Thickness(20, 18, 20, 18), Child = panel };
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 560).RecordAsync(path, async () =>
+            {
+                await Task.Delay(700);
+                mochi.IsSpeaking = true;
+                await Task.Delay(4400);
+                mochi.IsSpeaking = false;
+                await Task.Delay(900);
+            });
+            win.Close();
+            Controls.MochiView.SpeechLevel = null;
             return n;
         }
 

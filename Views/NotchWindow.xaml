@@ -78,6 +78,7 @@
                             <ContextMenu>
                                 <MenuItem Header="Copiar selección" Command="ApplicationCommands.Copy"/>
                                 <MenuItem Header="Copiar mensaje" Click="CopyMessage_Click"/>
+                                <MenuItem Header="Escuchar" Click="SpeakMessage_Click"/>
                             </ContextMenu>
                         </RichTextBox.ContextMenu>
                     </RichTextBox>
@@ -245,7 +246,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid Margin="8,0,0,0" VerticalAlignment="Center">
                         <c:MochiView Width="30" Height="30" Interactive="False"
-                                     BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                                     BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}" IsSpeaking="{Binding IsSpeaking}"/>
                         <!-- Insignias -->
                         <Border Width="14" Height="14" CornerRadius="7" Background="#E5484D" HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,-4,-5,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
@@ -442,7 +443,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <c:MochiView x:Name="FocusMochi" Width="84" Height="84" VerticalAlignment="Center" Interactive="True"
-                                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}" IsSpeaking="{Binding IsSpeaking}"/>
                             <StackPanel x:Name="FocusInfo" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
@@ -642,6 +643,8 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid Margin="6,0">
                                     <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
@@ -653,6 +656,10 @@
                                         Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
                                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"/>
                                 <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
+                                <!-- Voz: leer las respuestas en voz alta (o callar al agente) y dictar un mensaje -->
+                                <Button x:Name="SpeakerButton" Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE74F;" Click="Speaker_Click" VerticalAlignment="Bottom"/>
+                                <Button x:Name="MicButton" Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE720;" Click="Mic_Click" VerticalAlignment="Bottom"
+                                        ToolTip="Hablar: pulsa, di tu mensaje y vuelve a pulsar para enviarlo (Esc cancela)"/>
                             </Grid>
                         </Border>
                     </Grid>
@@ -719,6 +726,28 @@
                                             <TextBlock><Run Text="&#xE8F4;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Workspace de código"/></TextBlock>
                                         </Button>
                                     </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Voz -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="VOZ"/>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <StackPanel VerticalAlignment="Center" Margin="0,4,46,4">
+                                            <TextBlock Text="Leer las respuestas en voz alta" FontSize="12.5" Foreground="#ECECF2" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Lo que pidas hablando (botón del micrófono) se lee siempre."
+                                                       FontSize="10.5" Foreground="#6E6E7C" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="SetSpeakReplies" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
+                                    <RadioButton x:Name="SetVoiceFemale" Style="{StaticResource Choice}" GroupName="voice" Margin="0,4"
+                                                 Content="Voz femenina" Click="SettingToggle_Click"/>
+                                    <RadioButton x:Name="SetVoiceMale" Style="{StaticResource Choice}" GroupName="voice" Margin="0,4,0,2"
+                                                 Content="Voz masculina" Click="SettingToggle_Click"/>
+                                    <Button Style="{StaticResource SettingsButton}" Click="SetVoiceTest_Click">
+                                        <TextBlock><Run Text="&#xE767;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Probar la voz"/></TextBlock>
+                                    </Button>
                                 </StackPanel>
                             </Border>
 

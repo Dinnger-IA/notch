@@ -131,6 +131,19 @@ a la derecha**.
   trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Agent Manager Notch pide al agente (se oculta del chat)
   o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
 
+### Voz
+
+Usa el servidor de voz interno (`https://10.6.100.60:8880`, compatible con la API de audio de OpenAI:
+`/v1/audio/speech` para leer y `/v1/audio/transcriptions` para dictar). El audio va por waveOut/waveIn de Windows.
+
+- **Micrófono** (barra del chat): un clic empieza a escuchar, otro clic transcribe y envía el mensaje; la respuesta
+  se lee en voz alta. Esc cancela la grabación.
+- **Altavoz**: activa o desactiva leer todas las respuestas; mientras el agente habla, lo calla. Clic derecho en
+  un mensaje → *Escuchar*.
+- Antes de leer se quita el Markdown: las tablas se leen fila a fila y los bloques de código no se leen.
+- ⚙ Configuración → *Voz*: leer siempre, voz femenina (`es_MX-claude-high`) o masculina (`es_MX-ald-medium`) y
+  *Probar la voz*. La dirección y la velocidad están en `config.json` (`VoiceUrl`, `VoiceSpeed`).
+
 ### Ejemplo: agente del clima
 
 Un programado que cada 12 horas (06:00 y 18:00) consulta el clima con `WebFetch` a wttr.in y te avisa:
@@ -179,6 +192,7 @@ Dibujados a mano en tiempo real (`Controls/MochiView.cs`, 60 fps):
 - **Pensando**: mira hacia arriba con una burbuja de puntos. **Trabajando**: da saltitos y mira de lado a
   lado con un spinner. **Esperando permiso**: ojos grandes, se sacude y muestra "!".
 - **¡Listo!**: salto con *squash & stretch*, ojos felices ^ ^ y confeti. **Error**: cejas tristes.
+- **Hablando**: abre la boca al ritmo del volumen de la voz y le salen ondas de sonido (no se duerme mientras habla).
 - **Recordatorio**: vibra como un despertador. **Durmiendo**: tras 2 min sin actividad, con "z z z".
 - **Interacción**: un clic lo aplasta y pone cara de molestia `> <`; 5 clics seguidos lo **marean**
   (ojos en espiral y estrellitas). Al arrastrar archivos se mete en una **caja**.
@@ -241,6 +255,7 @@ Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
+Services/VoiceService.cs   voz: TTS en streaming, dictado (STT) y volumen para la boca del personaje
 Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas

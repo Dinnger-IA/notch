@@ -47,6 +47,10 @@ namespace AgentManagerNotch.Services
         private bool _isBox;
         public bool IsBox { get => _isBox; set => Set(ref _isBox, value); }
 
+        private bool _isSpeaking;
+        /// <summary>Está leyendo en voz alta (el personaje mueve la boca).</summary>
+        public bool IsSpeaking { get => _isSpeaking; set => Set(ref _isSpeaking, value); }
+
         public bool IsCode => Profile.Kind == AgentKind.Code;
         public bool IsScheduled => Profile.Kind == AgentKind.Scheduled;
         public bool IsConversational => !IsScheduled;

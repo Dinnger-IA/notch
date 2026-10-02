@@ -18,7 +18,8 @@ using AgentManagerNotch.Providers;
 
 namespace AgentManagerNotch.Services
 {
-    public record TurnResult(bool Success, bool Cancelled, string Summary, TimeSpan Duration, bool FromSchedule);
+    /// <param name="FinalText">Última respuesta completa del agente en el turno (para leerla en voz alta).</param>
+    public record TurnResult(bool Success, bool Cancelled, string Summary, TimeSpan Duration, bool FromSchedule, string FinalText = "");
 
     /// <summary>Estado vivo de un agente: conversación, proceso CLI, aprobaciones pendientes y animación.</summary>
     public class AgentSession : INotifyPropertyChanged
@@ -219,6 +220,9 @@ namespace AgentManagerNotch.Services
 
         private bool _isBox;
         public bool IsBox { get => _isBox; set => Set(ref _isBox, value); }
+
+        /// <summary>El último mensaje se dictó por voz: la respuesta se lee en voz alta.</summary>
+        public bool ReplyByVoice { get; set; }
 
         private ApprovalRequest? _pending;
         public ApprovalRequest? PendingApproval { get => _pending; private set { if (Set(ref _pending, value)) RaiseOverview(); } }
@@ -643,7 +647,7 @@ namespace AgentManagerNotch.Services
             LastActivity = DateTime.Now;
             RaiseOutputChanged();
             RaiseOverview();
-            TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule));
+            TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule, lastAgent));
 
             // Siguiente tarea de la cola
             if (!_queuePaused && PendingTasks.Count > 0)

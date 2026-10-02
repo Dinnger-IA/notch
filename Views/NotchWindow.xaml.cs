@@ -62,6 +62,8 @@ namespace AgentManagerNotch.Views
             AppRef.Agents.CollectionChanged += Agents_CollectionChanged;
             foreach (var s in AppRef.Sessions) s.PropertyChanged += Session_PropertyChanged;
             AppRef.Sessions.CollectionChanged += Sessions_CollectionChanged;
+            AppRef.Voice.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(UpdateVoiceButtons);
+            UpdateVoiceButtons();
 
             SetFocused(Principal);
             RebuildPill();
@@ -344,6 +346,7 @@ namespace AgentManagerNotch.Views
             ChatMochi.SetBinding(MochiView.BodyColorProperty, new Binding(nameof(AgentEntry.Color)));
             ChatMochi.SetBinding(MochiView.StateProperty, new Binding(nameof(AgentEntry.State)));
             ChatMochi.SetBinding(MochiView.IsBoxProperty, new Binding(nameof(AgentEntry.IsBox)));
+            ChatMochi.SetBinding(MochiView.IsSpeakingProperty, new Binding(nameof(AgentEntry.IsSpeaking)));
         }
 
         private void FocusInput()
@@ -759,6 +762,7 @@ namespace AgentManagerNotch.Views
             m.SetBinding(MochiView.BodyColorProperty, new Binding(nameof(AgentEntry.Color)) { Source = a });
             m.SetBinding(MochiView.StateProperty, new Binding(nameof(AgentEntry.State)) { Source = a });
             m.SetBinding(MochiView.IsBoxProperty, new Binding(nameof(AgentEntry.IsBox)) { Source = a });
+            m.SetBinding(MochiView.IsSpeakingProperty, new Binding(nameof(AgentEntry.IsSpeaking)) { Source = a });
             return m;
         }
 
@@ -1005,6 +1009,9 @@ namespace AgentManagerNotch.Views
             }
             SetSounds.IsChecked = st.Sounds;
             SetNotifyDone.IsChecked = st.NotifyOnDone;
+            SetSpeakReplies.IsChecked = st.SpeakReplies;
+            SetVoiceMale.IsChecked = st.Voice == MaleVoice;
+            SetVoiceFemale.IsChecked = st.Voice != MaleVoice;
             SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled();
             SetHover.IsChecked = st.ExpandOnHover;
             SetHideNotch.IsChecked = st.HideNotch;
@@ -1038,6 +1045,10 @@ namespace AgentManagerNotch.Views
             {
                 case var c when c == SetSounds: st.Sounds = SetSounds.IsChecked == true; break;
                 case var c when c == SetNotifyDone: st.NotifyOnDone = SetNotifyDone.IsChecked == true; break;
+                case var c when c == SetSpeakReplies: st.SpeakReplies = SetSpeakReplies.IsChecked == true; UpdateVoiceButtons(); break;
+                case var c when c == SetVoiceFemale || c == SetVoiceMale:
+                    st.Voice = SetVoiceMale.IsChecked == true ? MaleVoice : VoiceService.DefaultVoice;
+                    break;
                 case var c when c == SetHover: st.ExpandOnHover = SetHover.IsChecked == true; break;
                 case var c when c == SetHideNotch: st.HideNotch = SetHideNotch.IsChecked == true; _lineHover = false; break;
                 case var c when c == SetStartup: NotificationService.SetStartup(SetStartup.IsChecked == true); break;
@@ -1054,6 +1065,15 @@ namespace AgentManagerNotch.Views
         }
 
         private void SetAgentEdit_Click(object sender, RoutedEventArgs e) { if (_settingsTarget != null) OpenEditor(_settingsTarget); }
+
+        private const string MaleVoice = "es_MX-ald-medium";
+
+        private void SetVoiceTest_Click(object sender, RoutedEventArgs e)
+        {
+            var who = _settingsTarget ?? Principal;
+            var s = who?.ActiveTab;
+            if (s != null) AppRef.Speak(s, $"Hola, soy {who!.Name}. Así sueno cuando te cuento lo que he investigado.");
+        }
 
         private void SetAgentDefault_Click(object sender, RoutedEventArgs e)
         {
@@ -1282,6 +1302,11 @@ namespace AgentManagerNotch.Views
                 e.Handled = true;
                 await SendCurrent();
             }
+            else if (e.Key == Key.Escape && AppRef.Voice.IsRecording)
+            {
+                e.Handled = true;
+                AppRef.Voice.CancelRecording();
+            }
             else if (e.Key == Key.Escape)
             {
                 e.Handled = true;
@@ -1294,6 +1319,75 @@ namespace AgentManagerNotch.Views
             Placeholder.Visibility = Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         private void Stop_Click(object sender, RoutedEventArgs e) => _selected?.Cancel();
+
+        // =============================================================== voz
+        private bool _transcribing;
+
+        /// <summary>Altavoz: si el agente está hablando lo calla; si no, activa o desactiva leer las respuestas.</summary>
+        private void Speaker_Click(object sender, RoutedEventArgs e)
+        {
+            var voice = AppRef.Voice;
+            if (voice.IsSpeaking) { voice.StopSpeaking(); return; }
+            var st = AppRef.Store.Config.Settings;
+            st.SpeakReplies = !st.SpeakReplies;
+            AppRef.Store.Save();
+            UpdateVoiceButtons();
+        }
+
+        /// <summary>Micrófono: el primer clic empieza a escuchar; el segundo transcribe y envía el mensaje.</summary>
+        private async void Mic_Click(object sender, RoutedEventArgs e)
+        {
+            var voice = AppRef.Voice;
+            var target = _selected;
+            if (_transcribing || target == null) return;
+            if (!voice.IsRecording)
+            {
+                try { voice.StartRecording(); }
+                catch (Exception ex) { target.AddNotice(ex.Message, error: true); }
+                UpdateVoiceButtons();
+                FocusInput();
+                return;
+            }
+            _transcribing = true;
+            UpdateVoiceButtons();
+            try
+            {
+                var hotwords = string.Join(",", AppRef.Agents.Select(a => a.Name).Append("Agent Manager"));
+                var text = await voice.StopRecordingAsync(hotwords);
+                if (text.Length == 0) { target.AddNotice("No te he entendido; vuelve a intentarlo."); return; }
+                Input.Text = (Input.Text.TrimEnd() + " " + text).Trim();
+                if (_selected == target && target.CanType)
+                {
+                    target.ReplyByVoice = true;
+                    await SendCurrent();
+                }
+            }
+            catch (Exception ex) { target.AddNotice(ex.Message, error: true); }
+            finally
+            {
+                _transcribing = false;
+                UpdateVoiceButtons();
+            }
+        }
+
+        private void SpeakMessage_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is ChatMessage m && _selected != null) AppRef.Speak(_selected, m.Text);
+        }
+
+        private void UpdateVoiceButtons()
+        {
+            var voice = AppRef.Voice;
+            var on = AppRef.Store.Config.Settings.SpeakReplies;
+            SpeakerButton.Content = voice.IsSpeaking ? "" : on ? "" : "";
+            SpeakerButton.ToolTip = voice.IsSpeaking ? "Dejar de hablar"
+                : on ? "Las respuestas se leen en voz alta (pulsa para desactivarlo)" : "Leer las respuestas en voz alta";
+            SpeakerButton.Foreground = (Brush)FindResource(voice.IsSpeaking || on ? "TextPrimary" : "TextSecondary");
+            MicButton.Foreground = voice.IsRecording ? (Brush)FindResource("ErrorFg") : (Brush)FindResource("TextPrimary");
+            MicButton.IsEnabled = !_transcribing;
+            Placeholder.Text = voice.IsRecording ? "Escuchando… pulsa el micrófono para enviar"
+                : _transcribing ? "Transcribiendo…" : "Continuar…";
+        }
         private void NewChat_Click(object sender, RoutedEventArgs e) => _selected?.NewConversation();
 
         private void CopyMessage_Click(object sender, RoutedEventArgs e)
