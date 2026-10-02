@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 namespace AgentManagerNotch.Models
 {
     /// <summary>CLI que ejecuta al agente por debajo.</summary>
-    public enum ProviderKind { ClaudeCode, Codex, Gemini, Custom }
+    public enum ProviderKind { ClaudeCode, Codex, Gemini, Custom, AgentManager }
 
     /// <summary>Cómo se manejan los permisos de herramientas.</summary>
     public enum ApprovalMode

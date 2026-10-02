@@ -206,7 +206,7 @@ namespace AgentManagerNotch.Services
 <style>body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0c0c10;color:#ececf2;font-family:'Segoe UI',sans-serif}}
 .card{{background:#16152a;border-radius:20px;padding:36px 40px;max-width:420px;text-align:center;box-shadow:0 10px 40px #0008}}
 .icon{{font-size:40px;margin-bottom:8px}}h1{{font-size:20px;margin:0 0 10px}}p{{color:#9a9aa8;font-size:14px;line-height:1.5;margin:0}}</style></head>
-<body><div class=""card""><div class=""icon"">{(ok ? "✅" : "⚠️")}</div><h1>{WebUtility.HtmlEncode(title)}</h1><p>{WebUtility.HtmlEncode(message)}</p></div></body></html>";
+<body><script>history.replaceState(null, '', '/api/callback');</script><div class=""card""><div class=""icon"">{(ok ? "✅" : "⚠️")}</div><h1>{WebUtility.HtmlEncode(title)}</h1><p>{WebUtility.HtmlEncode(message)}</p></div></body></html>";
                 var bytes = Encoding.UTF8.GetBytes(html);
                 ctx.Response.StatusCode = status;
                 ctx.Response.ContentType = "text/html; charset=utf-8";
@@ -222,6 +222,17 @@ namespace AgentManagerNotch.Services
             var d = Application.Current?.Dispatcher;
             if (d == null || d.CheckAccess()) Changed?.Invoke();
             else d.BeginInvoke(() => Changed?.Invoke());
+        }
+
+        /// <summary>Token guardado, para procesos auxiliares (modo --llm). No lo valida.</summary>
+        public static string? LoadSavedToken()
+        {
+            try
+            {
+                if (!File.Exists(TokenPath)) return null;
+                return Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(TokenPath), Entropy, DataProtectionScope.CurrentUser));
+            }
+            catch { return null; }
         }
 
         private static string? LoadToken()

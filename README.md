@@ -47,6 +47,13 @@ Al arrancar se revalida el token; si caducó, se vuelve a pedir el login (sin co
 `https://agent-manager.distelsa.net/mcp?t=<token>`. Si ya existe, no se toca. El notch avisa si instaló algo
 o si falló, y el resultado queda en el registro (sin el token).
 
+**Primera configuración.** La primera vez (sin `config.json`) se crean los agentes según los CLI instalados:
+
+| ¿Hay algún CLI? | Agentes |
+|---|---|
+| Sí (el primero de Claude Code → Codex → Gemini) | **Codi** (código, con ese CLI, principal), **Doky** (chat, LLM de Agent Manager) y **Nube** (chat, con ese CLI) |
+| No | **Doky** y **Nube**, los dos con el LLM de Agent Manager |
+
 ## Tipos de agente
 
 | Tipo | Qué hace | Al abrirlo |
@@ -163,6 +170,7 @@ En el editor de agentes puedes previsualizar todos los estados.
 | **Codex** | `codex exec --json … -` (prompt por stdin) | `codex exec resume <thread>` | `-c developer_instructions="…"` | sandbox `read-only` / `workspace-write` / bypass |
 | **Gemini CLI** | `gemini -p … --output-format stream-json` | `--resume` | se antepone al primer mensaje | `--approval-mode auto_edit` / `--yolo` |
 | **Personalizado** | tu comando, con `{prompt}` `{system}` `{model}` | se reenvía el historial reciente | incluido en el prompt | — |
+| **Agent Manager** | `AgentManagerNotch.exe --llm` → `POST /api/default/test-ia` (OpenAI Chat Completions, streaming) con `Authorization: Bearer <token>` de la sesión | se reenvía el historial reciente (30 mensajes) | mensaje `system` | — (solo texto) |
 
 Modos de permiso por agente: *Preguntar* (recomendado), *Editar solo / preguntar comandos*,
 *Solo lectura* y *Automático*.
@@ -204,6 +212,7 @@ Services/AgentSession.cs   una conversación (agente o pestaña de workspace): c
 Services/Scheduler.cs      ejecuta los agentes programados según su horario
 Services/AuthService.cs    inicio de sesión con Agent Manager (callback en localhost:5454, token cifrado con DPAPI)
 Services/McpSetup.cs       instala el MCP de Agent Manager en los CLI que no lo tengan
+Services/LlmBridge.cs      modo --llm: el LLM de Agent Manager como un CLI más (stdin mensajes, stdout eventos)
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios

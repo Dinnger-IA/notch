@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Providers;
 
 namespace AgentManagerNotch.Services
 {
@@ -43,7 +45,14 @@ namespace AgentManagerNotch.Services
                 try { File.Copy(ConfigPath, ConfigPath + ".bak", true); } catch { }
                 Config = new AppConfig();
             }
-            if (Config.Agents.Count == 0) Config.Agents.AddRange(DefaultAgents());
+            if (Config.Agents.Count == 0)
+            {
+                // Primera configuración: los agentes iniciales dependen de los CLI instalados
+                Config.Agents.AddRange(DefaultAgents());
+                Config.Settings.DefaultAgentId = Config.Agents[0].Id;
+                Config.Settings.SeededCodeAgent = true;
+                Log.Info("Primera configuración: " + string.Join(", ", Config.Agents.Select(a => $"{a.Name} ({a.Provider})")));
+            }
         }
 
         /// <summary>Copia los datos de la carpeta del nombre anterior (la original queda como respaldo).</summary>
@@ -123,27 +132,41 @@ namespace AgentManagerNotch.Services
             SystemPrompt = CodePrompt
         };
 
-        public static AgentProfile[] DefaultAgents() => new[]
+        /// <summary>Primer CLI instalado (Claude Code, Codex o Gemini), o null si no hay ninguno.</summary>
+        public static ProviderKind? FirstInstalledCli() =>
+            new[] { ProviderKind.ClaudeCode, ProviderKind.Codex, ProviderKind.Gemini }
+                .Cast<ProviderKind?>()
+                .FirstOrDefault(k => CliResolver.Find(ProviderFactory.Executable(k!.Value)) != null);
+
+        /// <summary>
+        /// Agentes iniciales. Con algún CLI instalado: Codi (código), Doky (chat con el LLM de Agent Manager) y
+        /// Nube (chat), Codi y Nube con ese CLI. Sin CLI: Doky y Nube, los dos con el LLM de Agent Manager.
+        /// </summary>
+        public static List<AgentProfile> DefaultAgents()
         {
-            NewCodeAgent(null, "Código", "#FF9E5E"),
-            new AgentProfile
+            var cli = FirstInstalledCli();
+            var list = new List<AgentProfile>();
+            if (cli is ProviderKind c)
             {
-                Name = "Mochi", ColorHex = "#FF8A65", Provider = ProviderKind.ClaudeCode,
-                SystemPrompt = "Eres Mochi, un asistente amable y conciso que vive en la parte superior de la pantalla de Windows. Respondes en español, de forma breve y clara. Ayudas con tareas de programación, preguntas rápidas y recordatorios."
-            },
-            new AgentProfile
-            {
-                Name = "Codi", ColorHex = "#4DD0A1", Provider = ProviderKind.Codex,
-                SystemPrompt = "Eres Codi, un ingeniero de software senior. Escribes código limpio, explicas los cambios en pocas líneas y siempre verificas lo que haces.",
-                Approval = ApprovalMode.AcceptEdits
-            },
-            new AgentProfile
-            {
-                Name = "Nube", ColorHex = "#9C8CFF", Provider = ProviderKind.ClaudeCode,
-                SystemPrompt = "Eres Nube, un asistente personal de planificación. Ayudas a organizar el día, dividir tareas grandes en pasos y creas recordatorios cuando el usuario lo pide.",
-                Approval = ApprovalMode.ReadOnly
+                var codi = NewCodeAgent(null, "Codi", "#4DD0A1");
+                codi.Provider = c;
+                list.Add(codi);
             }
-        };
+            list.Add(new AgentProfile
+            {
+                Name = "Doky", ColorHex = "#64B5F6", Kind = AgentKind.Interactive, Provider = ProviderKind.AgentManager,
+                Approval = ApprovalMode.ReadOnly,
+                SystemPrompt = "Eres Doky, el asistente de Agent Manager. Respondes en español, de forma breve y clara. " +
+                               "Ayudas con preguntas rápidas, redacción, ideas y recordatorios."
+            });
+            list.Add(new AgentProfile
+            {
+                Name = "Nube", ColorHex = "#9C8CFF", Kind = AgentKind.Interactive, Provider = cli ?? ProviderKind.AgentManager,
+                Approval = ApprovalMode.ReadOnly,
+                SystemPrompt = "Eres Nube, un asistente personal de planificación. Ayudas a organizar el día, dividir tareas grandes en pasos y creas recordatorios cuando el usuario lo pide."
+            });
+            return list;
+        }
     }
 
     public static class Log

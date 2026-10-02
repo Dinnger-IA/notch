@@ -54,6 +54,7 @@ namespace AgentManagerNotch.Providers
             ProviderKind.ClaudeCode => new ClaudeCodeProvider(),
             ProviderKind.Codex => new CodexProvider(),
             ProviderKind.Gemini => new GeminiProvider(),
+            ProviderKind.AgentManager => new AgentManagerProvider(),
             _ => new CustomProvider()
         };
 
@@ -62,6 +63,7 @@ namespace AgentManagerNotch.Providers
             ProviderKind.ClaudeCode => "Claude Code",
             ProviderKind.Codex => "Codex",
             ProviderKind.Gemini => "Gemini CLI",
+            ProviderKind.AgentManager => "Agent Manager",
             _ => "Personalizado"
         };
 
@@ -560,6 +562,49 @@ namespace AgentManagerNotch.Providers
         public IEnumerable<AgentEvent> Parse(string line)
         {
             yield return new DeltaEvent(Ansi.Replace(line, "") + "\n");
+        }
+    }
+
+    // =====================================================================
+    // Agent Manager: el LLM de Agent Manager vía «AgentManagerNotch.exe --llm» (ver LlmBridge)
+    // =====================================================================
+    public class AgentManagerProvider : ICliProvider
+    {
+        public bool PlainText => false;
+
+        public LaunchSpec Build(AgentProfile p, string prompt, string? sessionId, RunContext ctx)
+        {
+            // Sin sesión en el servidor: se manda la conversación reciente en cada petición.
+            var messages = new List<object>();
+            if (!string.IsNullOrWhiteSpace(ctx.FullSystemPrompt)) messages.Add(new { role = "system", content = ctx.FullSystemPrompt });
+            var hist = ctx.History.Where(m => m.Role is ChatRole.User or ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text)).TakeLast(30).ToList();
+            // El último mensaje del historial es el que se está enviando: va con el texto real del prompt
+            foreach (var m in hist.Take(Math.Max(0, hist.Count - 1)))
+                messages.Add(new { role = m.Role == ChatRole.User ? "user" : "assistant", content = m.Text });
+            messages.Add(new { role = "user", content = prompt });
+
+            var exe = Environment.ProcessPath ?? throw new InvalidOperationException("No se encontró el ejecutable de Agent Manager Notch.");
+            var psi = ProviderFactory.NewPsi(exe, p);
+            psi.ArgumentList.Add("--llm");
+            return new LaunchSpec { Psi = psi, StdinText = JsonSerializer.Serialize(new { model = p.Model, messages }) };
+        }
+
+        public IEnumerable<AgentEvent> Parse(string line)
+        {
+            JsonElement root;
+            try { using var doc = JsonDocument.Parse(line); root = doc.RootElement.Clone(); }
+            catch (JsonException) { yield break; }
+            switch (ProviderFactory.Str(root, "type"))
+            {
+                case "delta":
+                    yield return new DeltaEvent(ProviderFactory.Str(root, "text"));
+                    break;
+                case "result":
+                    var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == JsonValueKind.True;
+                    var err = ProviderFactory.Str(root, "error");
+                    yield return new ResultEvent(ok, ok ? null : (err != "" ? err : "Agent Manager no respondió."), null);
+                    break;
+            }
         }
     }
 }

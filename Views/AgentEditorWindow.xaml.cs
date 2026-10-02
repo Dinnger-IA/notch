@@ -307,6 +307,7 @@ namespace AgentManagerNotch.Views
             ModelBox.Text = current;
 
             if (k == ProviderKind.Custom) { ProviderStatus.Text = "Se ejecuta el comando que escribas abajo."; return; }
+            if (k == ProviderKind.AgentManager) { ProviderStatus.Text = "✓ Usa el LLM de Agent Manager con tu sesión (no necesita CLI)."; return; }
             var exe = ProviderFactory.Executable(k);
             var found = CliResolver.Find(exe);
             ProviderStatus.Text = found != null ? $"✓ Encontrado: {found}" : $"⚠ No se encontró «{exe}» en el PATH";

@@ -20,6 +20,8 @@ namespace AgentManagerNotch
         {
             // Modo hook: lo invoca Claude Code antes de usar una herramienta (no abre ventanas).
             if (args.Length > 0 && args[0] == "--hook") return HookBridge.Run();
+            // Modo LLM: lo lanza un agente con proveedor Agent Manager (stdin = mensajes, stdout = eventos).
+            if (args.Length > 0 && args[0] == "--llm") return LlmBridge.Run();
             // Comandos de control: --notify, --ask, --claude-event
             if (ControlChannel.TryRunCli(args) is int code) return code;
 
