@@ -824,6 +824,9 @@
                                     <TextBlock x:Name="SetVersion" FontSize="12.5" Foreground="#ECECF2"/>
                                     <TextBlock x:Name="SetUpdateStatus" FontSize="11.5" Foreground="#9A9AA8" TextWrapping="Wrap" Margin="0,3,0,2"/>
                                     <WrapPanel>
+                                        <Button Style="{StaticResource SettingsButton}" Click="SetReleaseNotes_Click">
+                                            <TextBlock><Run Text="&#xE8A5;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Notas de la versión"/></TextBlock>
+                                        </Button>
                                         <Button x:Name="SetCheckUpdates" Style="{StaticResource SettingsButton}" Click="SetCheckUpdates_Click">
                                             <TextBlock><Run Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Buscar ahora"/></TextBlock>
                                         </Button>

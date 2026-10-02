@@ -46,6 +46,11 @@
     </LatestVersion>
   </Target>
 
+  <!-- Las notas (y los GIF) de todas las versiones van dentro del ejecutable para la ventana «Notas de la versión» -->
+  <ItemGroup>
+    <EmbeddedResource Include="versiones\*.md;versiones\*.gif" Exclude="versiones\README.md" LogicalName="versiones/%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!-- Commit y rama con los que se compiló: para el registro y la rama que se consulta al buscar versiones nuevas -->
   <Target Name="EmbedGitInfo" BeforeTargets="GetAssemblyAttributes">
     <Exec Command="git rev-parse HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">

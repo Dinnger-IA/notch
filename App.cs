@@ -101,6 +101,7 @@ namespace AgentManagerNotch
             Notifier.NotificationClicked += key => Notch.Expand(focusInput: true, sessionKey: key);
             Notifier.NewAgentRequested += () => Notch.OpenEditor(null);
             Notifier.RemindersRequested += () => Notch.OpenReminders();
+            Notifier.ReleaseNotesRequested += () => Notch.OpenReleaseNotes();
             Notifier.ExitRequested += ExitApp;
 
             Reminders = new ReminderService(Store);
@@ -119,6 +120,7 @@ namespace AgentManagerNotch
                 Notifier.Toast("Nueva versión de Agent Manager Notch", "Abre el notch → ⚙ Configuración → Actualizar.", null);
             };
             Updates.Start();
+            ShowNotesIfUpdated();
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);
@@ -139,6 +141,16 @@ namespace AgentManagerNotch
             }.Where(x => x != null));
             Notch.ShowBannerRaw(ClaudeColor, failed.Count > 0 ? MochiState.Error : MochiState.Done,
                 "MCP de Agent Manager", body, null, sticky: failed.Count > 0);
+        }
+
+        /// <summary>Recién actualizado (la versión es mayor que la de la última vez): abre las notas de la nueva.</summary>
+        private void ShowNotesIfUpdated()
+        {
+            var st = Store.Config.Settings;
+            var current = Updates.LocalVersion;
+            var updated = Version.TryParse(st.LastSeenVersion, out var last) && current > last;
+            if (st.LastSeenVersion != Updates.Version) { st.LastSeenVersion = Updates.Version; Store.Save(); }
+            if (updated) Dispatcher.BeginInvoke(() => Notch.OpenReleaseNotes(current), DispatcherPriority.ApplicationIdle);
         }
 
         // =============================================================== agentes, pestañas y sesiones
@@ -461,6 +473,9 @@ namespace AgentManagerNotch
                         break;
                     case "reminders":
                         Notch.OpenReminders();
+                        break;
+                    case "release-notes":
+                        Notch.OpenReleaseNotes(Version.TryParse(msg["version"]?.GetValue<string>(), out var notesVersion) ? notesVersion : null);
                         break;
                     case "notify":
                         {

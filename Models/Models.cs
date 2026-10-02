@@ -350,6 +350,8 @@ namespace AgentManagerNotch.Models
         public string? DefaultAgentId { get; set; }
         /// <summary>Ya se creó el agente de código por defecto (para no recrearlo si el usuario lo borra).</summary>
         public bool SeededCodeAgent { get; set; }
+        /// <summary>Última versión con la que se abrió: si al arrancar la versión es mayor, se muestran sus notas.</summary>
+        public string? LastSeenVersion { get; set; }
     }
 
     public class AppConfig

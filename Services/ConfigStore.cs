@@ -42,7 +42,8 @@ namespace AgentManagerNotch.Services
             catch (Exception ex)
             {
                 Log.Error("No se pudo leer config.json", ex);
-                try { File.Copy(ConfigPath, ConfigPath + ".bak", true); } catch { }
+                // Respaldo con fecha: un segundo fallo no debe pisar el respaldo del primero
+                try { File.Copy(ConfigPath, $"{ConfigPath}.{DateTime.Now:yyyyMMdd-HHmmss}.bak", false); } catch { }
                 Config = new AppConfig();
             }
             if (Config.Agents.Count == 0)

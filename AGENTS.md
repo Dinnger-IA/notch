@@ -43,9 +43,17 @@ Depende de Agent Manager y por tanto va en `agent-manager`:
 
 - La versión es la mayor de `versiones/` (un archivo `X.Y.Z.md` por versión; formato en `versiones/README.md`).
   El notch solo avisa de una actualización cuando su rama tiene una versión mayor que la instalada.
-- Para publicar algo que los usuarios deban recibir, añade `versiones/X.Y.Z.md` con las novedades en líneas `- …`
-  (en español, pensadas para el usuario). La versión se añade en `main` y llega a `agent-manager` con el merge;
-  si un cambio solo de `agent-manager` merece aviso, sube la versión en esa rama sin volver a usar ese número en `main`.
+- **Cada vez que haya cambios nuevos, crea la versión que los recoge**: `versiones/X.Y.Z.md` con las novedades en
+  líneas `- …` (en español, pensadas para el usuario; admiten Markdown). Si la versión más alta todavía no se ha
+  subido (`git log origin/<rama> -- versiones/`), añade las novedades a ese archivo en vez de crear otro. Sube el
+  menor (Z) para correcciones y el intermedio (Y) para funciones nuevas.
+- **Si el cambio es visual** (algo que se ve distinto en el notch o en una ventana), graba un GIF que lo enseñe y
+  guárdalo como `versiones/X.Y.Z.gif` con `versiones\grabar-gif.ps1` (ver `versiones/README.md`). Se ve en la
+  ventana *Notas de la versión*, donde cada versión tiene su pestaña en la barra lateral.
+- La versión se añade en `main` y llega a `agent-manager` con el merge; si un cambio solo de `agent-manager`
+  merece versión, súbela en esa rama sin volver a usar ese número en `main`.
+- La app de uso diario (`publish\`) se publica **siempre desde `agent-manager`**: una compilación de `main` no
+  conoce el proveedor de Agent Manager y no puede leer la configuración del usuario.
 
 ## Convenciones
 
