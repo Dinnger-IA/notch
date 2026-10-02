@@ -495,7 +495,7 @@ namespace AgentManagerNotch.Views
         private Rect? BoundsInSwapLayer(FrameworkElement? el)
         {
             if (el == null || !el.IsVisible || el.ActualWidth <= 0) return null;
-            try { return el.TransformToAncestor(SwapLayer).TransformBounds(new Rect(el.RenderSize)); }
+            try { return el.TransformToVisual(SwapLayer).TransformBounds(new Rect(el.RenderSize)); }
             catch (InvalidOperationException) { return null; }
         }
 
