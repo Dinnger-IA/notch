@@ -10,10 +10,12 @@ using System.Windows.Threading;
 namespace AgentManagerNotch.Services
 {
     /// <summary>
-    /// Busca versiones nuevas cada 2 horas de la forma más ligera posible: compara el commit con el que se compiló
-    /// (incrustado en el ensamblado) con el de su rama en el repositorio (<c>git ls-remote</c>, solo una referencia,
-    /// sin descargar nada). Para actualizar: git pull --ff-only + publish.ps1 en la carpeta del repositorio, con un
-    /// script aparte que espera a que el notch se cierre y lo vuelve a abrir.
+    /// Busca versiones nuevas cada 2 horas: compara la versión con la que se compiló (la mayor de la carpeta
+    /// <c>versiones\</c>) con la mayor de esa carpeta en su rama del repositorio (<c>git fetch</c> en la carpeta del
+    /// repositorio, o un clon mínimo temporal si esta copia no está dentro de uno). Solo avisa si la del repositorio
+    /// es mayor, así que un commit sin versión nueva no pide actualizar. Para actualizar: git pull --ff-only +
+    /// publish.ps1 en la carpeta del repositorio, con un script aparte que espera a que el notch se cierre y abre
+    /// la copia recién publicada.
     /// </summary>
     public sealed class UpdateService
     {
@@ -22,23 +24,28 @@ namespace AgentManagerNotch.Services
 
         public string LocalCommit { get; } = Metadata("GitCommit");
         public string Branch { get; } = Metadata("GitBranch");
-        public string Version { get; } = typeof(UpdateService).Assembly.GetName().Version?.ToString(3) ?? "";
-        public string? RemoteCommit { get; private set; }
+        public Version LocalVersion { get; } = Normalize(typeof(UpdateService).Assembly.GetName().Version);
+        public string Version => LocalVersion.ToString(3);
+        /// <summary>Mayor versión publicada en la rama del repositorio (null hasta la primera comprobación).</summary>
+        public Version? RemoteVersion { get; private set; }
+        /// <summary>Novedades de <see cref="RemoteVersion"/> (las líneas «- …» de su archivo).</summary>
+        public string[] RemoteNotes { get; private set; } = [];
         public DateTime? LastCheck { get; private set; }
         public string? LastError { get; private set; }
         public bool Checking { get; private set; }
-        public bool UpdateAvailable => RemoteCommit != null && LocalCommit != "" && !RemoteCommit.Equals(LocalCommit, StringComparison.OrdinalIgnoreCase);
+        public bool UpdateAvailable => RemoteVersion != null && RemoteVersion > LocalVersion;
+        public string RemoteVersionText => RemoteVersion?.ToString(3) ?? "?";
 
         /// <summary>Carpeta del repositorio (la publicación vive en &lt;repo&gt;\publish), o null si no se puede actualizar sola.</summary>
         public string? RepoDir { get; }
 
         /// <summary>Cambió el estado (comprobación terminada). En el hilo de la interfaz.</summary>
         public event Action? Changed;
-        /// <summary>Se encontró una versión nueva (una vez por commit).</summary>
+        /// <summary>Se encontró una versión nueva (una vez por versión).</summary>
         public event Action? Found;
 
         private readonly DispatcherTimer _timer = new() { Interval = Interval };
-        private string? _notifiedFor;
+        private Version? _notifiedFor;
 
         public UpdateService()
         {
@@ -52,7 +59,7 @@ namespace AgentManagerNotch.Services
 
         public void Start()
         {
-            if (LocalCommit == "" || Branch is "" or "HEAD") { Log.Info("Actualizaciones: compilación sin información de git, no se comprueba"); return; }
+            if (Branch is "" or "HEAD") { Log.Info("Actualizaciones: compilación sin información de git, no se comprueba"); return; }
             _timer.Start();
             // Primera comprobación al poco de arrancar, sin estorbar el inicio
             var first = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
@@ -62,23 +69,19 @@ namespace AgentManagerNotch.Services
 
         public async Task CheckAsync()
         {
-            if (Checking || LocalCommit == "") return;
+            if (Checking || Branch is "" or "HEAD") return;
             Checking = true;
             Changed?.Invoke();
             try
             {
-                var (code, output) = await Task.Run(() => Git(null, "ls-remote", RepoUrl, $"refs/heads/{Branch}"));
-                var hash = output.Split('\n').Select(l => l.Split('\t')[0].Trim()).FirstOrDefault(h => h.Length >= 40);
-                if (code != 0 || hash == null)
-                {
-                    LastError = code != 0 ? "No se pudo consultar el repositorio (¿sin conexión o sin acceso?)." : $"La rama «{Branch}» no existe en el repositorio.";
-                    Log.Info($"Actualizaciones: {LastError} {Tail(output)}");
-                }
+                var (version, notes, error) = await Task.Run(ReadRemote);
+                LastError = error;
+                if (error != null) Log.Info($"Actualizaciones: {error}");
                 else
                 {
-                    LastError = null;
-                    RemoteCommit = hash;
-                    Log.Info($"Actualizaciones: local {Short(LocalCommit)} · remoto {Short(hash)} ({Branch})");
+                    RemoteVersion = version;
+                    RemoteNotes = notes;
+                    Log.Info($"Actualizaciones: local {Version} ({Short(LocalCommit)}) · remoto {RemoteVersionText} ({Branch})");
                 }
                 LastCheck = DateTime.Now;
             }
@@ -86,7 +89,48 @@ namespace AgentManagerNotch.Services
             {
                 Checking = false;
                 Changed?.Invoke();
-                if (UpdateAvailable && _notifiedFor != RemoteCommit) { _notifiedFor = RemoteCommit; Found?.Invoke(); }
+                if (UpdateAvailable && _notifiedFor != RemoteVersion) { _notifiedFor = RemoteVersion; Found?.Invoke(); }
+            }
+        }
+
+        /// <summary>Lee la mayor versión de <c>versiones\</c> en la rama del repositorio y sus novedades.</summary>
+        private (Version?, string[], string?) ReadRemote()
+        {
+            string? temp = null;
+            try
+            {
+                string dir, rev;
+                if (RepoDir != null)
+                {
+                    var (fc, fo) = Git(RepoDir, "fetch", "--quiet", "origin", Branch);
+                    if (fc != 0) return (null, [], $"No se pudo consultar el repositorio (¿sin conexión o sin acceso?). {Tail(fo)}");
+                    (dir, rev) = (RepoDir, $"origin/{Branch}");
+                }
+                else
+                {
+                    // Copia suelta: clon mínimo (sin archivos ni historia) solo para leer la carpeta de versiones
+                    temp = Path.Combine(Path.GetTempPath(), $"agent-manager-notch-check-{Guid.NewGuid():N}");
+                    var (cc, co) = Git(null, "clone", "--quiet", "--depth", "1", "--filter=blob:none", "--no-checkout", "--branch", Branch, RepoUrl, temp);
+                    if (cc != 0) return (null, [], $"No se pudo consultar el repositorio (¿sin conexión o sin acceso?). {Tail(co)}");
+                    (dir, rev) = (temp, "HEAD");
+                }
+                var (lc, list) = Git(dir, "ls-tree", "--name-only", $"{rev}:versiones");
+                if (lc != 0) return (null, [], $"La rama «{Branch}» del repositorio todavía no tiene carpeta de versiones.");
+                var latest = list.Split('\n')
+                    .Select(n => n.Trim())
+                    .Where(n => n.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                    .Select(n => (name: n, v: System.Version.TryParse(Path.GetFileNameWithoutExtension(n), out var v) ? Normalize(v) : null))
+                    .Where(x => x.v != null)
+                    .OrderByDescending(x => x.v)
+                    .FirstOrDefault();
+                if (latest.v == null) return (null, [], $"La rama «{Branch}» del repositorio todavía no tiene versiones.");
+                var (sc, text) = Git(dir, "show", $"{rev}:versiones/{latest.name}");
+                var notes = sc != 0 ? [] : text.Split('\n').Select(l => l.Trim()).Where(l => l.StartsWith("- ")).Select(l => l[2..].Trim()).ToArray();
+                return (latest.v, notes, null);
+            }
+            finally
+            {
+                if (temp != null) try { ForceDelete(temp); } catch { }
             }
         }
 
@@ -104,7 +148,9 @@ namespace AgentManagerNotch.Services
             if (sc != 0) return "No se pudo leer el estado del repositorio.";
             if (status.Trim() != "") return "El repositorio tiene cambios sin guardar en git; actualízalo a mano (git pull) para no perderlos.";
 
-            var exe = Environment.ProcessPath ?? Path.Combine(RepoDir, "publish", "AgentManagerNotch.exe");
+            // Siempre la copia recién publicada (aunque esta corra desde bin\…): si no, se volvería a abrir la antigua
+            var exe = Path.Combine(RepoDir, "publish", "AgentManagerNotch.exe");
+            const string runKey = @"HKCU:\Software\Microsoft\Windows\CurrentVersion\Run";
             var log = Path.Combine(ConfigStore.Root, "update.log");
             var script = Path.Combine(Path.GetTempPath(), "agent-manager-notch-update.ps1");
             File.WriteAllText(script, $$"""
@@ -115,8 +161,12 @@ namespace AgentManagerNotch.Services
                 $env:GIT_TERMINAL_PROMPT = '0'
                 git pull --ff-only
                 if ($LASTEXITCODE -eq 0) { & '.\publish.ps1' } else { Write-Host 'git pull falló: se abre la versión actual' }
+                # «Iniciar con Windows» también pasa a la copia publicada
+                if (Get-ItemProperty -Path '{{runKey}}' -Name AgentManagerNotch -ErrorAction SilentlyContinue) {
+                    Set-ItemProperty -Path '{{runKey}}' -Name AgentManagerNotch -Value '"{{exe}}"'
+                }
                 Stop-Transcript | Out-Null
-                Start-Process '{{exe}}'
+                if (Test-Path '{{exe}}') { Start-Process '{{exe}}' } else { Start-Process '{{Environment.ProcessPath}}' }
                 """, new UTF8Encoding(true));
             Process.Start(new ProcessStartInfo("powershell.exe")
             {
@@ -124,11 +174,21 @@ namespace AgentManagerNotch.Services
                 UseShellExecute = false,
                 CreateNoWindow = true
             });
-            Log.Info($"Actualizaciones: actualizando de {Short(LocalCommit)} a {Short(RemoteCommit)}");
+            Log.Info($"Actualizaciones: actualizando de {Version} a {RemoteVersionText}");
             return null;
         }
 
         // =============================================================== utilidades
+        /// <summary>Versión con tres componentes (1.2 → 1.2.0, 1.2.0.0 → 1.2.0) para compararlas sin sorpresas.</summary>
+        private static Version Normalize(Version? v) => v == null ? new Version(0, 0, 0) : new Version(v.Major, v.Minor, Math.Max(v.Build, 0));
+
+        /// <summary>Borra una carpeta aunque git haya dejado archivos de solo lectura.</summary>
+        private static void ForceDelete(string dir)
+        {
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)) File.SetAttributes(f, FileAttributes.Normal);
+            Directory.Delete(dir, true);
+        }
+
         private static string Metadata(string key) =>
             typeof(UpdateService).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value?.Trim() ?? "";
 

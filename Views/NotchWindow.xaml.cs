@@ -132,7 +132,9 @@ namespace AgentManagerNotch.Views
                     ScheduleContent.Measure(new Size(590, double.PositiveInfinity));
                     return new Size(640, Math.Clamp(ScheduleContent.DesiredSize.Height + 40 + 36, 200, 520));
                 case Mode.Banner: return new Size(450, 74);
-                case Mode.Update: return new Size(580, 210);
+                case Mode.Update:
+                    UpdateView.Measure(new Size(560, double.PositiveInfinity));
+                    return new Size(580, Math.Clamp(UpdateView.DesiredSize.Height + 40 + 12, 210, 420));
                 case Mode.Settings:
                     SettingsContent.Measure(new Size(700, double.PositiveInfinity));
                     return new Size(740, Math.Clamp(SettingsContent.DesiredSize.Height + 40 + 12, 200, 580));
@@ -975,10 +977,10 @@ namespace AgentManagerNotch.Views
         public void RefreshUpdateInfo()
         {
             var u = AppRef.Updates;
-            SetVersion.Text = $"Agent Manager Notch {u.Version} · {UpdateService.Short(u.LocalCommit)}" + (u.Branch is "" or "HEAD" ? "" : $" ({u.Branch})");
+            SetVersion.Text = $"Agent Manager Notch {u.Version}" + (u.Branch is "" or "HEAD" ? "" : $" · {u.Branch}");
             SetUpdateStatus.Foreground = (Brush)FindResource(u.UpdateAvailable ? "TextPrimary" : "TextSecondary");
             SetUpdateStatus.Text = u.Checking ? "Buscando actualizaciones…"
-                : u.UpdateAvailable ? $"Hay una versión nueva ({UpdateService.Short(u.RemoteCommit)})."
+                : u.UpdateAvailable ? $"Hay una versión nueva: {u.RemoteVersionText}."
                 : u.LastError != null ? u.LastError
                 : u.LastCheck is DateTime when ? $"Al día · comprobado a las {when:HH:mm}. Se revisa cada 2 horas."
                 : "Se revisa cada 2 horas.";
@@ -1031,7 +1033,7 @@ namespace AgentManagerNotch.Views
         {
             var busy = AppRef.Sessions.Count(s => s.IsBusy);
             _modalOpen = true;
-            var msg = $"Se descargará la versión nueva ({UpdateService.Short(AppRef.Updates.RemoteCommit)}), se compilará y el notch se volverá a abrir solo." +
+            var msg = $"Se descargará la versión {AppRef.Updates.RemoteVersionText}, se compilará y el notch se volverá a abrir solo." +
                       (busy > 0 ? $"\n\nHay {busy} agente(s) trabajando: se detendrán." : "");
             var ok = MessageBox.Show(this, msg, "Actualizar Agent Manager Notch", MessageBoxButton.OKCancel, MessageBoxImage.Information, MessageBoxResult.OK) == MessageBoxResult.OK;
             _modalOpen = false;
@@ -1059,9 +1061,9 @@ namespace AgentManagerNotch.Views
         private const string UpdateBannerKey = "::update";
 
         // =============================================================== agente de actualización
-        private string? _updateDismissedFor;
+        private Version? _updateDismissedFor;
         /// <summary>Hay una versión nueva que el usuario no ha pospuesto con «Más tarde».</summary>
-        private bool UpdatePending => AppRef.Updates.UpdateAvailable && _updateDismissedFor != AppRef.Updates.RemoteCommit;
+        private bool UpdatePending => AppRef.Updates.UpdateAvailable && _updateDismissedFor != AppRef.Updates.RemoteVersion;
 
         /// <summary>Se encontró una versión nueva: aparece el agente de actualización en la píldora.</summary>
         public void OnUpdateFound()
@@ -1074,9 +1076,11 @@ namespace AgentManagerNotch.Views
         {
             var u = AppRef.Updates;
             var busy = AppRef.Sessions.Count(s => s.IsBusy);
-            UpdateText.Text = $"Tienes {UpdateService.Short(u.LocalCommit)} y en «{u.Branch}» ya está {UpdateService.Short(u.RemoteCommit)}. " +
-                              "Se descarga, se compila y el notch se vuelve a abrir solo." +
+            UpdateTitle.Text = $"Versión {u.RemoteVersionText} disponible";
+            UpdateText.Text = $"Tienes la {u.Version}. Se descarga, se compila y el notch se vuelve a abrir solo." +
                               (busy > 0 ? $" Hay {busy} agente(s) trabajando: se detendrán." : "");
+            UpdateNotes.Text = string.Join("\n", u.RemoteNotes.Take(5).Select(n => "•  " + n));
+            UpdateNotes.Visibility = u.RemoteNotes.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             UpdateNowButton.IsEnabled = true;
             if (_mode != Mode.Update) SetMode(Mode.Update);
         }
@@ -1091,7 +1095,7 @@ namespace AgentManagerNotch.Views
 
         private void UpdateLater_Click(object sender, RoutedEventArgs e)
         {
-            _updateDismissedFor = AppRef.Updates.RemoteCommit;
+            _updateDismissedFor = AppRef.Updates.RemoteVersion;
             RebuildPill();
             ShowOverview();
         }

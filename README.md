@@ -48,13 +48,16 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
 - **Ocultar el notch** (⚙ → *Panel · accesibilidad*): plegado, el notch es solo una línea gris arriba al centro;
   crece un poco al acercar el ratón y se abre con un clic (pasar el ratón no lo abre). Con esta opción los avisos
   de los agentes (terminó, necesita permiso, recordatorios…) llegan como notificaciones de Windows.
-- **Actualizaciones** (⚙ → *Versión*): cada compilación lleva su commit y su rama. Cada 2 horas el notch consulta
-  `git ls-remote` de esa rama en el repositorio (solo la referencia, sin descargar nada); si hay un commit nuevo,
-  aparece un **agente de actualización** (personaje violeta con «!») en la píldora y, al abrir el notch, una tarjeta
-  como la de inicio de sesión con *Actualizar ahora* o *Más tarde* (pospone hasta el siguiente commit); también
-  avisa con una notificación. *Actualizar* hace `git pull --ff-only` + `publish.ps1` en la carpeta del
-  repositorio y vuelve a abrir el notch (solo si el repositorio está en esa rama y sin cambios locales; si no, explica
-  el motivo). Registro en `%APPDATA%\AgentManagerNotch\update.log`.
+- **Actualizaciones** (⚙ → *Versión*): la versión de la app es la mayor de la carpeta [`versiones/`](versiones/)
+  (un archivo `X.Y.Z.md` por versión con sus novedades) y se fija al compilar, junto con la rama. Cada 2 horas el
+  notch lee esa carpeta en su rama del repositorio (`git fetch`, o un clon mínimo temporal si la copia no está
+  dentro del repositorio); solo si hay una **versión mayor** aparece un **agente de actualización** (personaje
+  violeta con «!») en la píldora y, al abrir el notch, una tarjeta con la versión nueva, sus novedades y
+  *Actualizar ahora* o *Más tarde* (pospone hasta la siguiente versión); también avisa con una notificación. Los
+  commits sin versión nueva no avisan. *Actualizar* hace `git pull --ff-only` + `publish.ps1` en la carpeta del
+  repositorio y abre la copia recién publicada (`publish\AgentManagerNotch.exe`, y «Iniciar con Windows» pasa a
+  apuntar a ella), solo si el repositorio está en esa rama y sin cambios locales; si no, explica el motivo.
+  Registro en `%APPDATA%\AgentManagerNotch\update.log`.
 - **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
   con su hora, agente, tipo y repetición, que se pueden borrar; y los agentes programados con su próxima
   ejecución. Pulsar un elemento abre su agente.
@@ -194,7 +197,7 @@ Providers/Providers.cs     Claude Code, Codex, Gemini, Personalizado → eventos
 Services/AgentEntry.cs     agente en la interfaz: pestañas, estado agregado y líneas de detalle
 Services/AgentSession.cs   una conversación (agente o pestaña de workspace): cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
 Services/Scheduler.cs      ejecuta los agentes programados según su horario
-Services/UpdateService.cs  busca versiones nuevas (git ls-remote cada 2 h) y actualiza
+Services/UpdateService.cs  busca versiones nuevas (carpeta versiones/ de la rama, cada 2 h) y actualiza
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios

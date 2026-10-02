@@ -39,6 +39,14 @@ Depende de Agent Manager y por tanto va en `agent-manager`:
 - Registro: `%APPDATA%\AgentManagerNotch\agent-manager-notch.log`. Datos del usuario (agentes, historial,
   sesión cifrada) en esa misma carpeta: haz una copia antes de borrar o restablecer nada.
 
+## Versiones
+
+- La versión es la mayor de `versiones/` (un archivo `X.Y.Z.md` por versión; formato en `versiones/README.md`).
+  El notch solo avisa de una actualización cuando su rama tiene una versión mayor que la instalada.
+- Para publicar algo que los usuarios deban recibir, añade `versiones/X.Y.Z.md` con las novedades en líneas `- …`
+  (en español, pensadas para el usuario). La versión se añade en `main` y llega a `agent-manager` con el merge;
+  si un cambio solo de `agent-manager` merece aviso, sube la versión en esa rama sin volver a usar ese número en `main`.
+
 ## Convenciones
 
 - Interfaz, comentarios, mensajes de commit y documentación **en español**.
