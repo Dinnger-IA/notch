@@ -94,45 +94,25 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- Línea de tarea: icono + texto. Tamaño pequeño (lista del chat) -->
-        <DataTemplate x:Key="TaskLineTemplate" DataType="{x:Type m:TaskLine}">
-            <Grid x:Name="Root" Margin="0,2" ToolTip="{Binding Detail}">
+        <!-- Acción del agente (leer, escribir, ejecutar…) en el panel bajo el personaje -->
+        <v:ToolActionConverter x:Key="ToolAction"/>
+        <DataTemplate x:Key="ActionLineTemplate" DataType="{x:Type m:ChatMessage}">
+            <Grid Margin="0,3" ToolTip="{Binding Text}" Background="Transparent">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="18"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Ic" Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" FontSize="9.5"
-                           Foreground="#6E6E7C" Margin="0,2,0,0"/>
-                <TextBlock x:Name="Tx" Grid.Column="1" Text="{Binding Text}" FontSize="11" Foreground="#9A9AA8"
-                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                <TextBlock Text="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=icon}"
+                           FontFamily="{StaticResource IconFont}" FontSize="10.5" Foreground="#8C8C99" Margin="0,2,0,0"/>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=name}"
+                               FontSize="11" FontWeight="SemiBold" Foreground="#C8C8D2" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=detail}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="10" Foreground="#6E6E7C"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                               Visibility="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=detailvis}"/>
+                </StackPanel>
             </Grid>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsStep}" Value="True">
-                    <Setter TargetName="Root" Property="Margin" Value="12,1,0,1"/>
-                    <Setter TargetName="Tx" Property="FontSize" Value="10.5"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Done}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
-                    <Setter TargetName="Tx" Property="Foreground" Value="#6E6E7C"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.StepDone}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="#4DD0A1"/>
-                    <Setter TargetName="Tx" Property="Foreground" Value="#6E6E7C"/>
-                    <Setter TargetName="Tx" Property="TextDecorations" Value="Strikethrough"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Failed}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource ErrorFg}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.Running}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
-                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
-                    <Setter TargetName="Tx" Property="FontWeight" Value="SemiBold"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Tone}" Value="{x:Static m:TaskTone.StepActive}">
-                    <Setter TargetName="Ic" Property="Foreground" Value="{StaticResource AlertBorder}"/>
-                    <Setter TargetName="Tx" Property="Foreground" Value="#ECECF2"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- Línea de detalle grande (tarjeta izquierda de la vista general) -->
@@ -480,11 +460,16 @@
                             </ScrollViewer>
                         </Grid>
 
-                        <!-- Tareas debajo del personaje: hasta la mitad, siempre lo más reciente, el resto difuminado -->
-                        <ScrollViewer x:Name="TaskScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
-                                      VerticalAlignment="Top" MaxHeight="210" Padding="2,2,10,2" Margin="0,2,0,0">
-                            <ItemsControl ItemsSource="{Binding TaskLines}" ItemTemplate="{StaticResource TaskLineTemplate}"/>
-                        </ScrollViewer>
+                        <!-- Acciones del agente debajo del personaje (leer, escribir, ejecutar…): ocupan toda la columna,
+                             siempre lo más reciente y el resto difuminado. En el chat ya no aparecen. -->
+                        <Grid Grid.Row="1" Grid.RowSpan="3" Margin="0,2,0,0">
+                            <ScrollViewer x:Name="TaskScroll" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
+                                          Padding="2,2,10,2">
+                                <ItemsControl x:Name="ActionsList" ItemTemplate="{StaticResource ActionLineTemplate}"/>
+                            </ScrollViewer>
+                            <TextBlock x:Name="NoActions" Text="Aquí verás lo que hace el agente: leer, editar, ejecutar…" FontSize="10.5"
+                                       Foreground="#55555F" TextWrapping="Wrap" Margin="2,2,10,0" VerticalAlignment="Top" IsHitTestVisible="False"/>
+                        </Grid>
 
                         <!-- Conversación -->
                         <Grid Grid.Row="1" Grid.Column="1">
@@ -504,7 +489,7 @@
                             </Border>
 
                             <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                                <ItemsControl x:Name="ChatList" ItemsSource="{Binding Messages}" ItemTemplate="{StaticResource Message}"/>
+                                <ItemsControl x:Name="ChatList" ItemTemplate="{StaticResource Message}"/>
                             </ScrollViewer>
 
                             <TextBlock x:Name="EmptyChat" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="13"
