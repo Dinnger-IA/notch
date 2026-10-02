@@ -5,6 +5,13 @@
         Title="Agente" Width="780" Height="760" MinWidth="660" MinHeight="580"
         WindowStartupLocation="CenterScreen" ShowInTaskbar="True" Topmost="True"
         FontFamily="{StaticResource UiFont}">
+    <DockPanel>
+    <!-- Todos los agentes: pulsar uno lo abre aquí mismo para editarlo -->
+    <Border DockPanel.Dock="Top" Background="#0C0C0F" Padding="16,10,16,10" BorderBrush="#1FFFFFFF" BorderThickness="0,0,0,1">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="AgentStrip" Orientation="Horizontal"/>
+        </ScrollViewer>
+    </Border>
     <Grid Margin="20">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="210"/>
@@ -166,4 +173,5 @@
             <Button x:Name="SaveButton" Content="Guardar" MinWidth="120" IsDefault="True" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}"/>
         </StackPanel>
     </Grid>
+    </DockPanel>
 </Window>

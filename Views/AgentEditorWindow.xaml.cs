@@ -19,6 +19,11 @@ namespace AgentManagerNotch.Views
         public bool MakeDefault { get; private set; }
         /// <summary>El usuario pulsó «Eliminar agente» y lo confirmó.</summary>
         public bool DeleteRequested { get; private set; }
+        /// <summary>Agente de la franja superior al que quiere pasar (los cambios del actual ya se guardaron o descartaron).</summary>
+        public string? SwitchToId { get; private set; }
+        /// <summary>Agente para la franja superior.</summary>
+        public record AgentChip(string Id, string Name, Color Color);
+        private string _snapshot = "";
         private readonly AgentProfile _p;
         private readonly bool _isNew, _folderLocked;
         private readonly List<CheckBox> _dayChecks = new();
@@ -59,7 +64,8 @@ namespace AgentManagerNotch.Views
         /// <param name="kindForNew">Tipo inicial cuando se crea uno nuevo.</param>
         /// <param name="folderLocked">Agente de código que ya tiene carpeta: no se puede cambiar.</param>
         /// <param name="kindLocked">El tipo no se puede cambiar (p. ej. agente de código con workspaces abiertos).</param>
-        public AgentEditorWindow(AgentProfile? profile, AgentKind kindForNew = AgentKind.Interactive, bool kindLocked = false, bool isDefault = false)
+        public AgentEditorWindow(AgentProfile? profile, AgentKind kindForNew = AgentKind.Interactive, bool kindLocked = false, bool isDefault = false,
+                                 IReadOnlyList<AgentChip>? agents = null)
         {
             InitializeComponent();
             _isNew = profile == null;
@@ -154,7 +160,8 @@ namespace AgentManagerNotch.Views
             _loading = false;
             UpdateKindUi();
             UpdateSchedulePreview();
-            Loaded += (_, _) => NameBox.Focus();
+            BuildAgentStrip(agents ?? Array.Empty<AgentChip>(), isNew ? null : _p.Id);
+            Loaded += (_, _) => { NameBox.Focus(); _snapshot = Snapshot(); };
         }
 
         private AgentKind SelectedKind => KindBox.SelectedItem is ComboBoxItem i ? (AgentKind)i.Tag : AgentKind.Interactive;
@@ -352,6 +359,62 @@ namespace AgentManagerNotch.Views
             if (dlg.ShowDialog(this) == true) DirBox.Text = dlg.FolderName;
         }
 
+        // ---------------- franja de agentes ----------------
+        private void BuildAgentStrip(IReadOnlyList<AgentChip> agents, string? currentId)
+        {
+            foreach (var a in agents)
+            {
+                bool current = a.Id == currentId;
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                row.Children.Add(new MochiView { Width = 24, Height = 24, BodyColor = a.Color, Interactive = false, IsHitTestVisible = false });
+                row.Children.Add(new TextBlock
+                {
+                    Text = a.Name, Margin = new Thickness(6, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 12.5,
+                    FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal,
+                    Foreground = new SolidColorBrush(current ? Colors.White : Color.FromRgb(0xB4, 0xB4, 0xC0))
+                });
+                var chip = new Border
+                {
+                    Child = row, Padding = new Thickness(8, 4, 12, 4), Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(16),
+                    Background = new SolidColorBrush(current ? Color.FromArgb(0x40, a.Color.R, a.Color.G, a.Color.B) : Color.FromRgb(0x1A, 0x1A, 0x21)),
+                    BorderBrush = new SolidColorBrush(current ? a.Color : Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)), BorderThickness = new Thickness(1),
+                    Cursor = current ? null : System.Windows.Input.Cursors.Hand,
+                    ToolTip = current ? "Editando" : $"Editar {a.Name}"
+                };
+                if (!current) chip.MouseLeftButtonUp += (_, _) => SwitchTo(a);
+                AgentStrip.Children.Add(chip);
+            }
+        }
+
+        /// <summary>Estado del formulario, para saber si hay cambios sin guardar.</summary>
+        private string Snapshot() => string.Join("\u001F", new[]
+        {
+            NameBox.Text, ColorBox.Text, ModelBox.Text, DirBox.Text, PromptBox.Text, ExtraBox.Text, CustomBox.Text,
+            SelectedKind.ToString(), SelectedProvider.ToString(), (ApprovalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
+            DefaultCheck.IsChecked.ToString(), InstructionBox.Text, ModeFixed.IsChecked.ToString(),
+            (IntervalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "", FromBox.Text, ToBox.Text, TimesBox.Text,
+            string.Join(",", _dayChecks.Select(c => c.IsChecked)), KeepContextCheck.IsChecked.ToString(), PausedCheck.IsChecked.ToString()
+        });
+
+        private void SwitchTo(AgentChip target)
+        {
+            if (Snapshot() != _snapshot)
+            {
+                var r = MessageBox.Show(this, $"¿Guardar los cambios de {(NameBox.Text.Trim() is { Length: > 0 } n ? n : _p.Name)} antes de pasar a {target.Name}?",
+                    "Agente", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
+                if (r == MessageBoxResult.Cancel) return;
+                if (r == MessageBoxResult.Yes)
+                {
+                    if (!TrySave()) return;
+                    SwitchToId = target.Id;
+                    DialogResult = true;
+                    return;
+                }
+            }
+            SwitchToId = target.Id;
+            DialogResult = false;
+        }
+
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
             var what = _p.Workspaces.Count > 0
@@ -366,16 +429,22 @@ namespace AgentManagerNotch.Views
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            if (TrySave()) DialogResult = true;
+        }
+
+        /// <summary>Valida el formulario y deja el perfil en <see cref="Result"/>. false si falta algo.</summary>
+        private bool TrySave()
+        {
             var name = NameBox.Text.Trim();
-            if (name == "") { NameBox.Focus(); return; }
+            if (name == "") { NameBox.Focus(); return false; }
             string hex;
             try
             {
                 var c = (Color)ColorConverter.ConvertFromString(ColorBox.Text.Trim());
                 hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
             }
-            catch { ColorBox.Focus(); return; }
-            if (SelectedProvider == ProviderKind.Custom && string.IsNullOrWhiteSpace(CustomBox.Text)) { CustomBox.Focus(); return; }
+            catch { ColorBox.Focus(); return false; }
+            if (SelectedProvider == ProviderKind.Custom && string.IsNullOrWhiteSpace(CustomBox.Text)) { CustomBox.Focus(); return false; }
 
             var kind = SelectedKind;
             var dir = DirBox.Text.Trim();
@@ -383,7 +452,7 @@ namespace AgentManagerNotch.Views
             {
                 MessageBox.Show(this, "Esa carpeta no existe.", "Agent Manager Notch", MessageBoxButton.OK, MessageBoxImage.Warning);
                 DirBox.Focus();
-                return;
+                return false;
             }
             if (kind == AgentKind.Scheduled)
             {
@@ -392,7 +461,7 @@ namespace AgentManagerNotch.Views
                 if (err != null)
                 {
                     MessageBox.Show(this, err, "Horario", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    return false;
                 }
                 _p.Schedule = sc;
             }
@@ -410,7 +479,7 @@ namespace AgentManagerNotch.Views
             _p.ExtraArgs = ExtraBox.Text.Trim();
             _p.CustomCommand = CustomBox.Text.Trim();
             Result = _p;
-            DialogResult = true;
+            return true;
         }
     }
 }
