@@ -525,7 +525,7 @@
                         <!-- Aprobación -->
                         <Border Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Padding="12,10" CornerRadius="14"
                                 Background="{StaticResource AlertBg}" BorderBrush="{StaticResource AlertBorder}" BorderThickness="1"
-                                Visibility="{Binding PendingApproval, Converter={StaticResource NullToVis}}">
+                                Visibility="{Binding PendingApproval, Converter={StaticResource NullToVis}, FallbackValue=Collapsed}">
                             <StackPanel>
                                 <TextBlock FontSize="12.5" Foreground="{StaticResource TextPrimary}">
                                     <Run Text="&#xE72E;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AlertBorder}"/>
@@ -549,7 +549,7 @@
 
                         <!-- Entrada -->
                         <Border x:Name="InputBar" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="8,4" CornerRadius="20" Background="#1EFFFFFF"
-                                Visibility="{Binding CanType, Converter={StaticResource BoolToVis}}">
+                                Visibility="{Binding CanType, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -564,7 +564,7 @@
                                 </Grid>
                                 <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
                                         Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
-                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"/>
                                 <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
                             </Grid>
                         </Border>
