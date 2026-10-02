@@ -63,7 +63,7 @@ namespace AgentManagerNotch.Services
                     ProviderKind.Codex => new[] { "mcp", "add", ServerName, "--url", url },
                     _ => new[] { "mcp", "add", "--scope", "user", "--transport", "http", ServerName, url }
                 };
-                var (code, output) = await RunAsync(exe, args);
+                var (code, output) = await RunAsync(exe, args, () => SafeIsConfigured(cli));
                 if (code == 0 && IsConfigured(cli)) return new Result(cli, Status.Installed);
                 // Nunca se registra el token
                 var msg = output.Replace(token, "***").Replace(Uri.EscapeDataString(token), "***").Trim();
@@ -81,6 +81,12 @@ namespace AgentManagerNotch.Services
             ProviderKind.Codex => TomlHasServer(Path.Combine(Environment.GetEnvironmentVariable("CODEX_HOME") is { Length: > 0 } ch ? ch : Path.Combine(Home, ".codex"), "config.toml")),
             _ => JsonHasServer(Path.Combine(Home, ".gemini", "settings.json"))
         };
+
+        /// <summary>Mientras el CLI escribe su configuración el archivo puede estar a medias.</summary>
+        private static bool SafeIsConfigured(ProviderKind cli)
+        {
+            try { return IsConfigured(cli); } catch { return false; }
+        }
 
         /// <summary>MCP de ámbito usuario de Claude Code: ~/.claude.json (o $CLAUDE_CONFIG_DIR/.claude.json).</summary>
         private static string ClaudeConfigPath()
@@ -121,7 +127,7 @@ namespace AgentManagerNotch.Services
         }
 
         // =============================================================== ejecución
-        private static async Task<(int, string)> RunAsync(string command, IEnumerable<string> args)
+        private static async Task<(int, string)> RunAsync(string command, IEnumerable<string> args, Func<bool> configured)
         {
             var r = CliResolver.Resolve(command) ?? throw new InvalidOperationException($"No se encontró «{command}»");
             var psi = new ProcessStartInfo(r.FileName)
@@ -144,14 +150,22 @@ namespace AgentManagerNotch.Services
             p.StandardInput.Close();
             var stdout = p.StandardOutput.ReadToEndAsync();
             var stderr = p.StandardError.ReadToEndAsync();
-            using var cts = new CancellationTokenSource(CommandTimeout);
-            try { await p.WaitForExitAsync(cts.Token); }
-            catch (OperationCanceledException)
+            // Codex guarda la entrada al instante y después abre un flujo OAuth que espera al navegador; con el
+            // token en la URL no hace falta, así que en cuanto la entrada aparece se da por instalado y se corta.
+            var deadline = DateTime.UtcNow + CommandTimeout;
+            while (!p.HasExited)
             {
-                try { p.Kill(entireProcessTree: true); } catch { }
-                return (-1, "se agotó el tiempo de espera");
+                await Task.WhenAny(p.WaitForExitAsync(), Task.Delay(500));
+                if (p.HasExited) break;
+                if (configured()) { Kill(p); return (0, ""); }
+                if (DateTime.UtcNow > deadline) { Kill(p); return (-1, "se agotó el tiempo de espera"); }
             }
             return (p.ExitCode, (await stdout) + (await stderr));
+        }
+
+        private static void Kill(Process p)
+        {
+            try { p.Kill(entireProcessTree: true); } catch { }
         }
 
         private static string Short(string s) => s.Length <= 200 ? s : s[..200] + "…";
