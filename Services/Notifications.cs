@@ -15,6 +15,8 @@ namespace AgentManagerNotch.Services
     {
         private readonly WinForms.NotifyIcon _icon;
         private string? _lastAgentId;
+        private string? _lastToast;
+        private DateTime _lastToastAt;
         private readonly Func<AppSettings> _settings;
 
         public event Action<string?>? NotificationClicked;
@@ -86,6 +88,11 @@ namespace AgentManagerNotch.Services
         /// <summary>Muestra una notificación nativa (en Windows 10/11 aparece como toast).</summary>
         public void Toast(string title, string body, string? agentId, WinForms.ToolTipIcon icon = WinForms.ToolTipIcon.None)
         {
+            // El mismo aviso puede llegar dos veces (notch oculto → notificación, y la notificación propia del evento)
+            var key = title + "\n" + body;
+            if (key == _lastToast && DateTime.Now - _lastToastAt < TimeSpan.FromSeconds(3)) return;
+            _lastToast = key;
+            _lastToastAt = DateTime.Now;
             _lastAgentId = agentId;
             if (body.Length > 240) body = body[..240] + "…";
             _icon.ShowBalloonTip(6000, title, string.IsNullOrWhiteSpace(body) ? " " : body, icon);

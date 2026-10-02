@@ -760,6 +760,14 @@
                                         <TextBlock Style="{StaticResource SettingsLabel}" Text="Abrir al pasar el ratón"/>
                                         <CheckBox x:Name="SetHover" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
                                     </Grid>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <StackPanel VerticalAlignment="Center" Margin="0,4,46,4">
+                                            <TextBlock Text="Ocultar el notch (solo una línea)" FontSize="12.5" Foreground="#ECECF2" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Crece al acercar el ratón y se abre con un clic. Los avisos llegan como notificaciones de Windows."
+                                                       FontSize="10.5" Foreground="#6E6E7C" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="SetHideNotch" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
                                     <TextBlock Text="Cerrar el panel" FontSize="11.5" Foreground="#9A9AA8" Margin="0,4,0,2"/>
                                     <RadioButton x:Name="SetCloseOutside" Style="{StaticResource Choice}" GroupName="closeMode" Margin="0,4"
                                                  Content="Solo al hacer clic fuera (o Esc)" Click="SettingToggle_Click"/>

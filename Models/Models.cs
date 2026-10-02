@@ -340,6 +340,11 @@ namespace AgentManagerNotch.Models
         /// false = se cierra al sacar el ratón / perder el foco.
         /// </summary>
         public bool CloseOnClickOutsideOnly { get; set; } = true;
+        /// <summary>
+        /// Accesibilidad: el notch plegado queda como una línea fina (crece un poco al acercar el ratón y se abre
+        /// con un clic); los avisos de los agentes llegan como notificaciones de Windows.
+        /// </summary>
+        public bool HideNotch { get; set; }
         public string? SelectedAgentId { get; set; }
         /// <summary>Agente principal: se muestra grande en el notch.</summary>
         public string? DefaultAgentId { get; set; }
