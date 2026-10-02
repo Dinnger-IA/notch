@@ -51,6 +51,8 @@ namespace AgentManagerNotch
         public ApprovalServer Approvals { get; } = new();
         /// <summary>Sesión con Agent Manager: sin ella el notch solo muestra el inicio de sesión.</summary>
         public AuthService Auth { get; } = new();
+        /// <summary>Comprueba cada 2 horas si hay una versión nueva en el repositorio.</summary>
+        public UpdateService Updates { get; } = new();
         public ReminderService Reminders { get; private set; } = null!;
         public ScheduleService Scheduler { get; private set; } = null!;
         public NotificationService Notifier { get; private set; } = null!;
@@ -110,6 +112,13 @@ namespace AgentManagerNotch
             Auth.Changed += Notch.OnAuthChanged;
             Auth.Changed += () => { if (Auth.Token is string t) _ = EnsureMcpAsync(t); };
             _ = Auth.RestoreAsync();
+            Updates.Changed += Notch.RefreshUpdateInfo;
+            Updates.Found += () =>
+            {
+                Notch.ShowUpdateBanner();
+                Notifier.Toast("Nueva versión de Agent Manager Notch", "Abre el notch → ⚙ Configuración → Actualizar.", null);
+            };
+            Updates.Start();
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);

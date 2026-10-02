@@ -18,4 +18,18 @@
     <Product>Agent Manager Notch</Product>
   </PropertyGroup>
 
+  <!-- Commit y rama con los que se compiló: el notch los compara con el repositorio para saber si hay versión nueva -->
+  <Target Name="EmbedGitInfo" BeforeTargets="GetAssemblyAttributes">
+    <Exec Command="git rev-parse HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommit" />
+    </Exec>
+    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitBranch" />
+    </Exec>
+    <ItemGroup>
+      <AssemblyMetadata Include="GitCommit" Value="$(GitCommit)" />
+      <AssemblyMetadata Include="GitBranch" Value="$(GitBranch)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

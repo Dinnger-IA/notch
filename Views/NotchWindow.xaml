@@ -26,6 +26,36 @@
         <SolidColorBrush x:Key="PaneBg" Color="#121217"/>
         <SolidColorBrush x:Key="ChipBg" Color="#1A1A21"/>
 
+        <!-- Configuración: tarjetas, títulos y filas con el mismo espaciado -->
+        <Style x:Key="SettingsCard" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PaneBg}"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Padding" Value="14,10,14,10"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style x:Key="SettingsTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#6E6E7C"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style x:Key="SettingsRow" TargetType="Grid">
+            <Setter Property="MinHeight" Value="32"/>
+        </Style>
+        <Style x:Key="SettingsLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Foreground" Value="#ECECF2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
+        <Style x:Key="SettingsButton" TargetType="Button" BasedOn="{StaticResource PillButton}">
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,4,8,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+
         <Style x:Key="TopPill" TargetType="Button" BasedOn="{StaticResource IconButton}">
             <Setter Property="Width" Value="40"/>
             <Setter Property="Height" Value="30"/>
@@ -360,7 +390,9 @@
                             <Border x:Name="SchedulePill" CornerRadius="15" Background="Transparent" Margin="2,0,0,0">
                                 <Button Style="{StaticResource TopPill}" Content="&#xE787;" ToolTip="Tareas programadas" Click="ScheduleView_Click"/>
                             </Border>
-                            <Button x:Name="SettingsButton" Style="{StaticResource TopPill}" Content="&#xE713;" ToolTip="Configuración" Click="Settings_Click" Margin="2,0,0,0"/>
+                            <Border x:Name="SettingsPill" CornerRadius="15" Background="Transparent" Margin="2,0,0,0">
+                                <Button x:Name="SettingsButton" Style="{StaticResource TopPill}" Content="&#xE713;" ToolTip="Configuración" Click="Settings_Click"/>
+                            </Border>
                         </StackPanel>
                     </Grid>
 
@@ -642,6 +674,139 @@
                         </StackPanel>
                     </ScrollViewer>
                 </Border>
+
+                <!-- ============ Configuración (agrupada) ============ -->
+                <ScrollViewer x:Name="SettingsView" Visibility="Collapsed" Opacity="0" Margin="10,2,10,10"
+                              Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" MaxHeight="520">
+                    <Grid x:Name="SettingsContent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <!-- Agente actual -->
+                            <Border x:Name="SetAgentCard" Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock x:Name="SetAgentTitle" Style="{StaticResource SettingsTitle}" Text="AGENTE"/>
+                                    <WrapPanel>
+                                        <Button x:Name="SetAgentEdit" Style="{StaticResource SettingsButton}" Click="SetAgentEdit_Click">
+                                            <TextBlock><Run Text="&#xE70F;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Ajustes del agente"/></TextBlock>
+                                        </Button>
+                                        <Button x:Name="SetAgentDefault" Style="{StaticResource SettingsButton}" Click="SetAgentDefault_Click">
+                                            <TextBlock><Run Text="&#xE734;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Hacer principal"/></TextBlock>
+                                        </Button>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Crear -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="CREAR"/>
+                                    <WrapPanel>
+                                        <Button Style="{StaticResource SettingsButton}" Click="SetNewChat_Click">
+                                            <TextBlock><Run Text="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Agente de chat"/></TextBlock>
+                                        </Button>
+                                        <Button Style="{StaticResource SettingsButton}" Click="SetNewScheduled_Click">
+                                            <TextBlock><Run Text="&#xE787;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Agente programado"/></TextBlock>
+                                        </Button>
+                                        <Button Style="{StaticResource SettingsButton}" Click="SetNewWorkspace_Click">
+                                            <TextBlock><Run Text="&#xE8F4;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Workspace de código"/></TextBlock>
+                                        </Button>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Notificaciones -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="NOTIFICACIONES"/>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock Style="{StaticResource SettingsLabel}" Text="Sonidos"/>
+                                        <CheckBox x:Name="SetSounds" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock Style="{StaticResource SettingsLabel}" Text="Avisar cuando un agente termina"/>
+                                        <CheckBox x:Name="SetNotifyDone" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock Style="{StaticResource SettingsLabel}" Text="Avisos de mis sesiones de Claude Code"/>
+                                        <CheckBox x:Name="SetClaudeHooks" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel x:Name="SettingsRight" Grid.Column="2">
+                            <!-- Sesión de Agent Manager -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="SESIÓN · AGENT MANAGER"/>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock x:Name="SetSessionUser" Style="{StaticResource SettingsLabel}"/>
+                                        <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Right" Margin="0,4,0,4" Click="SetLogout_Click">
+                                            <TextBlock><Run Text="&#xF3B1;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Cerrar sesión"/></TextBlock>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            <!-- Panel (accesibilidad) -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="PANEL · ACCESIBILIDAD"/>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock Style="{StaticResource SettingsLabel}" Text="Abrir al pasar el ratón"/>
+                                        <CheckBox x:Name="SetHover" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
+                                    <TextBlock Text="Cerrar el panel" FontSize="11.5" Foreground="#9A9AA8" Margin="0,4,0,2"/>
+                                    <RadioButton x:Name="SetCloseOutside" Style="{StaticResource Choice}" GroupName="closeMode" Margin="0,4"
+                                                 Content="Solo al hacer clic fuera (o Esc)" Click="SettingToggle_Click"/>
+                                    <RadioButton x:Name="SetCloseLeave" Style="{StaticResource Choice}" GroupName="closeMode" Margin="0,4,0,2"
+                                                 Content="Al sacar el ratón" Click="SettingToggle_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Sistema -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="SISTEMA"/>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock Style="{StaticResource SettingsLabel}" Text="Iniciar con Windows"/>
+                                        <CheckBox x:Name="SetStartup" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
+                                    <WrapPanel Margin="0,2,0,0">
+                                        <Button Style="{StaticResource SettingsButton}" Click="SetDataFolder_Click">
+                                            <TextBlock><Run Text="&#xE838;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Carpeta de datos"/></TextBlock>
+                                        </Button>
+                                        <Button Style="{StaticResource SettingsButton}" Click="SetExit_Click" Foreground="{StaticResource ErrorFg}">
+                                            <TextBlock><Run Text="&#xE7E8;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Salir"/></TextBlock>
+                                        </Button>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Versión y actualizaciones -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="VERSIÓN"/>
+                                    <TextBlock x:Name="SetVersion" FontSize="12.5" Foreground="#ECECF2"/>
+                                    <TextBlock x:Name="SetUpdateStatus" FontSize="11.5" Foreground="#9A9AA8" TextWrapping="Wrap" Margin="0,3,0,2"/>
+                                    <WrapPanel>
+                                        <Button x:Name="SetCheckUpdates" Style="{StaticResource SettingsButton}" Click="SetCheckUpdates_Click">
+                                            <TextBlock><Run Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Buscar ahora"/></TextBlock>
+                                        </Button>
+                                        <Button x:Name="SetUpdateNow" Style="{StaticResource SettingsButton}" Click="SetUpdateNow_Click" Visibility="Collapsed"
+                                                Background="#7C6CF0">
+                                            <TextBlock><Run Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Actualizar"/></TextBlock>
+                                        </Button>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
 
                     </Grid>
                 </Grid>
