@@ -47,6 +47,8 @@ namespace AgentManagerNotch
         /// <summary>Todas las sesiones (una por agente, o una por pestaña en los de código).</summary>
         public ObservableCollection<AgentSession> Sessions { get; } = new();
         public ApprovalServer Approvals { get; } = new();
+        /// <summary>Sesión con Agent Manager: sin ella el notch solo muestra el inicio de sesión.</summary>
+        public AuthService Auth { get; } = new();
         public ReminderService Reminders { get; private set; } = null!;
         public ScheduleService Scheduler { get; private set; } = null!;
         public NotificationService Notifier { get; private set; } = null!;
@@ -103,6 +105,8 @@ namespace AgentManagerNotch
 
             Notch = new NotchWindow();
             Notch.Show();
+            Auth.Changed += Notch.OnAuthChanged;
+            _ = Auth.RestoreAsync();
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);

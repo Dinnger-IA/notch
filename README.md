@@ -24,6 +24,21 @@ dotnet run                 # desarrollo
 Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras usar (`claude`, `codex`,
 `gemini`…) en el PATH. Los shims `.cmd` de npm se resuelven a `node script.js` para no pasar por `cmd.exe`.
 
+## Inicio de sesión
+
+Antes de ver los agentes hay que entrar con la cuenta de **Agent Manager**. Sin sesión, la píldora muestra un
+candado y el panel solo la tarjeta *Iniciar sesión* (los agentes programados y los recordatorios siguen
+funcionando en segundo plano, pero no se muestran avisos).
+
+1. *Iniciar sesión* abre en el navegador `https://agent-manager.distelsa.net/external/token?client=notch`.
+2. Agent Manager redirige a `http://localhost:5454/api/callback?token=…&state=…`. Ese puerto solo escucha
+   mientras se espera el login (máx. 5 min) y se rechaza cualquier `state` que no haya generado el notch.
+3. El token se valida con `GET /api/auth/me` y se guarda cifrado con DPAPI en
+   `%APPDATA%\AgentManagerNotch\auth.bin` (solo lo puede leer tu usuario de Windows).
+
+Al arrancar se revalida el token; si caducó, se vuelve a pedir el login (sin conexión se confía en el guardado).
+⚙ → *Cerrar sesión* lo invalida en Agent Manager y lo borra.
+
 ## Tipos de agente
 
 | Tipo | Qué hace | Al abrirlo |
@@ -179,6 +194,7 @@ Providers/Providers.cs     Claude Code, Codex, Gemini, Personalizado → eventos
 Services/AgentEntry.cs     agente en la interfaz: pestañas, estado agregado y líneas de detalle
 Services/AgentSession.cs   una conversación (agente o pestaña de workspace): cola de tareas, pasos [[tasks]], proceso del CLI, aprobaciones, TimeParser
 Services/Scheduler.cs      ejecuta los agentes programados según su horario
+Services/AuthService.cs    inicio de sesión con Agent Manager (callback en localhost:5454, token cifrado con DPAPI)
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios

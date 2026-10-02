@@ -28,7 +28,7 @@ namespace AgentManagerNotch.Views
     /// </summary>
     public partial class NotchWindow : Window
     {
-        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule }
+        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule, Login }
 
         private Mode _mode = Mode.Collapsed;
         private bool _pinned, _modalOpen, _autoScroll = true, _rebuildQueued, _scheduledExpanded;
@@ -45,7 +45,9 @@ namespace AgentManagerNotch.Views
         private static bool ClickOutsideOnly => App.Current.Store.Config.Settings.CloseOnClickOutsideOnly;
 
         private static App AppRef => App.Current;
-        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule;
+        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Login;
+        /// <summary>Sin sesión de Agent Manager solo se muestra el inicio de sesión.</summary>
+        private static bool Authed => AppRef.Auth.IsAuthenticated;
         private AgentEntry? Principal => AppRef.Agents.FirstOrDefault(a => a.IsDefault) ?? AppRef.Agents.FirstOrDefault();
 
         public NotchWindow()
@@ -111,6 +113,7 @@ namespace AgentManagerNotch.Views
                     ScheduleContent.Measure(new Size(590, double.PositiveInfinity));
                     return new Size(640, Math.Clamp(ScheduleContent.DesiredSize.Height + 40 + 36, 200, 520));
                 case Mode.Banner: return new Size(450, 74);
+                case Mode.Login: return new Size(560, 200);
                 case Mode.Overview:
                     OverviewView.Measure(new Size(820, double.PositiveInfinity));
                     return new Size(840, Math.Clamp(OverviewView.DesiredSize.Height + 4 + 40, 180, 560));
@@ -132,10 +135,14 @@ namespace AgentManagerNotch.Views
                 ShowView(OverviewView, m == Mode.Overview);
                 ShowView(ChatView, m == Mode.Chat);
                 ShowView(ScheduleView, m == Mode.Schedule);
+                ShowView(LoginView, m == Mode.Login);
+                // Sin sesión, la barra superior solo deja la configuración (con «Salir»)
+                var nav = m == Mode.Login ? Visibility.Collapsed : Visibility.Visible;
+                HomePill.Visibility = PinButton.Visibility = SchedulePill.Visibility = nav;
                 // La barra superior marca dónde estás
                 HomePill.Background = new SolidColorBrush(m == Mode.Overview ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
                 SchedulePill.Background = new SolidColorBrush(m == Mode.Schedule ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
-                TopTitle.Text = m == Mode.Schedule ? "Tareas programadas" : "";
+                TopTitle.Text = m == Mode.Schedule ? "Tareas programadas" : m == Mode.Login ? "Agent Manager Notch" : "";
             }
             var size = TargetSize(m);
             if (animate)
@@ -248,6 +255,7 @@ namespace AgentManagerNotch.Views
 
         private void ShowOverview()
         {
+            if (!Authed) { ShowLogin(); return; }
             RefreshOverview();
             if (_mode != Mode.Overview) SetMode(Mode.Overview);
             else Resize();
@@ -260,6 +268,7 @@ namespace AgentManagerNotch.Views
         public void Expand(bool focusInput, string? sessionKey = null)
         {
             _bannerTimer.Stop();
+            if (!Authed) { ShowLogin(); if (focusInput) Activate(); return; }
             var s = sessionKey == null ? null
                 : AppRef.Sessions.FirstOrDefault(x => x.Key == sessionKey)
                   ?? AppRef.Agents.FirstOrDefault(a => a.Profile.Id == sessionKey)?.ActiveTab;
@@ -278,6 +287,7 @@ namespace AgentManagerNotch.Views
         /// <summary>Abre el chat de un agente (en la pestaña indicada o la activa).</summary>
         private void Open(AgentEntry entry, AgentSession? tab = null, bool focus = true)
         {
+            if (!Authed) { ShowLogin(); return; }
             if (entry.IsScheduled) { SetFocused(entry); ShowOverview(); return; }
             _bannerTimer.Stop();
             _openEntry = entry;
@@ -326,7 +336,7 @@ namespace AgentManagerNotch.Views
 
         public void ShowBannerRaw(Color color, MochiState state, string title, string body, string? sessionKey, bool sticky)
         {
-            if (_mode is not (Mode.Collapsed or Mode.Banner)) return;
+            if (_mode is not (Mode.Collapsed or Mode.Banner) || !Authed) return;
             _bannerSession = null;
             _bannerKey = sessionKey;
             BannerMochi.BodyColor = color;
@@ -342,7 +352,7 @@ namespace AgentManagerNotch.Views
 
         private void UpdateCollapsedSize()
         {
-            var busy = AppRef.Sessions.FirstOrDefault(s => s.PendingApproval != null)
+            var busy = !Authed ? null : AppRef.Sessions.FirstOrDefault(s => s.PendingApproval != null)
                        ?? AppRef.Sessions.FirstOrDefault(s => s.IsBusy);
             CollapsedStatus.Text = busy == null ? "" :
                 busy.PendingApproval != null ? $"{busy.DisplayName} necesita permiso" : $"{busy.DisplayName}: {busy.Activity}";
@@ -560,6 +570,24 @@ namespace AgentManagerNotch.Views
         private void RebuildPill()
         {
             CollapsedAgents.Children.Clear();
+            if (!Authed)
+            {
+                // Sin sesión: candado + «Iniciar sesión» en lugar de los personajes
+                var locked = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+                locked.Children.Add(new TextBlock
+                {
+                    Text = "\uE72E", FontFamily = (FontFamily)FindResource("IconFont"), FontSize = 12,
+                    Foreground = (Brush)FindResource("TextSecondary"), VerticalAlignment = VerticalAlignment.Center
+                });
+                locked.Children.Add(new TextBlock
+                {
+                    Text = AppRef.Auth.IsLoggingIn ? "Esperando inicio de sesión…" : "Iniciar sesión", Margin = new Thickness(8, 0, 0, 0), FontSize = 12,
+                    Foreground = (Brush)FindResource("TextSecondary"), VerticalAlignment = VerticalAlignment.Center
+                });
+                CollapsedAgents.Children.Add(locked);
+                UpdateCollapsedSize();
+                return;
+            }
             var principal = Principal;
             if (principal != null)
             {
@@ -750,6 +778,7 @@ namespace AgentManagerNotch.Views
 
         private void ScheduleView_Click(object sender, RoutedEventArgs e)
         {
+            if (!Authed) { ShowLogin(); return; }
             if (_mode == Mode.Schedule) { ShowOverview(); return; }
             RefreshSchedule();
             SetMode(Mode.Schedule);
@@ -822,6 +851,12 @@ namespace AgentManagerNotch.Views
                 it.Click += (_, _) => act();
                 m.Items.Add(it);
             }
+            if (!Authed)
+            {
+                Add("Salir de Agent Manager Notch", AppRef.ExitApp);
+                OpenMenu(m);
+                return;
+            }
             void Toggle(string header, bool value, Action<bool> set)
             {
                 var it = new MenuItem { Header = header, IsCheckable = true, IsChecked = value };
@@ -873,8 +908,71 @@ namespace AgentManagerNotch.Views
             m.Items.Add(new Separator());
             Add("Abrir carpeta de datos", () => System.Diagnostics.Process.Start(
                 new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true }));
+            m.Items.Add(new Separator());
+            Add($"Sesión: {AppRef.Auth.UserName ?? "Agent Manager"}", () => { }, enabled: false);
+            Add("Cerrar sesión", ConfirmLogout);
             Add("Salir de Agent Manager Notch", AppRef.ExitApp);
             OpenMenu(m);
+        }
+
+        // =============================================================== sesión con Agent Manager
+        private void ShowLogin()
+        {
+            _hoverTimer.Stop();
+            _bannerTimer.Stop();
+            UpdateLoginView();
+            if (_mode != Mode.Login) SetMode(Mode.Login);
+        }
+
+        private void UpdateLoginView(string? error = null)
+        {
+            bool waiting = AppRef.Auth.IsLoggingIn;
+            LoginButton.IsEnabled = !waiting;
+            LoginButton.Content = error != null ? "Reintentar" : "Iniciar sesión";
+            LoginCancelButton.Visibility = waiting ? Visibility.Visible : Visibility.Collapsed;
+            LoginMochi.State = waiting ? MochiState.Thinking : error != null ? MochiState.Error : MochiState.Idle;
+            LoginStatus.Foreground = (Brush)FindResource(error != null ? "ErrorFg" : "TextSecondary");
+            LoginStatus.Text = error
+                ?? (waiting ? "Completa el inicio de sesión en el navegador. Esta ventana se actualizará sola."
+                            : "Para ver y usar tus agentes, entra con tu cuenta de Agent Manager. Se abrirá el navegador.");
+        }
+
+        private async void Login_Click(object sender, RoutedEventArgs e)
+        {
+            var task = AppRef.Auth.LoginAsync();
+            UpdateLoginView();
+            RebuildPill();
+            var error = await task;
+            if (Authed) return; // OnAuthChanged ya abrió los agentes
+            UpdateLoginView(error);
+            RebuildPill();
+        }
+
+        private void LoginCancel_Click(object sender, RoutedEventArgs e) => AppRef.Auth.CancelLogin();
+
+        private void ConfirmLogout()
+        {
+            _modalOpen = true;
+            var ok = MessageBox.Show(this, "¿Cerrar la sesión de Agent Manager?\nTendrás que volver a iniciar sesión para ver tus agentes.",
+                "Agent Manager Notch", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
+            _modalOpen = false;
+            Activate();
+            if (ok) _ = AppRef.Auth.LogoutAsync();
+        }
+
+        /// <summary>Inició o se cerró la sesión de Agent Manager.</summary>
+        public void OnAuthChanged()
+        {
+            RebuildPill();
+            if (Authed)
+            {
+                if (_mode == Mode.Login) { SetFocused(Principal); ShowOverview(); Activate(); }
+                return;
+            }
+            _openEntry = null;
+            _reminders?.Close();
+            if (IsPanel(_mode)) ShowLogin();
+            else if (_mode == Mode.Banner) Collapse();
         }
         private void BackToOverview_Click(object sender, RoutedEventArgs e) { if (_openEntry != null) SetFocused(_openEntry); ShowOverview(); }
 
@@ -1033,7 +1131,7 @@ namespace AgentManagerNotch.Views
 
         private void Shell_DragEnter(object sender, DragEventArgs e)
         {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.None; return; }
+            if (!Authed || !e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.None; return; }
             e.Effects = DragDropEffects.Copy;
             if (_mode is Mode.Collapsed or Mode.Banner) ShowOverview();
             var target = _mode == Mode.Chat ? _openEntry : _focused;
@@ -1049,6 +1147,7 @@ namespace AgentManagerNotch.Views
         private void Shell_Drop(object sender, DragEventArgs e)
         {
             foreach (var a in AppRef.Agents) a.IsBox = false;
+            if (!Authed) return;
             var paths = DroppedPaths(e);
             var dirs = paths.Where(Directory.Exists).ToList();
             var files = paths.Where(File.Exists).ToList();
@@ -1123,6 +1222,7 @@ namespace AgentManagerNotch.Views
 
         public void OpenEditor(AgentEntry? entry, AgentKind kindForNew = AgentKind.Interactive)
         {
+            if (!Authed) { Expand(focusInput: true); return; }
             _modalOpen = true;
             try
             {
@@ -1158,6 +1258,7 @@ namespace AgentManagerNotch.Views
 
         public void OpenReminders()
         {
+            if (!Authed) { Expand(focusInput: true); return; }
             if (_reminders == null || !_reminders.IsLoaded)
             {
                 _reminders = new RemindersWindow();
