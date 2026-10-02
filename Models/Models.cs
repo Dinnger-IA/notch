@@ -354,7 +354,8 @@ namespace AgentManagerNotch.Models
         public AppSettings Settings { get; set; } = new();
     }
 
-    public enum ChatRole { User, Agent, Tool, Notice, Error }
+    /// <summary>Tool y Permission no salen en la conversación: van al panel de acciones bajo el personaje.</summary>
+    public enum ChatRole { User, Agent, Tool, Notice, Error, Permission }
 
     public class ChatMessage : INotifyPropertyChanged
     {
@@ -366,6 +367,9 @@ namespace AgentManagerNotch.Models
             get => _text;
             set { if (_text != value) { _text = value; OnChanged(); } }
         }
+
+        /// <summary>Solo en Permission: Allow, AllowAlways o Deny.</summary>
+        public string? Decision { get; set; }
 
         public ChatMessage() { }
         public ChatMessage(ChatRole role, string text) { Role = role; _text = text; }
