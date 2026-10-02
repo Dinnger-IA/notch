@@ -37,11 +37,19 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
 - **Píldora** (modo pequeño), en dos lados: a la izquierda el **principal**; a la derecha **todos los demás
   agrupados** en un bloque 2×2 del mismo alto (máximo 4 visibles; si hay más, un indicador «+N»).
 - Al abrir el notch siempre hay una **barra superior**: 🏠 *Inicio* a la izquierda y, a la derecha, 📌 fijar,
-  📅 **tareas programadas** y ⚙ **configuración** (ajustes del agente, nuevos agentes y opciones de Agent Manager Notch:
-  sonidos, avisos, abrir al pasar el ratón, avisos de Claude Code, iniciar con Windows, salir).
-- **Cierre del panel** (⚙ → *Accesibilidad*): por defecto **solo se cierra al hacer clic fuera** del recuadro
+  📅 **tareas programadas** y ⚙ **configuración**.
+- **Configuración** (⚙): una vista dentro del notch con tarjetas agrupadas: *Agente* (ajustes del agente abierto,
+  hacer principal), *Crear* (chat, programado, workspace), *Notificaciones* (sonidos, avisar al terminar, avisos de
+  Claude Code), *Panel · accesibilidad*, *Sistema* (iniciar con Windows, carpeta de datos, salir) y *Versión*.
+- **Cierre del panel** (⚙ → *Panel · accesibilidad*): por defecto **solo se cierra al hacer clic fuera** del recuadro
   (o con Esc / Ctrl+Alt+Espacio); sacar el ratón no lo cierra. Alternativa: *Cerrar al sacar el ratón*.
   Ahí también está *Abrir al pasar el ratón*. Con 📌 fijado, o con un menú o diálogo abierto, nunca se cierra.
+  Fuera del recuadro visible el notch deja pasar los clics a lo que hay debajo (también sobre su sombra).
+- **Actualizaciones** (⚙ → *Versión*): cada compilación lleva su commit y su rama. Cada 2 horas el notch consulta
+  `git ls-remote` de esa rama en el repositorio (solo la referencia, sin descargar nada); si hay un commit nuevo,
+  avisa en el notch y con una notificación. *Actualizar* hace `git pull --ff-only` + `publish.ps1` en la carpeta del
+  repositorio y vuelve a abrir el notch (solo si el repositorio está en esa rama y sin cambios locales; si no, explica
+  el motivo). Registro en `%APPDATA%\AgentManagerNotch\update.log`.
 - **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
   con su hora, agente, tipo y repetición, que se pueden borrar; y los agentes programados con su próxima
   ejecución. Pulsar un elemento abre su agente.
