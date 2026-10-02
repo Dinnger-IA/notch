@@ -719,6 +719,9 @@ namespace AgentManagerNotch.Views
             if (_selected != null) _selected.Messages.CollectionChanged -= Messages_CollectionChanged;
             _selected = s;
             ChatView.DataContext = s;
+            // Mismo historial, dos vistas: la conversación sin las acciones, y las acciones en el panel izquierdo
+            ChatList.ItemsSource = s == null ? null : new ListCollectionView(s.Messages) { Filter = o => !IsAction(o) };
+            ActionsList.ItemsSource = s == null ? null : new ListCollectionView(s.Messages) { Filter = IsAction };
             if (s != null)
             {
                 s.Messages.CollectionChanged += Messages_CollectionChanged;
@@ -773,10 +776,13 @@ namespace AgentManagerNotch.Views
 
         private void Messages_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyChat();
 
+        private static bool IsAction(object o) => o is ChatMessage { Role: ChatRole.Tool };
+
         private void UpdateEmptyChat()
         {
             var s = _selected;
-            bool show = s != null && s.Messages.Count == 0;
+            NoActions.Visibility = s != null && s.Messages.Any(m => m.Role == ChatRole.Tool) ? Visibility.Collapsed : Visibility.Visible;
+            bool show = s != null && s.Messages.All(m => m.Role == ChatRole.Tool);
             EmptyChat.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (s == null) return;
             EmptyChat.Text = s.IsCode
