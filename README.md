@@ -214,6 +214,7 @@ Services/Scheduler.cs      ejecuta los agentes programados según su horario
 Services/AuthService.cs    inicio de sesión con Agent Manager (callback en localhost:5454, token cifrado con DPAPI)
 Services/McpSetup.cs       instala el MCP de Agent Manager en los CLI que no lo tengan
 Services/LlmBridge.cs      modo --llm: el LLM de Agent Manager como un CLI más (stdin mensajes, stdout eventos)
+Services/UpdateService.cs  busca versiones nuevas (git ls-remote cada 2 h) y actualiza
 Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
