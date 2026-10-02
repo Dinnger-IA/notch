@@ -776,13 +776,13 @@ namespace AgentManagerNotch.Views
 
         private void Messages_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyChat();
 
-        private static bool IsAction(object o) => o is ChatMessage { Role: ChatRole.Tool };
+        private static bool IsAction(object o) => o is ChatMessage { Role: ChatRole.Tool or ChatRole.Permission };
 
         private void UpdateEmptyChat()
         {
             var s = _selected;
-            NoActions.Visibility = s != null && s.Messages.Any(m => m.Role == ChatRole.Tool) ? Visibility.Collapsed : Visibility.Visible;
-            bool show = s != null && s.Messages.All(m => m.Role == ChatRole.Tool);
+            NoActions.Visibility = s != null && s.Messages.Any(IsAction) ? Visibility.Collapsed : Visibility.Visible;
+            bool show = s != null && s.Messages.All(IsAction);
             EmptyChat.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (s == null) return;
             EmptyChat.Text = s.IsCode

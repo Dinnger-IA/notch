@@ -69,7 +69,7 @@ namespace AgentManagerNotch.Services
 
             var h = store.LoadHistory(Key);
             SessionId = h.SessionId;
-            foreach (var m in h.Messages) Messages.Add(m);
+            foreach (var m in h.Messages) Messages.Add(UpgradeLegacy(m));
             foreach (var t in h.Pending) { t.Status = AgentTaskStatus.Pending; PendingTasks.Add(t); }
             foreach (var t in h.Completed) CompletedTasks.Add(t);
             if (CompletedTasks.FirstOrDefault()?.Finished is { } lf) _lastActivity = lf;
@@ -665,7 +665,11 @@ namespace AgentManagerNotch.Services
         /// <summary>Llamado desde el ApprovalServer (hilo UI). Devuelve la decisión cuando el usuario elige.</summary>
         public Task<ApprovalDecision> RequestApproval(ApprovalRequest req)
         {
-            if (AlwaysAllow.Contains(req.Tool)) return Task.FromResult(ApprovalDecision.Allow);
+            if (AlwaysAllow.Contains(req.Tool))
+            {
+                LogPermission(req, ApprovalDecision.AllowAlways);
+                return Task.FromResult(ApprovalDecision.Allow);
+            }
             _approvals.Add(req);
             if (PendingApproval == null) ShowNextApproval();
             return req.Tcs.Task;
@@ -694,16 +698,34 @@ namespace AgentManagerNotch.Services
             if (req == null) return;
             if (d == ApprovalDecision.AllowAlways) AlwaysAllow.Add(req.Tool);
             _approvals.Remove(req);
-            Messages.Add(new ChatMessage(ChatRole.Notice, d == ApprovalDecision.Deny ? $"✋ Denegado: {req.Tool}" : $"✅ Permitido: {req.Tool}"));
+            LogPermission(req, d);
             req.Resolve(d);
 
             // Si eligió "siempre", libera las demás pendientes de la misma herramienta
             if (d == ApprovalDecision.AllowAlways)
                 foreach (var other in _approvals.Where(a => a.Tool.Equals(req.Tool, StringComparison.OrdinalIgnoreCase)).ToList())
-                { _approvals.Remove(other); other.Resolve(ApprovalDecision.Allow); }
+                { _approvals.Remove(other); LogPermission(other, ApprovalDecision.AllowAlways); other.Resolve(ApprovalDecision.Allow); }
 
             PendingApproval = null;
             ShowNextApproval();
+        }
+
+        /// <summary>Historial anterior: los avisos «✅ Permitido: X» / «✋ Denegado: X» pasan a ser entradas de permiso.</summary>
+        private static ChatMessage UpgradeLegacy(ChatMessage m)
+        {
+            if (m.Role != ChatRole.Notice) return m;
+            foreach (var (prefix, decision) in new[] { ("✅ Permitido: ", "Allow"), ("✋ Denegado: ", "Deny") })
+                if (m.Text.StartsWith(prefix, StringComparison.Ordinal))
+                    return new ChatMessage(ChatRole.Permission, m.Text[prefix.Length..].Trim()) { Time = m.Time, Decision = decision };
+            return m;
+        }
+
+        /// <summary>Decisión de permiso para el panel de acciones (no sale en la conversación).</summary>
+        private void LogPermission(ApprovalRequest req, ApprovalDecision d)
+        {
+            var detail = (req.Detail ?? "").Replace("\r", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l != "") ?? "";
+            if (detail.Length > 200) detail = detail[..200] + "…";
+            Messages.Add(new ChatMessage(ChatRole.Permission, $"{req.Tool}  {detail}".Trim()) { Decision = d.ToString() });
         }
 
         // ---------------- Comandos de chat ----------------
