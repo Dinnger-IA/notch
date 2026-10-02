@@ -1437,17 +1437,16 @@ namespace AgentManagerNotch.Views
         private const int WS_EX_TRANSPARENT = 0x20, WS_EX_LAYERED = 0x80000;
         [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
         private readonly DispatcherTimer _hitTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
-        private bool _clickThrough;
 
         private void UpdateClickThrough()
         {
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero || !GetCursorPos(out var pt)) return;
             bool through = !IsInsideShell(new Point(pt.X, pt.Y));
-            if (through == _clickThrough) return;
-            _clickThrough = through;
-            var ex = GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED;
-            SetWindowLong(hwnd, GWL_EXSTYLE, through ? ex | WS_EX_TRANSPARENT : ex & ~WS_EX_TRANSPARENT);
+            // Se compara con el estilo real: WPF puede reescribir los estilos extendidos de la ventana
+            var ex = GetWindowLong(hwnd, GWL_EXSTYLE);
+            if (((ex & WS_EX_TRANSPARENT) != 0) == through) return;
+            SetWindowLong(hwnd, GWL_EXSTYLE, through ? ex | WS_EX_TRANSPARENT | WS_EX_LAYERED : ex & ~WS_EX_TRANSPARENT);
         }
 
         private void OnSourceInitialized(object? sender, EventArgs e)
