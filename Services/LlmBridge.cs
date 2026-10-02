@@ -10,15 +10,16 @@ using System.Text.Json.Nodes;
 namespace AgentManagerNotch.Services
 {
     /// <summary>
-    /// Modo <c>--llm</c>: puente entre un agente con proveedor «Agent Manager» y el LLM de Agent Manager
-    /// (POST /api/default/test-ia, contrato OpenAI Chat Completions con streaming SSE).
+    /// Modo <c>--llm</c>: puente entre un agente con proveedor «Agent Manager» y el ruteador de Agent Manager
+    /// (POST /api/notch/notch-agent con {"messages":[…]}; responde {success, data:{conversationId, response}}).
+    /// También entiende respuestas estilo OpenAI (JSON o SSE) por compatibilidad.
     /// stdin: {"messages":[{role,content}…]}. stdout: una línea JSON por evento:
     /// {"type":"delta","text":…} y al final {"type":"result","ok":true|false,"error":…}.
     /// Usa el token de la sesión guardada (DPAPI), así funciona igual que los demás CLI: un proceso que se puede detener.
     /// </summary>
     public static class LlmBridge
     {
-        public const string Endpoint = AuthService.BaseUrl + "/api/default/test-ia";
+        public const string Endpoint = AuthService.BaseUrl + "/api/notch/notch-agent";
 
         public static int Run()
         {
@@ -32,7 +33,6 @@ namespace AgentManagerNotch.Services
                 using (var sr = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)))
                     input = sr.ReadToEnd();
                 var body = JsonNode.Parse(input) as JsonObject ?? throw new InvalidDataException("Entrada vacía");
-                body["stream"] = true;
 
                 var token = AuthService.LoadSavedToken();
                 if (token == null) return Fail("No hay sesión de Agent Manager. Inicia sesión en el notch.");
@@ -43,6 +43,7 @@ namespace AgentManagerNotch.Services
                     Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
                 };
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                req.Headers.Accept.ParseAdd("application/json");
                 req.Headers.Accept.ParseAdd("text/event-stream");
                 using var res = http.Send(req, HttpCompletionOption.ResponseHeadersRead);
 
@@ -56,11 +57,15 @@ namespace AgentManagerNotch.Services
 
                 using var stream = res.Content.ReadAsStream();
                 using var reader = new StreamReader(stream, Encoding.UTF8);
-                // Sin streaming (respuesta JSON normal): se emite entero
+                // Respuesta JSON (el ruteador responde entero, sin streaming)
                 if (res.Content.Headers.ContentType?.MediaType?.Contains("json") == true)
                 {
-                    var text = Content(JsonNode.Parse(reader.ReadToEnd()), "message");
-                    if (!string.IsNullOrEmpty(text)) Emit(new { type = "delta", text });
+                    var json = JsonNode.Parse(reader.ReadToEnd());
+                    if (json?["success"]?.GetValueKind() == JsonValueKind.False)
+                        return Fail(json["error"]?.ToString() ?? "Agent Manager no pudo responder.");
+                    var text = json?["data"]?["response"]?.ToString() ?? Content(json, "message");
+                    if (string.IsNullOrEmpty(text)) return Fail("Agent Manager respondió sin contenido.");
+                    Emit(new { type = "delta", text });
                     Emit(new { type = "result", ok = true });
                     return 0;
                 }

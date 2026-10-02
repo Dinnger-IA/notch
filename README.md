@@ -170,7 +170,7 @@ En el editor de agentes puedes previsualizar todos los estados.
 | **Codex** | `codex exec --json … -` (prompt por stdin) | `codex exec resume <thread>` | `-c developer_instructions="…"` | sandbox `read-only` / `workspace-write` / bypass |
 | **Gemini CLI** | `gemini -p … --output-format stream-json` | `--resume` | se antepone al primer mensaje | `--approval-mode auto_edit` / `--yolo` |
 | **Personalizado** | tu comando, con `{prompt}` `{system}` `{model}` | se reenvía el historial reciente | incluido en el prompt | — |
-| **Agent Manager** | `AgentManagerNotch.exe --llm` → `POST /api/default/test-ia` (OpenAI Chat Completions, streaming) con `Authorization: Bearer <token>` de la sesión | se reenvía el historial reciente (30 mensajes) | mensaje `system` | — (solo texto) |
+| **Agent Manager** | `AgentManagerNotch.exe --llm` → `POST /api/notch/notch-agent` (ruteador de Agent Manager: `{"messages":[…]}` → `data.response`) con `Authorization: Bearer <token>` de la sesión; cada petición queda en tu historial de chat de Agent Manager | se reenvía el historial reciente (30 mensajes) | mensaje `system` | — (solo texto) |
 
 Modos de permiso por agente: *Preguntar* (recomendado), *Editar solo / preguntar comandos*,
 *Solo lectura* y *Automático*.
