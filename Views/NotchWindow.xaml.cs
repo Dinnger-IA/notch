@@ -28,7 +28,7 @@ namespace AgentManagerNotch.Views
     /// </summary>
     public partial class NotchWindow : Window
     {
-        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule }
+        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule, Settings }
 
         private Mode _mode = Mode.Collapsed;
         private bool _pinned, _modalOpen, _autoScroll = true, _rebuildQueued, _scheduledExpanded;
@@ -45,7 +45,7 @@ namespace AgentManagerNotch.Views
         private static bool ClickOutsideOnly => App.Current.Store.Config.Settings.CloseOnClickOutsideOnly;
 
         private static App AppRef => App.Current;
-        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule;
+        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Settings;
         private AgentEntry? Principal => AppRef.Agents.FirstOrDefault(a => a.IsDefault) ?? AppRef.Agents.FirstOrDefault();
 
         public NotchWindow()
@@ -82,7 +82,7 @@ namespace AgentManagerNotch.Views
             {
                 _leaveTimer.Stop();
                 if (ClickOutsideOnly || _pinned || _modalOpen || Shell.IsMouseOver || _selected?.PendingApproval != null) return;
-                if (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule && !IsActive)) Collapse();
+                if (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule or Mode.Settings && !IsActive)) Collapse();
             };
             Deactivated += (_, _) =>
             {
@@ -90,6 +90,8 @@ namespace AgentManagerNotch.Views
                 if (IsPanel(_mode) && !_pinned && !_modalOpen && !Shell.IsMouseOver && _selected?.PendingApproval == null) Collapse();
             };
             SourceInitialized += OnSourceInitialized;
+            _hitTimer.Tick += (_, _) => UpdateClickThrough();
+            _hitTimer.Start();
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.Invoke(PositionOnScreen);
             Loaded += (_, _) => { PositionOnScreen(); SetMode(Mode.Collapsed, animate: false); };
             AppRef.Reminders.Changed += () => { if (_mode == Mode.Schedule) { RefreshSchedule(); Resize(); } };
@@ -113,6 +115,9 @@ namespace AgentManagerNotch.Views
                     ScheduleContent.Measure(new Size(590, double.PositiveInfinity));
                     return new Size(640, Math.Clamp(ScheduleContent.DesiredSize.Height + 40 + 36, 200, 520));
                 case Mode.Banner: return new Size(450, 74);
+                case Mode.Settings:
+                    SettingsContent.Measure(new Size(700, double.PositiveInfinity));
+                    return new Size(740, Math.Clamp(SettingsContent.DesiredSize.Height + 40 + 12, 200, 580));
                 case Mode.Overview:
                     OverviewView.Measure(new Size(820, double.PositiveInfinity));
                     return new Size(840, Math.Clamp(OverviewView.DesiredSize.Height + 4 + 40, 180, 560));
@@ -134,10 +139,12 @@ namespace AgentManagerNotch.Views
                 ShowView(OverviewView, m == Mode.Overview);
                 ShowView(ChatView, m == Mode.Chat);
                 ShowView(ScheduleView, m == Mode.Schedule);
+                ShowView(SettingsView, m == Mode.Settings);
                 // La barra superior marca dónde estás
                 HomePill.Background = new SolidColorBrush(m == Mode.Overview ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
                 SchedulePill.Background = new SolidColorBrush(m == Mode.Schedule ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
-                TopTitle.Text = m == Mode.Schedule ? "Tareas programadas" : "";
+                SettingsPill.Background = new SolidColorBrush(m == Mode.Settings ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
+                TopTitle.Text = m == Mode.Schedule ? "Tareas programadas" : m == Mode.Settings ? "Configuración" : "";
             }
             var size = TargetSize(m);
             if (animate)
@@ -802,7 +809,7 @@ namespace AgentManagerNotch.Views
         private void Shell_MouseLeave(object sender, MouseEventArgs e)
         {
             _hoverTimer.Stop();
-            if (!ClickOutsideOnly && (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule && !IsActive))) _leaveTimer.Start();
+            if (!ClickOutsideOnly && (_mode == Mode.Overview || (_mode is Mode.Chat or Mode.Schedule or Mode.Settings && !IsActive))) _leaveTimer.Start();
             if (_mode == Mode.Banner && !_bannerTimer.IsEnabled) _bannerTimer.Start();
         }
 
@@ -816,6 +823,7 @@ namespace AgentManagerNotch.Views
         private void Banner_Click(object sender, MouseButtonEventArgs e)
         {
             if (e.OriginalSource is DependencyObject d && FindAncestor<Button>(d) != null) return;
+            if (_bannerKey == UpdateBannerKey) { _bannerTimer.Stop(); Settings_Click(this, e); return; }
             Expand(focusInput: true, sessionKey: _bannerKey);
         }
 
@@ -893,70 +901,120 @@ namespace AgentManagerNotch.Views
         private void NewReminder_Click(object sender, RoutedEventArgs e) => OpenReminders();
 
         /// <summary>Configuración: ajustes del agente y opciones generales de Agent Manager Notch.</summary>
+        // =============================================================== configuración
+        private AgentEntry? _settingsTarget;
+
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-            var st = AppRef.Store.Config.Settings;
-            var m = new ContextMenu { PlacementTarget = SettingsButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-            void Add(string header, Action act, bool enabled = true)
-            {
-                var it = new MenuItem { Header = header, IsEnabled = enabled };
-                it.Click += (_, _) => act();
-                m.Items.Add(it);
-            }
-            void Toggle(string header, bool value, Action<bool> set)
-            {
-                var it = new MenuItem { Header = header, IsCheckable = true, IsChecked = value };
-                it.Click += (_, _) => { set(it.IsChecked); AppRef.Store.Save(); };
-                m.Items.Add(it);
-            }
-            var target = _mode == Mode.Chat ? _openEntry : _focused;
-            if (target != null)
-            {
-                Add($"Ajustes de {target.Name}…", () => OpenEditor(target));
-                if (!target.IsDefault) Add($"Hacer principal a {target.Name}", () => { AppRef.SetDefault(target); RebuildPill(); RefreshOverview(); });
-                m.Items.Add(new Separator());
-            }
-            Add("Nuevo agente de chat…", () => OpenEditor(null, AgentKind.Interactive));
-            Add("Nuevo agente programado…", () => OpenEditor(null, AgentKind.Scheduled));
-            Add("Nuevo workspace de código…", () => NewWorkspace(null));
-            m.Items.Add(new Separator());
-            Toggle("Sonidos", st.Sounds, v => st.Sounds = v);
-            Toggle("Avisar cuando un agente termina", st.NotifyOnDone, v => st.NotifyOnDone = v);
-            Toggle("Avisos de mis sesiones de Claude Code", ControlChannel.IsClaudeIntegrationInstalled(), v =>
-            {
-                try { ControlChannel.SetClaudeIntegration(v); } catch (Exception ex) { Log.Error("Integración Claude", ex); }
-            });
-            Toggle("Iniciar con Windows", NotificationService.IsStartupEnabled(), NotificationService.SetStartup);
-
-            // Accesibilidad: cómo se abre y se cierra el panel
-            var access = new MenuItem { Header = "Accesibilidad" };
-            MenuItem Radio(string header, bool value, Action set)
-            {
-                var it = new MenuItem { Header = header, IsCheckable = true, IsChecked = value };
-                it.Click += (_, _) => { set(); AppRef.Store.Save(); };
-                return it;
-            }
-            access.Items.Add(Radio("Cerrar solo al hacer clic fuera", st.CloseOnClickOutsideOnly, () =>
-            {
-                st.CloseOnClickOutsideOnly = true;
-                SetOutsideClickHook(IsPanel(_mode));
-            }));
-            access.Items.Add(Radio("Cerrar al sacar el ratón", !st.CloseOnClickOutsideOnly, () =>
-            {
-                st.CloseOnClickOutsideOnly = false;
-                SetOutsideClickHook(false);
-            }));
-            access.Items.Add(new Separator());
-            var hover = new MenuItem { Header = "Abrir al pasar el ratón", IsCheckable = true, IsChecked = st.ExpandOnHover };
-            hover.Click += (_, _) => { st.ExpandOnHover = hover.IsChecked; AppRef.Store.Save(); };
-            access.Items.Add(hover);
-            m.Items.Add(access);
-            m.Items.Add(new Separator());
-            Add("Abrir carpeta de datos", () => System.Diagnostics.Process.Start(
-                new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true }));
-            Add("Salir de Agent Manager Notch", AppRef.ExitApp);
-            OpenMenu(m);
+            if (_mode == Mode.Settings) { ShowOverview(); return; }
+            _settingsTarget = _mode == Mode.Chat ? _openEntry : _focused;
+            RefreshSettings();
+            SetMode(Mode.Settings);
+            Activate();
         }
+
+        /// <summary>Carga el estado actual en la vista de configuración.</summary>
+        private void RefreshSettings()
+        {
+            var st = AppRef.Store.Config.Settings;
+            var t = _settingsTarget;
+            SetAgentCard.Visibility = t == null ? Visibility.Collapsed : Visibility.Visible;
+            if (t != null)
+            {
+                SetAgentTitle.Text = $"AGENTE · {t.Name.ToUpperInvariant()}";
+                SetAgentDefault.Visibility = t.IsDefault ? Visibility.Collapsed : Visibility.Visible;
+            }
+            SetSounds.IsChecked = st.Sounds;
+            SetNotifyDone.IsChecked = st.NotifyOnDone;
+            SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled();
+            SetHover.IsChecked = st.ExpandOnHover;
+            SetCloseOutside.IsChecked = st.CloseOnClickOutsideOnly;
+            SetCloseLeave.IsChecked = !st.CloseOnClickOutsideOnly;
+            SetStartup.IsChecked = NotificationService.IsStartupEnabled();
+            RefreshUpdateInfo();
+        }
+
+        /// <summary>Versión instalada y estado de la última comprobación de actualizaciones.</summary>
+        public void RefreshUpdateInfo()
+        {
+            var u = AppRef.Updates;
+            SetVersion.Text = $"Agent Manager Notch {u.Version} · {UpdateService.Short(u.LocalCommit)}" + (u.Branch is "" or "HEAD" ? "" : $" ({u.Branch})");
+            SetUpdateStatus.Foreground = (Brush)FindResource(u.UpdateAvailable ? "TextPrimary" : "TextSecondary");
+            SetUpdateStatus.Text = u.Checking ? "Buscando actualizaciones…"
+                : u.UpdateAvailable ? $"Hay una versión nueva ({UpdateService.Short(u.RemoteCommit)})."
+                : u.LastError != null ? u.LastError
+                : u.LastCheck is DateTime when ? $"Al día · comprobado a las {when:HH:mm}. Se revisa cada 2 horas."
+                : "Se revisa cada 2 horas.";
+            SetCheckUpdates.IsEnabled = !u.Checking;
+            SetUpdateNow.Visibility = u.UpdateAvailable ? Visibility.Visible : Visibility.Collapsed;
+            if (_mode == Mode.Settings) Resize();
+        }
+
+        private void SettingToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var st = AppRef.Store.Config.Settings;
+            switch (sender)
+            {
+                case var c when c == SetSounds: st.Sounds = SetSounds.IsChecked == true; break;
+                case var c when c == SetNotifyDone: st.NotifyOnDone = SetNotifyDone.IsChecked == true; break;
+                case var c when c == SetHover: st.ExpandOnHover = SetHover.IsChecked == true; break;
+                case var c when c == SetStartup: NotificationService.SetStartup(SetStartup.IsChecked == true); break;
+                case var c when c == SetClaudeHooks:
+                    try { ControlChannel.SetClaudeIntegration(SetClaudeHooks.IsChecked == true); }
+                    catch (Exception ex) { Log.Error("Integración Claude", ex); SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled(); }
+                    break;
+                case var c when c == SetCloseOutside || c == SetCloseLeave:
+                    st.CloseOnClickOutsideOnly = SetCloseOutside.IsChecked == true;
+                    SetOutsideClickHook(ClickOutsideOnly && IsPanel(_mode));
+                    break;
+            }
+            AppRef.Store.Save();
+        }
+
+        private void SetAgentEdit_Click(object sender, RoutedEventArgs e) { if (_settingsTarget != null) OpenEditor(_settingsTarget); }
+
+        private void SetAgentDefault_Click(object sender, RoutedEventArgs e)
+        {
+            if (_settingsTarget == null) return;
+            AppRef.SetDefault(_settingsTarget);
+            RebuildPill();
+            RefreshSettings();
+        }
+
+        private void SetNewChat_Click(object sender, RoutedEventArgs e) => OpenEditor(null, AgentKind.Interactive);
+        private void SetNewScheduled_Click(object sender, RoutedEventArgs e) => OpenEditor(null, AgentKind.Scheduled);
+        private void SetNewWorkspace_Click(object sender, RoutedEventArgs e) => NewWorkspace(null);
+        private void SetDataFolder_Click(object sender, RoutedEventArgs e) =>
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true });
+        private void SetExit_Click(object sender, RoutedEventArgs e) => AppRef.ExitApp();
+        private async void SetCheckUpdates_Click(object sender, RoutedEventArgs e) => await AppRef.Updates.CheckAsync();
+
+        private async void SetUpdateNow_Click(object sender, RoutedEventArgs e)
+        {
+            var busy = AppRef.Sessions.Count(s => s.IsBusy);
+            _modalOpen = true;
+            var msg = $"Se descargará la versión nueva ({UpdateService.Short(AppRef.Updates.RemoteCommit)}), se compilará y el notch se volverá a abrir solo." +
+                      (busy > 0 ? $"\n\nHay {busy} agente(s) trabajando: se detendrán." : "");
+            var ok = MessageBox.Show(this, msg, "Actualizar Agent Manager Notch", MessageBoxButton.OKCancel, MessageBoxImage.Information, MessageBoxResult.OK) == MessageBoxResult.OK;
+            _modalOpen = false;
+            if (!ok) return;
+            var error = await AppRef.Updates.StartUpdateAsync();
+            if (error == null) { AppRef.ExitApp(); return; }
+            _modalOpen = true;
+            MessageBox.Show(this, error, "Actualizar Agent Manager Notch", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _modalOpen = false;
+            Activate();
+        }
+
+        /// <summary>Aviso de versión nueva en el notch (al pulsarlo se abre la configuración).</summary>
+        public void ShowUpdateBanner()
+        {
+            ShowBannerRaw(Color.FromRgb(0x7C, 0x6C, 0xF0), MochiState.Done, "Nueva versión de Agent Manager Notch",
+                "Pulsa para ver la versión y actualizar", UpdateBannerKey, sticky: true);
+        }
+
+        private const string UpdateBannerKey = "::update";
+
         private void BackToOverview_Click(object sender, RoutedEventArgs e) { if (_openEntry != null) SetFocused(_openEntry); ShowOverview(); }
 
         private void Tabs_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -1269,6 +1327,26 @@ namespace AgentManagerNotch.Views
         [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr h, int i, int v);
         [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
         [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr h, int id);
+
+        // =============================================================== clics a través
+        // La ventana es mayor que el notch y la sombra pinta píxeles semitransparentes alrededor: esos píxeles
+        // capturarían los clics de lo que hay debajo. Fuera del recuadro visible la ventana se vuelve transparente
+        // al ratón (WS_EX_TRANSPARENT); dentro, normal.
+        private const int WS_EX_TRANSPARENT = 0x20, WS_EX_LAYERED = 0x80000;
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+        private readonly DispatcherTimer _hitTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
+        private bool _clickThrough;
+
+        private void UpdateClickThrough()
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero || !GetCursorPos(out var pt)) return;
+            bool through = !IsInsideShell(new Point(pt.X, pt.Y));
+            if (through == _clickThrough) return;
+            _clickThrough = through;
+            var ex = GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED;
+            SetWindowLong(hwnd, GWL_EXSTYLE, through ? ex | WS_EX_TRANSPARENT : ex & ~WS_EX_TRANSPARENT);
+        }
 
         private void OnSourceInitialized(object? sender, EventArgs e)
         {

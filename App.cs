@@ -47,6 +47,8 @@ namespace AgentManagerNotch
         /// <summary>Todas las sesiones (una por agente, o una por pestaña en los de código).</summary>
         public ObservableCollection<AgentSession> Sessions { get; } = new();
         public ApprovalServer Approvals { get; } = new();
+        /// <summary>Comprueba cada 2 horas si hay una versión nueva en el repositorio.</summary>
+        public UpdateService Updates { get; } = new();
         public ReminderService Reminders { get; private set; } = null!;
         public ScheduleService Scheduler { get; private set; } = null!;
         public NotificationService Notifier { get; private set; } = null!;
@@ -103,6 +105,13 @@ namespace AgentManagerNotch
 
             Notch = new NotchWindow();
             Notch.Show();
+            Updates.Changed += Notch.RefreshUpdateInfo;
+            Updates.Found += () =>
+            {
+                Notch.ShowUpdateBanner();
+                Notifier.Toast("Nueva versión de Agent Manager Notch", "Abre el notch → ⚙ Configuración → Actualizar.", null);
+            };
+            Updates.Start();
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);
