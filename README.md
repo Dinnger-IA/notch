@@ -50,7 +50,9 @@ Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras us
   de los agentes (terminó, necesita permiso, recordatorios…) llegan como notificaciones de Windows.
 - **Actualizaciones** (⚙ → *Versión*): cada compilación lleva su commit y su rama. Cada 2 horas el notch consulta
   `git ls-remote` de esa rama en el repositorio (solo la referencia, sin descargar nada); si hay un commit nuevo,
-  avisa en el notch y con una notificación. *Actualizar* hace `git pull --ff-only` + `publish.ps1` en la carpeta del
+  aparece un **agente de actualización** (personaje violeta con «!») en la píldora y, al abrir el notch, una tarjeta
+  como la de inicio de sesión con *Actualizar ahora* o *Más tarde* (pospone hasta el siguiente commit); también
+  avisa con una notificación. *Actualizar* hace `git pull --ff-only` + `publish.ps1` en la carpeta del
   repositorio y vuelve a abrir el notch (solo si el repositorio está en esa rama y sin cambios locales; si no, explica
   el motivo). Registro en `%APPDATA%\AgentManagerNotch\update.log`.
 - **Tareas programadas**: los recordatorios y tareas (también los que crean los agentes, p. ej. «recuérdame…»)
@@ -100,6 +102,8 @@ Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 
 ### Principal y horarios
 
+- **Ajustes de un agente**: arriba del editor están todos los agentes; pulsar uno lo abre en el mismo editor para
+  cambiar sus atributos (si hay cambios sin guardar, pregunta si guardarlos).
 - **Agente principal**: cualquiera (pulsando su chip, clic derecho → *Establecer como principal*, o la casilla del editor). Es el
   que aparece en la tarjeta grande al abrir y en grande en la píldora. Por defecto, el agente de código.
   Cualquier agente se puede **eliminar** (clic derecho → *Eliminar*, o el botón *Eliminar agente* de sus ajustes), siempre con confirmación.
