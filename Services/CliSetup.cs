@@ -157,6 +157,27 @@ namespace AgentManagerNotch.Services
         /// <summary>Línea <c>notify = …</c> que había antes del notch (otra app), para reenviarle los avisos.</summary>
         private static string PreviousPath => Path.Combine(ConfigStore.Root, "codex-notify-anterior.txt");
 
+        /// <summary>
+        /// Si Codex guardó esa sesión (~/.codex/sessions o archived_sessions). Las tareas internas de Codex, como la que
+        /// genera el título de la conversación, también avisan por notify pero no se guardan y no se pueden continuar.
+        /// </summary>
+        public static bool HasRollout(string threadId)
+        {
+            if (string.IsNullOrWhiteSpace(threadId) || threadId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
+            var home = Path.GetDirectoryName(ConfigPath)!;
+            foreach (var dir in new[] { "sessions", "archived_sessions" })
+            {
+                var root = Path.Combine(home, dir);
+                try
+                {
+                    if (Directory.Exists(root) && Directory.EnumerateFiles(root, $"rollout-*{threadId}.jsonl", SearchOption.AllDirectories).Any())
+                        return true;
+                }
+                catch (Exception ex) { Log.Error("Codex: buscar la sesión guardada", ex); return true; }
+            }
+            return false;
+        }
+
         private static bool IsNotifyLine(string l) => l.TrimStart().StartsWith("notify", StringComparison.Ordinal) && l.Contains('=');
 
         public static (CliSetup.HookResult, string) Install(string exe)

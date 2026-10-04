@@ -586,6 +586,12 @@ namespace AgentManagerNotch
             var asked = (p["input-messages"] as System.Text.Json.Nodes.JsonArray)?
                 .Select(n => n is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : "").ToList() ?? new();
             var threadId = Get("thread-id");
+            // Tareas internas de Codex (p. ej. generar el título): no se guardan ni se pueden continuar, no son tuyas
+            if (!CodexNotify.HasRollout(threadId))
+            {
+                Log.Info($"Codex: aviso ignorado, la sesión {threadId} no está guardada (tarea interna)");
+                return;
+            }
             var tab = TerminalTab(ProviderKind.Codex, cwd, threadId);
             tab?.AppendTerminalTurn(threadId, asked, answer, "Codex");
             var project = string.IsNullOrEmpty(cwd) ? "tu terminal" : System.IO.Path.GetFileName(cwd.TrimEnd('\\', '/'));

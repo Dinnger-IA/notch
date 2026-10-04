@@ -429,6 +429,24 @@ namespace AgentManagerNotch.Services
             return true;
         }
 
+        /// <summary>
+        /// Errores de Codex al continuar una sesión, explicados: la sesión sigue abierta en otro sitio (Codex solo deja
+        /// escribir en ella a un proceso) o Codex ya no la tiene (entonces se olvida y el próximo mensaje empieza otra).
+        /// </summary>
+        private string ExplainResumeError(string error)
+        {
+            if (error.Contains("already has an active writer", StringComparison.OrdinalIgnoreCase))
+                return "Esa sesión de Codex sigue abierta en la terminal o en la app de Codex, y Codex solo deja usarla a un " +
+                       "programa a la vez. Ciérrala allí (o espera a que termine) y vuelve a enviar el mensaje.";
+            if (error.Contains("no rollout found", StringComparison.OrdinalIgnoreCase))
+            {
+                SessionId = null;
+                return "Codex ya no tiene guardada esa sesión, así que no se puede continuar. Vuelve a enviar el mensaje: " +
+                       "empezará una sesión nueva en esta carpeta.";
+            }
+            return error;
+        }
+
         public void AddNotice(string text, bool error = false)
         {
             Messages.Add(new ChatMessage(error ? ChatRole.Error : ChatRole.Notice, text));
@@ -659,7 +677,8 @@ namespace AgentManagerNotch.Services
             }
             else if (!success && !string.IsNullOrWhiteSpace(error))
             {
-                Messages.Add(new ChatMessage(ChatRole.Error, error!));
+                error = ExplainResumeError(error!);
+                Messages.Add(new ChatMessage(ChatRole.Error, error));
             }
 
             ExtractSchedules(firstNew);
