@@ -15,6 +15,7 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>
     <Product>Agent Manager Notch</Product>
+    <ApplicationIcon>Assets\AgentManagerNotch.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Versión: la mayor de la carpeta versiones\ (un archivo X.Y.Z.md por versión, con sus novedades). El notch

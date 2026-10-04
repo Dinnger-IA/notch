@@ -29,6 +29,15 @@ namespace AgentManagerNotch
                 return new App { RecordGifRequest = (args[1], args[2]) }.Run();
             }
 
+            // Instalador: el mismo ejecutable autónomo (AgentManagerNotch-Setup-X.Y.Z.exe) instala o desinstala
+            bool uninstall = args.Length > 0 && args[0] == "--desinstalar";
+            if (uninstall || Installer.IsSetupLaunch(args))
+            {
+                // --silencioso: sin ventana, para instalar desde un script (--sin-inicio-windows, --escritorio, --abrir)
+                if (args.Contains("--silencioso")) return Installer.RunSilent(uninstall, args);
+                return new App { SetupRequest = uninstall ? App.SetupKind.Uninstall : App.SetupKind.Install }.Run();
+            }
+
             using var mutex = new Mutex(true, "AgentManagerNotch.SingleInstance", out bool first);
             if (!first)
             {
@@ -61,6 +70,9 @@ namespace AgentManagerNotch
         public NotchWindow Notch { get; private set; } = null!;
         public string HookSettingsPath { get; private set; } = "";
         private readonly CancellationTokenSource _cts = new();
+        internal enum SetupKind { Install, Uninstall }
+        /// <summary>Modo instalador o desinstalador (sin datos del usuario ni instancia única).</summary>
+        internal SetupKind? SetupRequest { get; init; }
         /// <summary>Modo --grabar-gif (vista, salida).</summary>
         internal (string view, string path)? RecordGifRequest { get; init; }
         private static readonly System.Windows.Media.Color ClaudeColor = System.Windows.Media.Color.FromRgb(0xD9, 0x77, 0x57);
@@ -75,6 +87,13 @@ namespace AgentManagerNotch
                 Source = new Uri("pack://application:,,,/AgentManagerNotch;component/Themes/Theme.xaml")
             });
             if (RecordGifRequest is { } rec) { RecordGif(rec.view, rec.path); return; }
+            if (SetupRequest is { } setup)
+            {
+                var w = new InstallerWindow(setup == SetupKind.Uninstall, Installer.Version);
+                w.Closed += (_, _) => Shutdown();
+                w.Show();
+                return;
+            }
 
             DispatcherUnhandledException += (_, ex) =>
             {

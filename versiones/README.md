@@ -34,6 +34,8 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 |---|---|
 | `actualizacion[=X.Y.Z]` | La tarjeta «Versión X.Y.Z disponible» con las novedades de esa versión. |
 | `notas[=X.Y.Z]` | La ventana de notas, recorriendo las pestañas desde esa versión (reproduce los GIF que ya haya). |
+| `tabla` | Una respuesta del chat con tablas Markdown. |
+| `instalador` | La ventana del instalador cambiando sus opciones (no instala nada). |
 
 Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
 ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo

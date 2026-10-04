@@ -24,6 +24,24 @@ dotnet run                 # desarrollo
 Requisitos: Windows 10/11, SDK de .NET 10 para compilar, y el CLI que quieras usar (`claude`, `codex`,
 `gemini`…) en el PATH. Los shims `.cmd` de npm se resuelven a `node script.js` para no pasar por `cmd.exe`.
 
+## Instalador
+
+```powershell
+.\crear-instalador.ps1     # genera .\instalador\AgentManagerNotch-Setup-X.Y.Z.exe (desde la rama agent-manager)
+```
+
+El instalador es el propio programa como un único `.exe` autónomo (no necesita .NET instalado): abierto con ese
+nombre (o con `--instalar`) muestra la ventana de instalación. Instala por usuario, sin permisos de administrador,
+en `%LOCALAPPDATA%\Programs\Agent Manager Notch`, con acceso en el menú Inicio y opciones para **iniciar con
+Windows**, crear un acceso en el escritorio y abrirlo al terminar. Si ya estaba instalado, lo actualiza (cierra el
+notch abierto y conserva agentes, conversaciones y sesión).
+
+Se desinstala desde *Configuración de Windows → Aplicaciones instaladas* (o `AgentManagerNotch.exe --desinstalar`),
+con la opción de borrar también los datos. Para instalar desde un script: `AgentManagerNotch-Setup-X.Y.Z.exe
+--silencioso [--sin-inicio-windows] [--escritorio] [--abrir]`, y `--desinstalar --silencioso [--borrar-datos]`.
+No se comprime a propósito: comprimido ocupa la mitad, pero tarda ~0,9 s en cada arranque (Claude Code lo lanza en
+cada herramienta) frente a ~0,2 s.
+
 ## Tipos de agente
 
 | Tipo | Qué hace | Al abrirlo |
@@ -206,6 +224,8 @@ Services/Approvals.cs      servidor de named pipe + modo --hook
 Services/ControlChannel.cs --notify / --ask / --claude-event e integración opcional con ~/.claude
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
+Services/Installer.cs      instalar/desinstalar por usuario (accesos, registro, inicio con Windows)
+Views/InstallerWindow.*    ventana del instalador
 Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada
 Views/RemindersWindow.*    recordatorios y tareas programadas
