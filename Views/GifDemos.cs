@@ -134,16 +134,18 @@ namespace AgentManagerNotch.Views
         /// <summary>La ventana del instalador, cambiando sus opciones (no instala nada).</summary>
         private static async Task<int> InstallerAsync(string path)
         {
-            var win = new InstallerWindow(uninstall: false, Installer.Version);
+            // Alto fijo: las etapas miden distinto y el GIF no admite cambios de tamaño
+            var win = new InstallerWindow(uninstall: false, Installer.Version) { SizeToContent = SizeToContent.Manual, Height = 640 };
             var content = (FrameworkElement)win.Content;
             await ShowOffscreenAsync(win);
-            var startup = (CheckBox)win.FindName("StartupOption");
             var desktop = (CheckBox)win.FindName("DesktopOption");
+            var next = (Button)win.FindName("MainButton");
+            var click = System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
             var n = await new GifWriter(content, Frozen(Color.FromRgb(0x14, 0x14, 0x18)), 560).RecordAsync(path, async () =>
             {
-                await Task.Delay(1400);
-                startup.IsChecked = false; await Task.Delay(900);
-                startup.IsChecked = true; await Task.Delay(900);
+                await Task.Delay(3200); // etapa Herramientas: estado real de Claude Code y Codex
+                next.RaiseEvent(new RoutedEventArgs(click)); // → Opciones (no instala nada)
+                await Task.Delay(1200);
                 desktop.IsChecked = true; await Task.Delay(1800);
             });
             win.Close();
@@ -213,7 +215,7 @@ namespace AgentManagerNotch.Views
                 Child = new TextBlock { Text = "mi-proyecto  ✓", FontSize = 12, Foreground = text }
             });
             chat.Children.Add(header);
-            chat.Children.Add(new TextBlock { Text = AgentSession.TerminalNotice, FontSize = 11.5, Foreground = dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+            chat.Children.Add(new TextBlock { Text = AgentSession.TerminalNotice(), FontSize = 11.5, Foreground = dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
             foreach (var m in messages)
             {
                 FrameworkElement el = m.Role switch

@@ -378,7 +378,10 @@ namespace AgentManagerNotch.Services
             SaveHistory();
         }
 
-        public const string TerminalNotice = "💻 Sesión de Claude Code de tu terminal. Si escribes aquí, se continúa esa misma sesión.";
+        private const string TerminalNoticePrefix = "💻 Sesión de ";
+        public static string TerminalNotice(string cli = "Claude Code") =>
+            $"{TerminalNoticePrefix}{cli} de tu terminal. Si escribes aquí, se continúa esa misma sesión.";
+        private static bool IsTerminalNotice(ChatMessage m) => m.Role == ChatRole.Notice && m.Text.StartsWith(TerminalNoticePrefix);
 
         /// <summary>
         /// Muestra en esta pestaña una sesión de Claude Code abierta en la terminal y la deja lista para continuarla
@@ -391,15 +394,34 @@ namespace AgentManagerNotch.Services
             if (transcript != null)
             {
                 // Solo se rehace si cambió (cada aviso de la terminal vuelve a leer la sesión entera)
-                var shown = Messages.Where(m => m.Text != TerminalNotice).ToList();
+                var shown = Messages.Where(m => !IsTerminalNotice(m)).ToList();
                 bool same = shown.Count == transcript.Count && (shown.Count == 0 || shown[^1].Text == transcript[^1].Text);
                 if (!same)
                 {
                     Messages.Clear();
-                    Messages.Add(new ChatMessage(ChatRole.Notice, TerminalNotice));
+                    Messages.Add(new ChatMessage(ChatRole.Notice, TerminalNotice()));
                     foreach (var m in transcript) Messages.Add(m);
                 }
             }
+            LastActivity = DateTime.Now;
+            SaveHistory();
+            RaiseOutputChanged();
+            RaiseOverview();
+            return true;
+        }
+
+        /// <summary>
+        /// Un turno de una sesión de Codex de la terminal (su notify no trae la transcripción: solo lo pedido y la
+        /// respuesta): se añade a la pestaña y queda lista para continuar esa sesión desde el notch.
+        /// </summary>
+        public bool AppendTerminalTurn(string sessionId, IEnumerable<string> asked, string answer, string cli)
+        {
+            if (IsBusy) return false;
+            if (SessionId != sessionId || !Messages.Any(IsTerminalNotice))
+                Messages.Add(new ChatMessage(ChatRole.Notice, TerminalNotice(cli)));
+            SessionId = sessionId;
+            foreach (var q in asked.Where(q => !string.IsNullOrWhiteSpace(q))) Messages.Add(new ChatMessage(ChatRole.User, q.Trim()));
+            if (!string.IsNullOrWhiteSpace(answer)) Messages.Add(new ChatMessage(ChatRole.Agent, answer.Trim()));
             LastActivity = DateTime.Now;
             SaveHistory();
             RaiseOutputChanged();

@@ -63,7 +63,18 @@ namespace AgentManagerNotch.Services
             try
             {
                 if (uninstall) Uninstall(removeData: args.Contains("--borrar-datos"));
-                else Install(new Options(!args.Contains("--sin-inicio-windows"), args.Contains("--escritorio"), args.Contains("--abrir")), Version);
+                else
+                {
+                    // Como en la ventana: CLI que falten (con --instalar-cli) y avisos de la terminal (salvo --sin-avisos)
+                    if (args.Contains("--instalar-cli"))
+                        foreach (var cli in CliSetup.Clis.Where(c => !CliSetup.Detect(c).Installed))
+                            Log.Info($"Instalar {cli} (silencioso): " + (CliSetup.InstallAsync(cli).GetAwaiter().GetResult() ?? "instalado"));
+                    Install(new Options(!args.Contains("--sin-inicio-windows"), args.Contains("--escritorio"), LaunchWhenDone: false), Version);
+                    if (!args.Contains("--sin-avisos"))
+                        foreach (var cli in CliSetup.Clis)
+                            Log.Info($"Avisos de {cli} (silencioso): {CliSetup.ConnectHooks(cli, InstalledExe).Detail}");
+                    if (args.Contains("--abrir")) Process.Start(new ProcessStartInfo(InstalledExe) { UseShellExecute = true, WorkingDirectory = InstallDir });
+                }
                 return 0;
             }
             catch (Exception ex)
@@ -124,12 +135,13 @@ namespace AgentManagerNotch.Services
             using (var run = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
                 if (run?.GetValue(RunValue) is string v && v.Contains(InstallDir, StringComparison.OrdinalIgnoreCase)) run.DeleteValue(RunValue, false);
             Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, throwOnMissingSubKey: false);
-            // Los hooks de Claude Code apuntan a este ejecutable: sin él fallarían
+            // Los avisos de Claude Code y Codex apuntan a este ejecutable: sin él fallarían
             try
             {
                 if (ControlChannel.IsClaudeIntegrationInstalled() && IsSelfInstalled()) ControlChannel.SetClaudeIntegration(false);
+                if (CodexNotify.IsInstalled() && IsSelfInstalled()) CodexNotify.Uninstall();
             }
-            catch (Exception ex) { Log.Error("Desinstalar: integración con Claude Code", ex); }
+            catch (Exception ex) { Log.Error("Desinstalar: avisos de Claude Code y Codex", ex); }
             Log.Info($"Desinstalado de {InstallDir} (datos borrados: {removeData})");
 
             var dirs = removeData ? new[] { InstallDir, ConfigStore.Root } : new[] { InstallDir };
