@@ -14,6 +14,33 @@ Depende de Agent Manager y por tanto va en `agent-manager`:
 - Instalación del MCP de Agent Manager en los CLI: `Services/McpSetup.cs`.
 - Proveedor LLM de Agent Manager (`ProviderKind.AgentManager`, `AgentManagerProvider`, `Services/LlmBridge.cs`, modo `--llm`).
 - La primera configuración con Doky (usa el proveedor de Agent Manager).
+- La opción *Usar Agent Manager* del instalador y su comprobación (`Services/AgentManagerCheck.cs`).
+
+Además, por decisión del responsable, la **voz** (`Services/VoiceService.cs`, servidor TTS/STT interno) vive solo en
+`agent-manager` aunque no depende de Agent Manager: no la lleves a `main` sin que lo pida.
+
+### Identificar siempre qué es de Agent Manager
+
+Antes de escribir código, clasifica **cada parte** del cambio: ¿necesita Agent Manager (su sesión o token, su
+servidor, su LLM, su MCP) o funciona sin él? Dilo en el plan y en el mensaje del commit, y si mezcla las dos cosas,
+sepáralas según el flujo de abajo. Ante la duda, pregunta al responsable antes de decidir la rama.
+
+### Todo lo de Agent Manager va detrás de la bandera `UseAgentManager`
+
+En `agent-manager`, la app también puede funcionar **sin** Agent Manager: se elige en el instalador y se guarda en
+`config.json` como `Settings.UseAgentManager` (por defecto `true`; se activa después en ⚙ Configuración →
+*Sesión*). Por eso **toda funcionalidad que dependa de Agent Manager debe comprobar esa bandera** y, con ella en
+`false`, comportarse como `main`:
+
+- No se pide ni se restaura la sesión, no se muestra la puerta de inicio de sesión ni se instala el MCP.
+- No se crean agentes con el proveedor de Agent Manager ni se ofrece ese proveedor en el editor.
+- No se hace ninguna llamada a `agent-manager.distelsa.net`.
+- Nada de la interfaz da por hecho que hay sesión (textos, tarjetas, botones): o se oculta o explica que no se usa.
+
+Puntos donde ya se comprueba (sigue el mismo patrón al añadir algo nuevo): `Authed` en `Views/NotchWindow.xaml.cs`,
+el arranque de la sesión y el MCP en `App.cs`, `ConfigStore.DefaultAgents(useAgentManager)`, la lista de
+proveedores de `Views/AgentEditorWindow.xaml.cs` y la tarjeta de sesión de la configuración. Al revisar un cambio de
+`agent-manager`, comprueba también que funciona con la bandera en `false`.
 
 ### Flujo
 
