@@ -1,0 +1,114 @@
+<Window x:Class="AgentManagerNotch.Views.InstallerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:AgentManagerNotch.Controls"
+        Title="Instalar Agent Manager Notch" Width="580" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" FontFamily="{StaticResource UiFont}" Background="#141418">
+    <Window.Resources>
+        <Style x:Key="OptionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#ECECF2"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="OptionHint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#7A7A88"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+        <Style x:Key="OptionRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,14"/>
+        </Style>
+        <Style x:Key="StageCard" TargetType="Border">
+            <Setter Property="Padding" Value="16,16,16,2"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Background" Value="#1C1C22"/>
+            <Setter Property="Visibility" Value="Collapsed"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="28,24,28,22">
+        <!-- Cabecera -->
+        <StackPanel Orientation="Horizontal">
+            <c:MochiView x:Name="Mochi" Width="84" Height="84" BodyColor="#FF8A65" VerticalAlignment="Center"/>
+            <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
+                <TextBlock x:Name="Heading" Text="Agent Manager Notch" FontSize="22" FontWeight="SemiBold" Foreground="#ECECF2"/>
+                <TextBlock x:Name="SubHeading" FontSize="12.5" Foreground="#9A9AA8" Margin="0,4,0,0" TextWrapping="Wrap" MaxWidth="380"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Etapa actual -->
+        <TextBlock x:Name="StageLabel" FontSize="10.5" FontWeight="SemiBold" Foreground="#7C6CF0" Margin="2,22,0,8"/>
+        <Grid x:Name="StageArea">
+            <!-- Herramientas: los CLI que usan los agentes de código -->
+            <Border x:Name="ToolsStage" Style="{StaticResource StageCard}" Padding="16,14,16,4">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource OptionHint}" Margin="0,0,0,10"
+                               Text="Los agentes de código trabajan con estos programas de línea de comandos (CLI). Instala los que vayas a usar; también puedes hacerlo después."/>
+                    <StackPanel x:Name="CliRows"/>
+                    <Grid Style="{StaticResource OptionRow}" Margin="0,8,0,12">
+                        <StackPanel Margin="0,0,56,0">
+                            <TextBlock Style="{StaticResource OptionTitle}" Text="Avisos de las sesiones de la terminal"/>
+                            <TextBlock Style="{StaticResource OptionHint}" Text="Conecta los CLI con el notch: te avisa cuando una sesión que abriste en la terminal termina o necesita permiso, y la muestra en una pestaña para verla y continuarla."/>
+                        </StackPanel>
+                        <CheckBox x:Name="HooksOption" Style="{StaticResource Switch}" HorizontalAlignment="Right" IsChecked="True"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Opciones de instalación -->
+            <Border x:Name="OptionsStage" Style="{StaticResource StageCard}">
+                <StackPanel>
+                    <Grid Style="{StaticResource OptionRow}">
+                        <StackPanel Margin="0,0,56,0">
+                            <TextBlock Style="{StaticResource OptionTitle}" Text="Iniciar con Windows"/>
+                            <TextBlock Style="{StaticResource OptionHint}" Text="Se abre solo al encender el equipo y espera en la bandeja del sistema. Se puede cambiar luego en ⚙ Configuración → Sistema."/>
+                        </StackPanel>
+                        <CheckBox x:Name="StartupOption" Style="{StaticResource Switch}" HorizontalAlignment="Right" IsChecked="True"/>
+                    </Grid>
+                    <Grid Style="{StaticResource OptionRow}">
+                        <StackPanel Margin="0,0,56,0">
+                            <TextBlock Style="{StaticResource OptionTitle}" Text="Acceso directo en el escritorio"/>
+                            <TextBlock Style="{StaticResource OptionHint}" Text="En el menú Inicio se crea siempre."/>
+                        </StackPanel>
+                        <CheckBox x:Name="DesktopOption" Style="{StaticResource Switch}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Grid Style="{StaticResource OptionRow}">
+                        <TextBlock Style="{StaticResource OptionTitle}" Text="Abrir Agent Manager Notch al terminar" VerticalAlignment="Center" Margin="0,0,56,0"/>
+                        <CheckBox x:Name="LaunchOption" Style="{StaticResource Switch}" HorizontalAlignment="Right" IsChecked="True"/>
+                    </Grid>
+                    <TextBlock x:Name="Where" Style="{StaticResource OptionHint}" Margin="0,0,0,14"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Instalación: cada paso con su resultado -->
+            <Border x:Name="ProgressStage" Style="{StaticResource StageCard}" Padding="16,12,16,12">
+                <StackPanel x:Name="StepRows"/>
+            </Border>
+
+            <!-- Desinstalar -->
+            <Border x:Name="UninstallOptions" Style="{StaticResource StageCard}">
+                <Grid Style="{StaticResource OptionRow}">
+                    <StackPanel Margin="0,0,56,0">
+                        <TextBlock Style="{StaticResource OptionTitle}" Text="Borrar también mis agentes e historial"/>
+                        <TextBlock x:Name="DataHint" Style="{StaticResource OptionHint}"/>
+                    </StackPanel>
+                    <CheckBox x:Name="RemoveDataOption" Style="{StaticResource Switch}" HorizontalAlignment="Right"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock x:Name="Status" FontSize="12.5" Foreground="#ECECF2" TextWrapping="Wrap" Margin="2,12,2,0" Visibility="Collapsed"/>
+
+        <!-- Botones -->
+        <Grid Margin="0,20,0,0">
+            <Button x:Name="BackButton" Style="{StaticResource PillButton}" Content="Atrás" Padding="18,7" HorizontalAlignment="Left"
+                    Click="Back_Click" Visibility="Collapsed"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelButton" Style="{StaticResource PillButton}" Content="Cancelar" Padding="18,7" Margin="0,0,8,0" Click="Cancel_Click"/>
+                <Button x:Name="MainButton" Style="{StaticResource PillButton}" Content="Siguiente" Padding="22,7" FontWeight="SemiBold"
+                        Background="#7C6CF0" Foreground="White" Click="Main_Click"/>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</Window>

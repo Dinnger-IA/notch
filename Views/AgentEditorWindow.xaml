@@ -1,0 +1,169 @@
+<Window x:Class="AgentManagerNotch.Views.AgentEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:AgentManagerNotch.Controls"
+        Title="Agente" Width="780" Height="760" MinWidth="660" MinHeight="580"
+        WindowStartupLocation="CenterScreen" ShowInTaskbar="True" Topmost="True"
+        FontFamily="{StaticResource UiFont}">
+    <DockPanel>
+    <!-- Todos los agentes: pulsar uno lo abre aquí mismo para editarlo -->
+    <Border DockPanel.Dock="Top" Background="#0C0C0F" Padding="16,10,16,10" BorderBrush="#1FFFFFFF" BorderThickness="0,0,0,1">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="AgentStrip" Orientation="Horizontal"/>
+        </ScrollViewer>
+    </Border>
+    <Grid Margin="20">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Vista previa -->
+        <StackPanel Grid.Column="0" Margin="0,0,20,0">
+            <Border CornerRadius="18" Background="#0C0C0F" Height="200" Padding="20">
+                <c:MochiView x:Name="Preview" Width="140" Height="140"/>
+            </Border>
+            <TextBlock Text="Probar animación" Margin="0,14,0,6" FontSize="12" Opacity="0.7"/>
+            <ComboBox x:Name="PreviewState" SelectionChanged="PreviewState_Changed"/>
+            <TextBlock Text="Pínchalo varias veces seguidas 😵" Margin="0,8,0,0" FontSize="11.5" Opacity="0.55" TextWrapping="Wrap"/>
+            <Button Content="Celebrar 🎉" Margin="0,10,0,0" HorizontalAlignment="Stretch" Click="Celebrate_Click"/>
+            <Button Content="Modo caja 📦" Margin="0,6,0,0" HorizontalAlignment="Stretch" Click="Box_Click"/>
+
+            <TextBlock Text="Plantillas" Margin="0,22,0,6" FontSize="12" Opacity="0.7"/>
+            <WrapPanel x:Name="Templates"/>
+        </StackPanel>
+
+        <!-- Formulario -->
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,8,0">
+                <TextBlock Text="Tipo de agente" FontSize="12" Opacity="0.7"/>
+                <ComboBox x:Name="KindBox" Margin="0,4,0,2" HorizontalAlignment="Stretch" SelectionChanged="Kind_Changed"/>
+                <TextBlock x:Name="KindHint" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Nombre" FontSize="12" Opacity="0.7"/>
+                <TextBox x:Name="NameBox" Margin="0,4,0,6" TextChanged="Name_Changed"/>
+                <CheckBox x:Name="DefaultCheck" Content="Usar como agente principal (se ve grande en el notch)" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Color" FontSize="12" Opacity="0.7"/>
+                <WrapPanel x:Name="Swatches" Margin="0,6,0,6"/>
+
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="CLI que usa por debajo" FontSize="12" Opacity="0.7"/>
+                        <ComboBox x:Name="ProviderBox" Margin="0,4,0,0" HorizontalAlignment="Stretch" SelectionChanged="Provider_Changed"/>
+                        <TextBlock x:Name="ProviderStatus" FontSize="11" Margin="0,4,0,0" Opacity="0.7" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Modelo (vacío = el predeterminado)" FontSize="12" Opacity="0.7"/>
+                        <ComboBox x:Name="ModelBox" Margin="0,4,0,0" IsEditable="True" HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="Permisos" FontSize="12" Opacity="0.7"/>
+                <ComboBox x:Name="ApprovalBox" Margin="0,4,0,12" HorizontalAlignment="Stretch"/>
+
+                <StackPanel x:Name="CustomPanel" Visibility="Collapsed">
+                    <TextBlock Text="Comando personalizado" FontSize="12" Opacity="0.7"/>
+                    <TextBox x:Name="CustomBox" Margin="0,4,0,2" FontFamily="{StaticResource MonoFont}"/>
+                    <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,12"
+                               Text="Marcadores: {prompt} {system} {model}. Si no usas {prompt} el mensaje se envía por stdin. Ej.: ollama run llama3.2   ·   aider --yes --message {prompt}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="FolderSection">
+                    <TextBlock x:Name="FolderLabel" Text="Carpeta de trabajo" FontSize="12" Opacity="0.7"/>
+                    <Grid Margin="0,4,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="DirBox" AllowDrop="True" PreviewDragOver="DirBox_DragOver" PreviewDrop="DirBox_Drop"
+                                 ToolTip="Donde se abre el CLI. Puedes arrastrar una carpeta aquí."/>
+                        <Button x:Name="BrowseButton" Grid.Column="1" Content="Seleccionar…" Margin="6,0,0,0" Click="Browse_Click"/>
+                    </Grid>
+                    <TextBlock x:Name="FolderNote" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                </StackPanel>
+
+                <!-- Agente programado -->
+                <Border x:Name="SchedulePanel" Visibility="Collapsed" Padding="14" CornerRadius="12" Background="#14FFFFFF" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Instrucción que debe ejecutar" FontSize="12" Opacity="0.7"/>
+                        <TextBox x:Name="InstructionBox" Margin="0,4,0,12" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" MaxHeight="160"
+                                 VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" TextChanged="Schedule_Changed"/>
+
+                        <TextBlock Text="Cuándo" FontSize="12" Opacity="0.7"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,8">
+                            <RadioButton x:Name="ModeInterval" Content="Cada N horas" GroupName="mode" Checked="Schedule_Changed" Margin="0,0,18,0"/>
+                            <RadioButton x:Name="ModeFixed" Content="A horas fijas" GroupName="mode" Checked="Schedule_Changed"/>
+                        </StackPanel>
+
+                        <Grid x:Name="IntervalPanel" Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Cada (mín. 1 h)" FontSize="11" Opacity="0.7"/>
+                                <ComboBox x:Name="IntervalBox" Margin="0,4,0,0" HorizontalAlignment="Stretch" SelectionChanged="Schedule_Changed"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Desde" FontSize="11" Opacity="0.7"/>
+                                <TextBox x:Name="FromBox" Margin="0,4,0,0" Text="09:00" TextChanged="Schedule_Changed"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="Hasta" FontSize="11" Opacity="0.7"/>
+                                <TextBox x:Name="ToBox" Margin="0,4,0,0" Text="18:00" TextChanged="Schedule_Changed"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel x:Name="FixedPanel" Visibility="Collapsed" Margin="0,0,0,8">
+                            <TextBlock Text="Horas (separadas por comas, al menos 1 h entre sí)" FontSize="11" Opacity="0.7"/>
+                            <TextBox x:Name="TimesBox" Margin="0,4,0,0" Text="09:00, 14:00" TextChanged="Schedule_Changed"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Días" FontSize="11" Opacity="0.7" Margin="0,2,0,4"/>
+                        <WrapPanel x:Name="DaysPanel"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button Content="Lun–Vie" Padding="8,2" Margin="0,0,6,0" Click="DaysWeekdays_Click"/>
+                            <Button Content="Todos" Padding="8,2" Margin="0,0,6,0" Click="DaysAll_Click"/>
+                            <Button Content="Fin de semana" Padding="8,2" Click="DaysWeekend_Click"/>
+                        </StackPanel>
+
+                        <CheckBox x:Name="KeepContextCheck" Content="Recordar las ejecuciones anteriores (misma sesión del CLI)" Margin="0,12,0,0"/>
+                        <CheckBox x:Name="PausedCheck" Content="En pausa" Margin="0,4,0,0" Checked="Schedule_Changed" Unchecked="Schedule_Changed"/>
+                        <TextBlock x:Name="SchedulePreview" FontSize="11.5" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="System prompt (personalidad e instrucciones)" FontSize="12" Opacity="0.7"/>
+                <TextBox x:Name="PromptBox" Margin="0,4,0,12" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="150" MaxHeight="260"
+                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+
+                <TextBlock Text="Argumentos extra para el CLI (opcional)" FontSize="12" Opacity="0.7"/>
+                <TextBox x:Name="ExtraBox" Margin="0,4,0,4" FontFamily="{StaticResource MonoFont}"/>
+                <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                           Text="Ej. Claude: --add-dir D:\otro   ·   Codex: --enable web_search"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Button x:Name="DeleteButton" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="0,16,0,0"
+                Content="Eliminar agente" MinWidth="120" Click="Delete_Click" Visibility="Collapsed"
+                Foreground="{StaticResource ErrorFg}" ToolTip="Elimina el agente y sus conversaciones (pide confirmación)"/>
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancelar" MinWidth="100" IsCancel="True" Margin="0,0,8,0"/>
+            <Button x:Name="SaveButton" Content="Guardar" MinWidth="120" IsDefault="True" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}"/>
+        </StackPanel>
+    </Grid>
+    </DockPanel>
+</Window>

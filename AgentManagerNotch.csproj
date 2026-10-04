@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>AgentManagerNotch</AssemblyName>
+    <RootNamespace>AgentManagerNotch</RootNamespace>
+    <StartupObject>AgentManagerNotch.Program</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>
+    <Product>Agent Manager Notch</Product>
+    <ApplicationIcon>Assets\AgentManagerNotch.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Versión: la mayor de la carpeta versiones\ (un archivo X.Y.Z.md por versión, con sus novedades). El notch
+       la compara con la de su rama en el repositorio para saber si hay versión nueva. -->
+  <UsingTask TaskName="LatestVersion" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <Version Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        System.Version best = null;
+        foreach (var f in Files)
+        {
+            System.Version v;
+            if (System.Version.TryParse(f.GetMetadata("Filename"), out v) && (best == null || v > best)) best = v;
+        }
+        Version = best == null ? "0.0.0" : best.ToString();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="VersionFromFolder" BeforeTargets="GetAssemblyVersion">
+    <ItemGroup>
+      <VersionFile Include="versiones\*.md" />
+    </ItemGroup>
+    <LatestVersion Files="@(VersionFile)">
+      <Output TaskParameter="Version" PropertyName="Version" />
+    </LatestVersion>
+  </Target>
+
+  <!-- Las notas (y los GIF) de todas las versiones van dentro del ejecutable para la ventana «Notas de la versión» -->
+  <ItemGroup>
+    <EmbeddedResource Include="versiones\*.md;versiones\*.gif" Exclude="versiones\README.md" LogicalName="versiones/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Commit y rama con los que se compiló: para el registro y la rama que se consulta al buscar versiones nuevas -->
+  <Target Name="EmbedGitInfo" BeforeTargets="GetAssemblyAttributes">
+    <Exec Command="git rev-parse HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommit" />
+    </Exec>
+    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitBranch" />
+    </Exec>
+    <ItemGroup>
+      <AssemblyMetadata Include="GitCommit" Value="$(GitCommit)" />
+      <AssemblyMetadata Include="GitBranch" Value="$(GitBranch)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
