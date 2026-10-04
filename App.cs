@@ -297,6 +297,16 @@ namespace AgentManagerNotch
             Store.Save();
         }
 
+        /// <summary>Intercambia el sitio de dos agentes en la lista (y en la píldora y los chips).</summary>
+        public void SwapOrder(AgentEntry a, AgentEntry b)
+        {
+            int i = Agents.IndexOf(a), j = Agents.IndexOf(b);
+            if (i < 0 || j < 0 || i == j) return;
+            Agents.Move(i, j);
+            Agents.Move(i < j ? j - 1 : j + 1, i);
+            SaveAgents();
+        }
+
         public AgentEntry AddAgent(AgentProfile p)
         {
             var e = CreateEntry(p);

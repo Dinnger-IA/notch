@@ -495,12 +495,13 @@ namespace AgentManagerNotch.Views
         private void Chip_Click(object sender, MouseButtonEventArgs e)
         {
             // El agente del chip pasa a la tarjeta grande y queda como principal (se recuerda al cerrar
-            // y sale en grande en la píldora); el que estaba ahí baja a los chips
+            // y sale en grande en la píldora); el que estaba ahí baja a los chips, al sitio del pulsado
             if ((sender as FrameworkElement)?.DataContext is AgentEntry a)
             {
                 var old = _focused;
                 var fromChip = BoundsInSwapLayer(ChipMochiFor(a));
                 var fromCard = BoundsInSwapLayer(FocusMochi);
+                if (old != null) AppRef.SwapOrder(a, old);
                 if (!a.IsDefault) { AppRef.SetDefault(a); RebuildPill(); }
                 SetFocused(a);
                 AnimateSwap(a, old, fromChip, fromCard);
