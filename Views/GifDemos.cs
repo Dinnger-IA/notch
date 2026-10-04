@@ -23,7 +23,8 @@ namespace AgentManagerNotch.Views
             "tabla (respuesta del chat con tablas Markdown) · voz (el agente leyendo su respuesta en voz alta) · instalador (ventana del instalador) · " +
             "terminal (sesión de Claude Code de la terminal en una pestaña de codi-claude) · " +
             "aviso-panel (aviso de Claude Code de la terminal con el panel abierto) · " +
-            "acciones (las 5 últimas acciones de un agente de código, la más reciente arriba)";
+            "acciones (las 5 últimas acciones de un agente de código, la más reciente arriba) · " +
+            "editor-color (los colores del editor de agentes, en una sola fila)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -42,6 +43,7 @@ namespace AgentManagerNotch.Views
                 "terminal" => await TerminalSessionAsync(path),
                 "aviso-panel" => await PanelNoticeAsync(path),
                 "acciones" => await RecentActionsAsync(path),
+                "editor-color" => await EditorColorAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -259,6 +261,28 @@ namespace AgentManagerNotch.Views
                 RecentActionList.SetSharp(panel, true);
                 for (int k = 1; k <= 12; k++) { scroll.ScrollToVerticalOffset(scroll.ScrollableHeight * k / 12); await Task.Delay(40); }
                 await Task.Delay(1400);
+            });
+            win.Close();
+            return n;
+        }
+
+        /// <summary>El editor de agentes eligiendo colores de la fila de muestras (agente nuevo, sin datos del usuario).</summary>
+        private static async Task<int> EditorColorAsync(string path)
+        {
+            var win = new AgentEditorWindow(null) { Width = 780, Height = 520 };
+            var content = (FrameworkElement)win.Content;
+            await ShowOffscreenAsync(win);
+            var swatches = ((Panel)win.FindName("Swatches")).Children.OfType<Border>().ToList();
+            var n = await new GifWriter(content, WindowBg, 700).RecordAsync(path, async () =>
+            {
+                await Task.Delay(900);
+                foreach (var i in new[] { 0, 3, 6, 8, 10, 14 })
+                {
+                    swatches[i].RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+                        { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+                    await Task.Delay(800);
+                }
+                await Task.Delay(600);
             });
             win.Close();
             return n;

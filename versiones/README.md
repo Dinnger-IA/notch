@@ -40,6 +40,7 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 | `terminal` | El aviso de una sesión de Claude Code de la terminal y esa sesión en una pestaña de codi-claude. |
 | `aviso-panel` | El aviso de Claude Code de la terminal flotando sobre el panel abierto. |
 | `acciones` | Las 5 últimas acciones de un agente de código: la nueva entra arriba, las demás bajan difuminándose y con scroll se ven las anteriores. |
+| `editor-color` | El editor de agentes eligiendo colores de la fila de muestras. |
 
 Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
 ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo
