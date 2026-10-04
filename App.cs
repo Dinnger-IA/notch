@@ -521,25 +521,66 @@ namespace AgentManagerNotch
             catch (Exception ex) { Log.Error("HandleControl", ex); }
         }
 
-        /// <summary>Eventos de las sesiones de Claude Code que el usuario abre en su terminal.</summary>
+        /// <summary>
+        /// Eventos de las sesiones de Claude Code que el usuario abre en su terminal. Cada sesión se asocia a una pestaña
+        /// (workspace) de un agente de código de Claude Code, para verla y continuarla desde el notch; el aviso abre esa
+        /// pestaña.
+        /// </summary>
         private void HandleClaudeEvent(System.Text.Json.Nodes.JsonObject? p)
         {
             if (p == null) return;
-            var ev = p["hook_event_name"]?.GetValue<string>() ?? "";
-            var cwd = p["cwd"]?.GetValue<string>() ?? "";
+            string Get(string key) => p[key]?.GetValue<string>() ?? "";
+            var ev = Get("hook_event_name");
+            var cwd = Get("cwd");
             var project = string.IsNullOrEmpty(cwd) ? "tu terminal" : System.IO.Path.GetFileName(cwd.TrimEnd('\\', '/'));
+            var key = LinkTerminalSession(cwd, Get("session_id"), Get("transcript_path"))?.Key;
             if (ev == "Stop")
             {
-                Notch.ShowBannerRaw(ClaudeColor, MochiState.Done, "Claude Code terminó", $"Sesión en {project}", null, sticky: false);
-                if (Store.Config.Settings.NotifyOnDone) Notifier.Toast("Claude Code terminó", $"Sesión en {project}", null);
+                Notch.ShowBannerRaw(ClaudeColor, MochiState.Done, "Claude Code terminó", $"Sesión en {project}", key, sticky: false);
+                if (Store.Config.Settings.NotifyOnDone) Notifier.Toast("Claude Code terminó", $"Sesión en {project}", key);
                 Notifier.Play(NotificationService.SoundKind.Done);
             }
             else if (ev == "Notification")
             {
                 var m = p["message"]?.GetValue<string>() ?? "Claude Code necesita tu atención";
-                Notch.ShowBannerRaw(ClaudeColor, MochiState.Waiting, $"Claude Code · {project}", m, null, sticky: true);
-                Notifier.Toast($"Claude Code · {project}", m, null, System.Windows.Forms.ToolTipIcon.Warning);
+                Notch.ShowBannerRaw(ClaudeColor, MochiState.Waiting, $"Claude Code · {project}", m, key, sticky: true);
+                Notifier.Toast($"Claude Code · {project}", m, key, System.Windows.Forms.ToolTipIcon.Warning);
                 Notifier.Play(NotificationService.SoundKind.Attention);
+            }
+            // UserPromptSubmit: solo asocia la sesión y muestra lo que se pidió (sin aviso)
+        }
+
+        /// <summary>
+        /// Pestaña para una sesión de Claude Code de la terminal: en un agente de código que use Claude Code (el que ya
+        /// tenga esa carpeta, el principal, el que se llame Codi… o el primero); si no hay ninguno se crea «codi-claude».
+        /// Devuelve null si el evento no trae carpeta o sesión.
+        /// </summary>
+        private AgentSession? LinkTerminalSession(string cwd, string sessionId, string transcriptPath)
+        {
+            if (string.IsNullOrWhiteSpace(cwd) || string.IsNullOrWhiteSpace(sessionId) || !System.IO.Directory.Exists(cwd)) return null;
+            try
+            {
+                var folder = System.IO.Path.GetFullPath(cwd).TrimEnd('\\');
+                bool SameFolder(AgentSession s) => s.Workspace != null &&
+                    string.Equals(System.IO.Path.GetFullPath(s.WorkDir).TrimEnd('\\'), folder, StringComparison.OrdinalIgnoreCase);
+                var codis = Agents.Where(a => a.IsCode && a.Profile.Provider == ProviderKind.ClaudeCode).ToList();
+                var target = codis.FirstOrDefault(a => a.Tabs.Any(SameFolder))
+                             ?? codis.FirstOrDefault(a => a.IsDefault)
+                             ?? codis.FirstOrDefault(a => a.Name.StartsWith("Codi", StringComparison.OrdinalIgnoreCase))
+                             ?? codis.FirstOrDefault();
+                if (target == null)
+                {
+                    target = AddAgent(ConfigStore.NewCodeAgent(null, "codi-claude", "#D97757"));
+                    Log.Info("Sesión de Claude Code en la terminal: se creó el agente codi-claude");
+                }
+                var tab = AddWorkspace(folder, target);
+                tab.AttachTerminalSession(sessionId, ClaudeTranscript.Read(transcriptPath));
+                return tab;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Asociar la sesión de Claude Code de la terminal", ex);
+                return null;
             }
         }
 

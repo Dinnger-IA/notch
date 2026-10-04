@@ -378,6 +378,35 @@ namespace AgentManagerNotch.Services
             SaveHistory();
         }
 
+        public const string TerminalNotice = "💻 Sesión de Claude Code de tu terminal. Si escribes aquí, se continúa esa misma sesión.";
+
+        /// <summary>
+        /// Muestra en esta pestaña una sesión de Claude Code abierta en la terminal y la deja lista para continuarla
+        /// desde el notch (el siguiente mensaje usa --resume con su id). No hace nada si el notch está trabajando aquí.
+        /// </summary>
+        public bool AttachTerminalSession(string sessionId, List<ChatMessage>? transcript)
+        {
+            if (IsBusy) return false;
+            SessionId = sessionId;
+            if (transcript != null)
+            {
+                // Solo se rehace si cambió (cada aviso de la terminal vuelve a leer la sesión entera)
+                var shown = Messages.Where(m => m.Text != TerminalNotice).ToList();
+                bool same = shown.Count == transcript.Count && (shown.Count == 0 || shown[^1].Text == transcript[^1].Text);
+                if (!same)
+                {
+                    Messages.Clear();
+                    Messages.Add(new ChatMessage(ChatRole.Notice, TerminalNotice));
+                    foreach (var m in transcript) Messages.Add(m);
+                }
+            }
+            LastActivity = DateTime.Now;
+            SaveHistory();
+            RaiseOutputChanged();
+            RaiseOverview();
+            return true;
+        }
+
         public void AddNotice(string text, bool error = false)
         {
             Messages.Add(new ChatMessage(error ? ChatRole.Error : ChatRole.Notice, text));

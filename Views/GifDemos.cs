@@ -20,7 +20,8 @@ namespace AgentManagerNotch.Views
         public const string Help =
             "Vistas: notas[=X.Y.Z] (ventana de notas recorriendo las pestañas desde esa versión) · " +
             "actualizacion[=X.Y.Z] (tarjeta de versión nueva con las novedades de esa versión) · " +
-            "tabla (respuesta del chat con tablas Markdown) · instalador (ventana del instalador)";
+            "tabla (respuesta del chat con tablas Markdown) · instalador (ventana del instalador) · " +
+            "terminal (sesión de Claude Code de la terminal en una pestaña de codi-claude)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -35,6 +36,7 @@ namespace AgentManagerNotch.Views
                 "notas" => await ReleaseNotesAsync(version, path),
                 "actualizacion" => await UpdateCardAsync(version, path),
                 "tabla" => await ChatTableAsync(path),
+                "terminal" => await TerminalSessionAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -146,6 +148,116 @@ namespace AgentManagerNotch.Views
             });
             win.Close();
             return n;
+        }
+
+        /// <summary>
+        /// Sesión de Claude Code de la terminal: llega el aviso y, al abrirlo, la sesión está en una pestaña de
+        /// codi-claude (leída con <see cref="ClaudeTranscript"/> de una transcripción de ejemplo).
+        /// </summary>
+        private static async Task<int> TerminalSessionAsync(string path)
+        {
+            object Line(string type, object content, int min) => new
+            {
+                type, sessionId = "demo", timestamp = DateTime.Today.AddHours(10).AddMinutes(min).ToUniversalTime().ToString("o"),
+                message = new { role = type, content }
+            };
+            var lines = new[]
+            {
+                Line("user", "Arregla el test de fechas que falla en CI", 0),
+                Line("assistant", new object[] { new { type = "tool_use", name = "Bash", input = new { command = "npm test -- fechas" } } }, 1),
+                Line("assistant", new object[] { new { type = "tool_use", name = "Read", input = new { file_path = "src/utils/fechas.ts" } } }, 1),
+                Line("assistant", new object[] { new { type = "tool_use", name = "Edit", input = new { file_path = "src/utils/fechas.ts" } } }, 2),
+                Line("assistant", new object[] { new { type = "text", text = "Listo: el test fallaba por la **zona horaria** del servidor de CI. Ahora `formatearFecha` usa UTC y los 14 tests pasan." } }, 3)
+            };
+            var file = Path.Combine(Path.GetTempPath(), "agent-manager-notch-demo-sesion.jsonl");
+            File.WriteAllLines(file, lines.Select(l => System.Text.Json.JsonSerializer.Serialize(l)));
+            var messages = ClaudeTranscript.Read(file) ?? new();
+            File.Delete(file);
+
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            var dim = Frozen(Color.FromRgb(0x8C, 0x8C, 0x99));
+            var claude = Color.FromRgb(0xD9, 0x77, 0x57);
+
+            // 1) El aviso del notch
+            var banner = new Border
+            {
+                Background = Frozen(Color.FromRgb(0x1C, 0x1C, 0x22)), CornerRadius = new CornerRadius(18), Padding = new Thickness(14, 10, 18, 10),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 10, 0, 0),
+                Child = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new Controls.MochiView { Width = 40, Height = 40, BodyColor = claude, State = Controls.MochiState.Done, Interactive = false },
+                        new StackPanel
+                        {
+                            Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+                            Children =
+                            {
+                                new TextBlock { Text = "Claude Code terminó", FontSize = 13.5, FontWeight = FontWeights.SemiBold, Foreground = text },
+                                new TextBlock { Text = "Sesión en mi-proyecto · clic para verla", FontSize = 12, Foreground = dim }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // 2) La pestaña de codi-claude con la sesión
+            var chat = new StackPanel { Margin = new Thickness(4, 0, 4, 0) };
+            var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            header.Children.Add(new Controls.MochiView { Width = 34, Height = 34, BodyColor = claude, Interactive = false });
+            header.Children.Add(new TextBlock { Text = "codi-claude", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 10, 0) });
+            header.Children.Add(new Border
+            {
+                Background = Frozen(Color.FromRgb(0x2C, 0x2C, 0x33)), CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 3, 10, 3), VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock { Text = "mi-proyecto  ✓", FontSize = 12, Foreground = text }
+            });
+            chat.Children.Add(header);
+            chat.Children.Add(new TextBlock { Text = AgentSession.TerminalNotice, FontSize = 11.5, Foreground = dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+            foreach (var m in messages)
+            {
+                FrameworkElement el = m.Role switch
+                {
+                    ChatRoleUser => new Border
+                    {
+                        Background = Frozen(Color.FromRgb(0x2C, 0x2C, 0x33)), CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 7, 14, 7),
+                        HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 2, 0, 6),
+                        Child = new TextBlock { Text = m.Text, FontSize = 13.5, Foreground = text }
+                    },
+                    ChatRoleTool => new TextBlock { Text = "›  " + m.Text, FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 11, Foreground = dim, Margin = new Thickness(2, 1, 0, 1) },
+                    _ => MarkdownBlock(m.Text, text)
+                };
+                chat.Children.Add(el);
+            }
+
+            var stage = new Grid { Width = 560, Height = 330 };
+            stage.Children.Add(banner);
+            var chatHost = new Border { Child = chat, Visibility = Visibility.Hidden, Padding = new Thickness(8, 4, 8, 0) };
+            stage.Children.Add(chatHost);
+            var host = new Border { Background = NotchBg, Padding = new Thickness(12), Child = stage };
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 580).RecordAsync(path, async () =>
+            {
+                await Task.Delay(2200);
+                banner.Visibility = Visibility.Hidden;
+                chatHost.Visibility = Visibility.Visible;
+                await Task.Delay(4500);
+            });
+            win.Close();
+            return n;
+        }
+
+        private const Models.ChatRole ChatRoleUser = Models.ChatRole.User, ChatRoleTool = Models.ChatRole.Tool;
+
+        private static FrameworkElement MarkdownBlock(string md, Brush foreground)
+        {
+            var box = new RichTextBox { FontSize = 13.5, Margin = new Thickness(0, 6, 0, 0) };
+            if (Application.Current.TryFindResource("SelectableDoc") is Style st) box.Style = st;
+            box.Foreground = foreground;
+            System.Windows.Documents.Block.SetLineHeight(box, 20);
+            Markdown.SetText(box, md);
+            return box;
         }
 
         private static async Task ShowOffscreenAsync(Window win)
