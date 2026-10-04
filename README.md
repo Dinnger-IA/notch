@@ -112,7 +112,8 @@ a la derecha**.
 ### Chat (interactivos y código)
 
 - El chat va dentro de una **tarjeta** (como las de la vista general) bajo la barra superior. Estilo coucou:
-  nombre del agente + nueva conversación (o pestañas de workspace en código), píldora de contexto,
+  nombre del agente + nueva conversación (o pestañas de workspace en código), píldora de contexto
+  (no en los agentes de código: su carpeta ya se ve en la pestaña),
   tus mensajes en burbuja a la derecha, las respuestas como texto suelto, fondo oscuro con halo violeta y el
   personaje asomando abajo a la izquierda. Entrada «Continuar…».
 - **Código**: en lugar de «+» aparecen las **pestañas de workspace** (carpeta + estado: ▶ activa, ✓ terminó,

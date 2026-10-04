@@ -559,8 +559,20 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <Border x:Name="ContextPill" HorizontalAlignment="Left" CornerRadius="13" Background="#2C2C33" Padding="10,4,12,4" Margin="0,0,0,6"
-                                    ToolTip="{Binding FolderPath}" Cursor="Hand" MouseLeftButtonUp="OpenFolder_Click"
-                                    Visibility="{Binding Converter={StaticResource NullToVis}}">
+                                    ToolTip="{Binding FolderPath}" Cursor="Hand" MouseLeftButtonUp="OpenFolder_Click">
+                                <!-- En los agentes de código la carpeta ya se ve en la pestaña del workspace: no se repite -->
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsCode}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <StackPanel Orientation="Horizontal">
                                     <Ellipse Width="7" Height="7" Fill="{Binding Color, Converter={StaticResource ColorBrush}}" VerticalAlignment="Center"/>
                                     <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="#ECECF2" VerticalAlignment="Center">
