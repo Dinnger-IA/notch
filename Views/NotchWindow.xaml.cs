@@ -1100,6 +1100,7 @@ namespace AgentManagerNotch.Views
             SetNotifyDone.IsChecked = st.NotifyOnDone;
             SetSpeakReplies.IsChecked = st.SpeakReplies;
             SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled();
+            SetCodexNotify.IsChecked = CodexNotify.IsInstalled();
             SetHover.IsChecked = st.ExpandOnHover;
             SetHideNotch.IsChecked = st.HideNotch;
             SetCloseOutside.IsChecked = st.CloseOnClickOutsideOnly;
@@ -1140,6 +1141,15 @@ namespace AgentManagerNotch.Views
                 case var c when c == SetHover: st.ExpandOnHover = SetHover.IsChecked == true; break;
                 case var c when c == SetHideNotch: st.HideNotch = SetHideNotch.IsChecked == true; _lineHover = false; break;
                 case var c when c == SetStartup: NotificationService.SetStartup(SetStartup.IsChecked == true); break;
+                case var c when c == SetCodexNotify:
+                    try
+                    {
+                        if (SetCodexNotify.IsChecked == true) CodexNotify.Install(Environment.ProcessPath ?? "AgentManagerNotch.exe");
+                        else CodexNotify.Uninstall();
+                    }
+                    catch (Exception ex) { Log.Error("Avisos de Codex", ex); }
+                    SetCodexNotify.IsChecked = CodexNotify.IsInstalled();
+                    break;
                 case var c when c == SetClaudeHooks:
                     try { ControlChannel.SetClaudeIntegration(SetClaudeHooks.IsChecked == true); }
                     catch (Exception ex) { Log.Error("Integración Claude", ex); SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled(); }

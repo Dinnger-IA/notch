@@ -769,6 +769,11 @@
                                         <TextBlock Style="{StaticResource SettingsLabel}" Text="Avisos de mis sesiones de Claude Code"/>
                                         <CheckBox x:Name="SetClaudeHooks" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
                                     </Grid>
+                                    <Grid Style="{StaticResource SettingsRow}">
+                                        <TextBlock Style="{StaticResource SettingsLabel}" Text="Avisos de mis sesiones de Codex"
+                                                   ToolTip="Usa la opción notify de ~/.codex/config.toml; si ya la usaba otra app, se le siguen pasando los avisos"/>
+                                        <CheckBox x:Name="SetCodexNotify" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

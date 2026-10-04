@@ -16,7 +16,8 @@ namespace AgentManagerNotch.Services
     /// <item>Claude Code: instalador oficial de Windows (<c>irm https://claude.ai/install.ps1 | iex</c>), sin Node ni
     /// administrador. Avisos: hooks en ~/.claude/settings.json (<see cref="ControlChannel.SetClaudeIntegration"/>).</item>
     /// <item>Codex: <c>npm install -g @openai/codex</c> (si no hay Node, antes Node LTS con winget). Avisos: la opción
-    /// <c>notify</c> de ~/.codex/config.toml, solo si está libre (Codex admite uno y la app de Codex puede usarlo).</item>
+    /// <c>notify</c> de ~/.codex/config.toml. Codex admite uno solo: si ya lo usa otra app (p. ej. la app de Codex), se
+    /// encadena: el notch lo toma y reenvía cada aviso al programa anterior (<see cref="CodexNotify"/>).</item>
     /// </list>
     /// </summary>
     public static class CliSetup
@@ -144,10 +145,19 @@ namespace AgentManagerNotch.Services
     /// JSON como último argumento. Solo admite uno, así que si ya lo usa otra aplicación (p. ej. la app de Codex) no se
     /// toca.
     /// </summary>
+    /// <summary>
+    /// La opción <c>notify</c> de ~/.codex/config.toml apuntando al notch. Si otra app ya la usaba, su valor se guarda
+    /// en <see cref="PreviousPath"/> y el notch le reenvía cada aviso (<see cref="ForwardToPrevious"/>); al quitarlo se
+    /// restaura.
+    /// </summary>
     public static class CodexNotify
     {
         public const string Arg = "--codex-event";
         private static string ConfigPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "config.toml");
+        /// <summary>Línea <c>notify = …</c> que había antes del notch (otra app), para reenviarle los avisos.</summary>
+        private static string PreviousPath => Path.Combine(ConfigStore.Root, "codex-notify-anterior.txt");
+
+        private static bool IsNotifyLine(string l) => l.TrimStart().StartsWith("notify", StringComparison.Ordinal) && l.Contains('=');
 
         public static (CliSetup.HookResult, string) Install(string exe)
         {
@@ -156,32 +166,85 @@ namespace AgentManagerNotch.Services
             var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : new();
             int firstTable = lines.FindIndex(l => l.TrimStart().StartsWith('['));
             int top = firstTable < 0 ? lines.Count : firstTable;
-            int notify = lines.FindIndex(0, top, l => l.TrimStart().StartsWith("notify", StringComparison.Ordinal) && l.Contains('='));
+            int notify = lines.FindIndex(0, top, IsNotifyLine);
             // Cadena literal de TOML (comillas simples): sin escapar las barras de la ruta
             var line = $"notify = ['{exe}', '{Arg}']";
+            string chained = "";
             if (notify >= 0)
             {
-                if (!lines[notify].Contains(Arg))
-                    return (CliSetup.HookResult.Busy, "Codex ya avisa a otra aplicación (la opción «notify» de ~/.codex/config.toml está en uso): no se cambia.");
                 if (lines[notify] == line) return (CliSetup.HookResult.AlreadyConnected, "Avisos de la terminal ya conectados.");
+                if (!lines[notify].Contains(Arg))
+                {
+                    // Otra app usa notify: se guarda para reenviarle los avisos
+                    Directory.CreateDirectory(ConfigStore.Root);
+                    File.WriteAllText(PreviousPath, lines[notify].Trim());
+                    chained = " Se siguen reenviando a la app que ya los usaba.";
+                    Log.Info("Codex: notify encadenado con el anterior");
+                }
                 lines[notify] = line;
             }
             else lines.Insert(0, line);
             if (File.Exists(path)) File.Copy(path, path + ".agent-manager-notch-backup", overwrite: true);
             File.WriteAllLines(path, lines);
-            return (CliSetup.HookResult.Connected, "Avisos de la terminal conectados (notify en ~/.codex/config.toml).");
+            return (CliSetup.HookResult.Connected, "Avisos de la terminal conectados (notify en ~/.codex/config.toml)." + chained);
         }
 
-        /// <summary>Quita el notify del notch (si es el suyo).</summary>
+        /// <summary>Quita el notify del notch (si es el suyo) y deja el que había antes, si lo había.</summary>
         public static void Uninstall()
         {
             var path = ConfigPath;
             if (!File.Exists(path)) return;
             var lines = File.ReadAllLines(path).ToList();
-            if (lines.RemoveAll(l => l.TrimStart().StartsWith("notify", StringComparison.Ordinal) && l.Contains(Arg)) > 0)
-                File.WriteAllLines(path, lines);
+            int i = lines.FindIndex(l => IsNotifyLine(l) && l.Contains(Arg));
+            if (i < 0) return;
+            var previous = File.Exists(PreviousPath) ? File.ReadAllText(PreviousPath).Trim() : "";
+            if (previous.Length > 0) lines[i] = previous; else lines.RemoveAt(i);
+            File.WriteAllLines(path, lines);
+            try { File.Delete(PreviousPath); } catch { }
         }
 
         public static bool IsInstalled() => File.Exists(ConfigPath) && File.ReadAllText(ConfigPath).Contains(Arg);
+
+        /// <summary>Pasa el aviso al notify anterior (mismo comando con el JSON como último argumento), sin esperarlo.</summary>
+        public static void ForwardToPrevious(string json)
+        {
+            try
+            {
+                if (!File.Exists(PreviousPath)) return;
+                var cmd = ParseArray(File.ReadAllText(PreviousPath));
+                if (cmd.Count == 0 || cmd[0].Contains(Arg)) return;
+                var psi = new ProcessStartInfo(cmd[0]) { UseShellExecute = false, CreateNoWindow = true };
+                foreach (var a in cmd.Skip(1)) psi.ArgumentList.Add(a);
+                psi.ArgumentList.Add(json);
+                Process.Start(psi)?.Dispose();
+            }
+            catch (Exception ex) { Log.Error("Codex: reenviar el aviso al notify anterior", ex); }
+        }
+
+        /// <summary>Cadenas del array TOML de <c>notify = [...]</c> (básicas con escapes o literales con comillas simples).</summary>
+        private static System.Collections.Generic.List<string> ParseArray(string line)
+        {
+            var result = new System.Collections.Generic.List<string>();
+            int i = line.IndexOf('[');
+            if (i < 0) return result;
+            while (++i < line.Length)
+            {
+                char q = line[i];
+                if (q == ']') break;
+                if (q != '"' && q != '\'') continue;
+                var sb = new StringBuilder();
+                while (++i < line.Length && line[i] != q)
+                {
+                    if (q == '"' && line[i] == '\\' && i + 1 < line.Length)
+                    {
+                        char e = line[++i];
+                        sb.Append(e switch { 'n' => '\n', 't' => '\t', 'r' => '\r', _ => e });
+                    }
+                    else sb.Append(line[i]);
+                }
+                result.Add(sb.ToString());
+            }
+            return result;
+        }
     }
 }
