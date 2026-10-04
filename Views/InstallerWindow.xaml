@@ -31,8 +31,46 @@
             </StackPanel>
         </StackPanel>
 
+        <!-- Agent Manager: si se usa, hay que pasar la comprobación antes de instalar -->
+        <Border x:Name="AmOptions" Margin="0,22,0,0" Padding="16,16,16,14" CornerRadius="14" Background="#1C1C22">
+            <StackPanel>
+                <Grid>
+                    <StackPanel Margin="0,0,56,0">
+                        <TextBlock Style="{StaticResource OptionTitle}" Text="Usar Agent Manager"/>
+                        <TextBlock Style="{StaticResource OptionHint}" Text="Inicio de sesión con tu cuenta, el asistente Doky (LLM de Agent Manager) y su MCP en los CLI. Sin él, los agentes trabajan solo con los CLI de este equipo (Claude Code, Codex, Gemini…)."/>
+                    </StackPanel>
+                    <CheckBox x:Name="AmOption" Style="{StaticResource Switch}" HorizontalAlignment="Right" IsChecked="True" Click="AmOption_Click"/>
+                </Grid>
+                <StackPanel x:Name="AmCheckPanel" Margin="0,12,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="AmCheckButton" Style="{StaticResource PillButton}" Padding="14,6" Click="AmCheck_Click">
+                            <TextBlock><Run Text="&#xE9D5;" FontFamily="{StaticResource IconFont}" FontSize="11"/><Run Text="  Comprobar conexión"/></TextBlock>
+                        </Button>
+                        <TextBlock x:Name="AmSummary" FontSize="12" Foreground="#9A9AA8" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap" MaxWidth="300"
+                                   Text="Hay que comprobarlo antes de instalar."/>
+                    </StackPanel>
+                    <ItemsControl x:Name="AmSteps" Margin="2,10,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Icon}" Foreground="{Binding Color}" FontFamily="{StaticResource IconFont}" FontSize="12" Margin="0,2,0,0"/>
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap" FontSize="12" Foreground="#ECECF2">
+                                        <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" · "/><Run Text="{Binding Detail, Mode=OneWay}" Foreground="{Binding Color, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- Opciones de instalación -->
-        <Border x:Name="InstallOptions" Margin="0,22,0,0" Padding="16,16,16,2" CornerRadius="14" Background="#1C1C22">
+        <Border x:Name="InstallOptions" Margin="0,12,0,0" Padding="16,16,16,2" CornerRadius="14" Background="#1C1C22">
             <StackPanel>
                 <Grid Style="{StaticResource OptionRow}">
                     <StackPanel Margin="0,0,56,0">

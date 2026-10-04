@@ -352,6 +352,11 @@ namespace AgentManagerNotch.Models
         public bool SeededCodeAgent { get; set; }
         /// <summary>Última versión con la que se abrió: si al arrancar la versión es mayor, se muestran sus notas.</summary>
         public string? LastSeenVersion { get; set; }
+        /// <summary>
+        /// Usar Agent Manager (inicio de sesión, su LLM y su MCP). Se elige en el instalador; sin él, el notch funciona
+        /// directamente con los CLI, como la versión de main.
+        /// </summary>
+        public bool UseAgentManager { get; set; } = true;
         /// <summary>Leer en voz alta todas las respuestas (las que se piden hablando se leen siempre).</summary>
         public bool SpeakReplies { get; set; }
         /// <summary>Servidor de voz (TTS/STT compatible con la API de audio de OpenAI).</summary>

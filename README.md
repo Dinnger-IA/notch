@@ -39,6 +39,14 @@ notch abierto y conserva agentes, conversaciones y sesión).
 Se desinstala desde *Configuración de Windows → Aplicaciones instaladas* (o `AgentManagerNotch.exe --desinstalar`),
 con la opción de borrar también los datos. Para instalar desde un script: `AgentManagerNotch-Setup-X.Y.Z.exe
 --silencioso [--sin-inicio-windows] [--escritorio] [--abrir]`, y `--desinstalar --silencioso [--borrar-datos]`.
+**Agent Manager en el instalador** (solo en esta rama): la opción *Usar Agent Manager* viene marcada y exige pulsar
+**Comprobar conexión** antes de instalar (`Services/AgentManagerCheck.cs`): que se resuelve
+`agent-manager.distelsa.net` (red de la empresa o VPN), que responde por HTTPS con un certificado de confianza y que
+el puerto 5454 del inicio de sesión está libre. Si algo falla, muestra el motivo y no deja instalar. Sin marcarla se
+instala igual con `UseAgentManager = false` en `config.json`: el notch no pide sesión ni instala el MCP, no crea a
+Doky y los agentes usan los CLI del equipo; se puede activar después en ⚙ Configuración → *Sesión*. En modo
+silencioso se hace la misma comprobación (código 3 si falla) y `--sin-agent-manager` instala sin él.
+
 No se comprime a propósito: comprimido ocupa la mitad, pero tarda ~0,9 s en cada arranque (Claude Code lo lanza en
 cada herramienta) frente a ~0,2 s.
 

@@ -47,8 +47,11 @@ namespace AgentManagerNotch.Views
 
         private static App AppRef => App.Current;
         private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Settings or Mode.Login or Mode.Update;
-        /// <summary>Sin sesión de Agent Manager solo se muestra el inicio de sesión.</summary>
-        private static bool Authed => AppRef.Auth.IsAuthenticated;
+        /// <summary>
+        /// Sin sesión de Agent Manager solo se muestra el inicio de sesión (salvo que se haya instalado sin Agent
+        /// Manager: entonces el notch funciona directamente con los CLI).
+        /// </summary>
+        private static bool Authed => !AppRef.Store.Config.Settings.UseAgentManager || AppRef.Auth.IsAuthenticated;
         private AgentEntry? Principal => AppRef.Agents.FirstOrDefault(a => a.IsDefault) ?? AppRef.Agents.FirstOrDefault();
 
         public NotchWindow()
@@ -1018,7 +1021,11 @@ namespace AgentManagerNotch.Views
             SetCloseOutside.IsChecked = st.CloseOnClickOutsideOnly;
             SetCloseLeave.IsChecked = !st.CloseOnClickOutsideOnly;
             SetStartup.IsChecked = NotificationService.IsStartupEnabled();
-            SetSessionUser.Text = $"Conectado como {AppRef.Auth.UserName ?? "usuario de Agent Manager"}";
+            bool useAm = st.UseAgentManager;
+            SetSessionUser.Text = useAm ? $"Conectado como {AppRef.Auth.UserName ?? "usuario de Agent Manager"}"
+                                        : "No se usa Agent Manager: los agentes trabajan con los CLI de este equipo.";
+            SetLogoutButton.Visibility = useAm ? Visibility.Visible : Visibility.Collapsed;
+            SetUseAmButton.Visibility = useAm ? Visibility.Collapsed : Visibility.Visible;
             RefreshUpdateInfo();
         }
 
@@ -1090,6 +1097,16 @@ namespace AgentManagerNotch.Views
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", ConfigStore.Root) { UseShellExecute = true });
         private void SetExit_Click(object sender, RoutedEventArgs e) => AppRef.ExitApp();
         private void SetLogout_Click(object sender, RoutedEventArgs e) => ConfirmLogout();
+
+        /// <summary>Se instaló sin Agent Manager y ahora se quiere usar: hay que iniciar sesión.</summary>
+        private async void SetUseAgentManager_Click(object sender, RoutedEventArgs e)
+        {
+            AppRef.Store.Config.Settings.UseAgentManager = true;
+            AppRef.Store.Save();
+            await AppRef.Auth.RestoreAsync();
+            RebuildPill();
+            if (!Authed) ShowLogin(); else RefreshSettings();
+        }
         private async void SetCheckUpdates_Click(object sender, RoutedEventArgs e) => await AppRef.Updates.CheckAsync();
         private void SetReleaseNotes_Click(object sender, RoutedEventArgs e) => OpenReleaseNotes();
 

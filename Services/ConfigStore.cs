@@ -49,7 +49,7 @@ namespace AgentManagerNotch.Services
             if (Config.Agents.Count == 0)
             {
                 // Primera configuración: los agentes iniciales dependen de los CLI instalados
-                Config.Agents.AddRange(DefaultAgents());
+                Config.Agents.AddRange(DefaultAgents(Config.Settings.UseAgentManager));
                 Config.Settings.DefaultAgentId = Config.Agents[0].Id;
                 Config.Settings.SeededCodeAgent = true;
                 Log.Info("Primera configuración: " + string.Join(", ", Config.Agents.Select(a => $"{a.Name} ({a.Provider})")));
@@ -142,18 +142,20 @@ namespace AgentManagerNotch.Services
         /// <summary>
         /// Agentes iniciales. Con algún CLI instalado: Codi (código), Doky (chat con el LLM de Agent Manager) y
         /// Nube (chat), Codi y Nube con ese CLI. Sin CLI: Doky y Nube, los dos con el LLM de Agent Manager.
+        /// Sin Agent Manager no hay Doky y Nube usa el CLI (Claude Code si no hay ninguno).
         /// </summary>
-        public static List<AgentProfile> DefaultAgents()
+        public static List<AgentProfile> DefaultAgents(bool useAgentManager = true)
         {
             var cli = FirstInstalledCli();
             var list = new List<AgentProfile>();
+            var chatProvider = cli ?? (useAgentManager ? ProviderKind.AgentManager : ProviderKind.ClaudeCode);
             if (cli is ProviderKind c)
             {
                 var codi = NewCodeAgent(null, "Codi", "#4DD0A1");
                 codi.Provider = c;
                 list.Add(codi);
             }
-            list.Add(new AgentProfile
+            if (useAgentManager) list.Add(new AgentProfile
             {
                 Name = "Doky", ColorHex = "#64B5F6", Kind = AgentKind.Interactive, Provider = ProviderKind.AgentManager,
                 Approval = ApprovalMode.ReadOnly,
@@ -162,7 +164,7 @@ namespace AgentManagerNotch.Services
             });
             list.Add(new AgentProfile
             {
-                Name = "Nube", ColorHex = "#9C8CFF", Kind = AgentKind.Interactive, Provider = cli ?? ProviderKind.AgentManager,
+                Name = "Nube", ColorHex = "#9C8CFF", Kind = AgentKind.Interactive, Provider = chatProvider,
                 Approval = ApprovalMode.ReadOnly,
                 SystemPrompt = "Eres Nube, un asistente personal de planificación. Ayudas a organizar el día, dividir tareas grandes en pasos y creas recordatorios cuando el usuario lo pide."
             });

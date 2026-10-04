@@ -167,16 +167,24 @@ namespace AgentManagerNotch.Views
         /// <summary>La ventana del instalador, cambiando sus opciones (no instala nada).</summary>
         private static async Task<int> InstallerAsync(string path)
         {
-            var win = new InstallerWindow(uninstall: false, Installer.Version);
+            // Alto fijo: el resultado de la comprobación hace crecer la ventana y el GIF no admite cambios de tamaño
+            var win = new InstallerWindow(uninstall: false, Installer.Version) { SizeToContent = SizeToContent.Manual, Height = 700 };
             var content = (FrameworkElement)win.Content;
             await ShowOffscreenAsync(win);
             var startup = (CheckBox)win.FindName("StartupOption");
             var desktop = (CheckBox)win.FindName("DesktopOption");
+            var check = (Button)win.FindName("AmCheckButton");
+            var am = (CheckBox)win.FindName("AmOption");
+            var click = System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
             var n = await new GifWriter(content, Frozen(Color.FromRgb(0x14, 0x14, 0x18)), 560).RecordAsync(path, async () =>
             {
                 await Task.Delay(1400);
-                startup.IsChecked = false; await Task.Delay(900);
-                startup.IsChecked = true; await Task.Delay(900);
+                // Comprobación real de Agent Manager (red, servidor y puerto del inicio de sesión)
+                check.RaiseEvent(new RoutedEventArgs(click));
+                await Task.Delay(4000);
+                // Sin Agent Manager se puede instalar sin comprobar
+                am.IsChecked = false; am.RaiseEvent(new RoutedEventArgs(click));
+                await Task.Delay(1500);
                 desktop.IsChecked = true; await Task.Delay(1800);
             });
             win.Close();

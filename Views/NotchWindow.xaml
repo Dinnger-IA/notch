@@ -778,8 +778,13 @@
                                     <TextBlock Style="{StaticResource SettingsTitle}" Text="SESIÓN · AGENT MANAGER"/>
                                     <Grid Style="{StaticResource SettingsRow}">
                                         <TextBlock x:Name="SetSessionUser" Style="{StaticResource SettingsLabel}"/>
-                                        <Button Style="{StaticResource SettingsButton}" HorizontalAlignment="Right" Margin="0,4,0,4" Click="SetLogout_Click">
+                                        <Button x:Name="SetLogoutButton" Style="{StaticResource SettingsButton}" HorizontalAlignment="Right" Margin="0,4,0,4" Click="SetLogout_Click">
                                             <TextBlock><Run Text="&#xF3B1;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Cerrar sesión"/></TextBlock>
+                                        </Button>
+                                        <!-- Instalado sin Agent Manager: se puede activar después -->
+                                        <Button x:Name="SetUseAmButton" Style="{StaticResource SettingsButton}" HorizontalAlignment="Right" Margin="0,4,0,4"
+                                                Click="SetUseAgentManager_Click" Visibility="Collapsed">
+                                            <TextBlock><Run Text="&#xE77B;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Usar Agent Manager"/></TextBlock>
                                         </Button>
                                     </Grid>
                                 </StackPanel>

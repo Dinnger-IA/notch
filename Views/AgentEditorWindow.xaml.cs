@@ -122,7 +122,8 @@ namespace AgentManagerNotch.Views
             }
 
             foreach (ProviderKind k in Enum.GetValues<ProviderKind>())
-                ProviderBox.Items.Add(new ComboBoxItem { Content = ProviderFactory.Label(k), Tag = k });
+                if (k != ProviderKind.AgentManager || _p.Provider == k || App.Current.Store.Config.Settings.UseAgentManager)
+                    ProviderBox.Items.Add(new ComboBoxItem { Content = ProviderFactory.Label(k), Tag = k });
             foreach (var (mode, label) in new[]
                      {
                          (ApprovalMode.Ask, "Preguntar en el notch antes de cambiar algo (recomendado)"),

@@ -36,7 +36,27 @@ namespace AgentManagerNotch
             if (uninstall || Installer.IsSetupLaunch(args))
             {
                 // --silencioso: sin ventana, para instalar desde un script (--sin-inicio-windows, --escritorio, --abrir)
-                if (args.Contains("--silencioso")) return Installer.RunSilent(uninstall, args);
+                if (args.Contains("--silencioso"))
+                {
+                    // Con Agent Manager (salvo --sin-agent-manager) hay que pasar la comprobación, como en la ventana
+                    if (!uninstall)
+                    {
+                        bool useAm = !args.Contains("--sin-agent-manager");
+                        if (useAm)
+                        {
+                            var failed = AgentManagerCheck.RunAsync().GetAwaiter().GetResult().Where(s => !s.Ok).ToList();
+                            if (failed.Count > 0)
+                            {
+                                var why = string.Join(" | ", failed.Select(s => $"{s.Name}: {s.Detail}"));
+                                Log.Info("Instalación silenciosa cancelada, falló la comprobación de Agent Manager: " + why);
+                                Console.Error.WriteLine("No se instaló. " + why);
+                                return 3;
+                            }
+                        }
+                        AgentManagerCheck.SaveChoice(useAm);
+                    }
+                    return Installer.RunSilent(uninstall, args);
+                }
                 return new App { SetupRequest = uninstall ? App.SetupKind.Uninstall : App.SetupKind.Install }.Run();
             }
 
@@ -143,8 +163,9 @@ namespace AgentManagerNotch
             Notch = new NotchWindow();
             Notch.Show();
             Auth.Changed += Notch.OnAuthChanged;
-            Auth.Changed += () => { if (Auth.Token is string t) _ = EnsureMcpAsync(t); };
-            _ = Auth.RestoreAsync();
+            Auth.Changed += () => { if (Auth.Token is string t && Store.Config.Settings.UseAgentManager) _ = EnsureMcpAsync(t); };
+            // Sin Agent Manager (elegido en el instalador) no se restaura la sesión ni se pide iniciarla
+            if (Store.Config.Settings.UseAgentManager) _ = Auth.RestoreAsync();
             Updates.Changed += Notch.RefreshUpdateInfo;
             Updates.Found += () =>
             {
