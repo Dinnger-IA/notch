@@ -20,7 +20,7 @@ namespace AgentManagerNotch.Views
         public const string Help =
             "Vistas: notas[=X.Y.Z] (ventana de notas recorriendo las pestañas desde esa versión) · " +
             "actualizacion[=X.Y.Z] (tarjeta de versión nueva con las novedades de esa versión) · " +
-            "tabla (respuesta del chat con tablas Markdown) · voz (el agente leyendo su respuesta en voz alta)";
+            "tabla (respuesta del chat con tablas Markdown) · voz (el agente leyendo su respuesta en voz alta) · instalador (ventana del instalador)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -36,6 +36,7 @@ namespace AgentManagerNotch.Views
                 "actualizacion" => await UpdateCardAsync(version, path),
                 "tabla" => await ChatTableAsync(path),
                 "voz" => await VoiceAsync(path),
+                "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
             Log.Info($"GIF guardado: {path} ({frames} fotogramas, {new FileInfo(path).Length / 1024} KB)");
@@ -160,6 +161,22 @@ namespace AgentManagerNotch.Views
             });
             win.Close();
             Controls.MochiView.SpeechLevel = null;
+        /// <summary>La ventana del instalador, cambiando sus opciones (no instala nada).</summary>
+        private static async Task<int> InstallerAsync(string path)
+        {
+            var win = new InstallerWindow(uninstall: false, Installer.Version);
+            var content = (FrameworkElement)win.Content;
+            await ShowOffscreenAsync(win);
+            var startup = (CheckBox)win.FindName("StartupOption");
+            var desktop = (CheckBox)win.FindName("DesktopOption");
+            var n = await new GifWriter(content, Frozen(Color.FromRgb(0x14, 0x14, 0x18)), 560).RecordAsync(path, async () =>
+            {
+                await Task.Delay(1400);
+                startup.IsChecked = false; await Task.Delay(900);
+                startup.IsChecked = true; await Task.Delay(900);
+                desktop.IsChecked = true; await Task.Delay(1800);
+            });
+            win.Close();
             return n;
         }
 
