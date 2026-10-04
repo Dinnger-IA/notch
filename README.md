@@ -167,9 +167,10 @@ a la derecha**.
   ▶ en curso, ○ pendiente) y los pasos de la tarea en curso. Cada mensaje es una tarea; si escribes mientras
   trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Agent Manager Notch pide al agente (se oculta del chat)
   o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
-- En los agentes de **código**, bajo el personaje solo se ven las **5 últimas acciones** (leer, editar, ejecutar…),
-  la más reciente **arriba** y las demás cada vez más difuminadas. La nueva entra deslizándose y las otras bajan a
-  su sitio (`Views/RecentActionList.cs`).
+- En los agentes de **código**, bajo el personaje se ven las **5 últimas acciones** (leer, editar, ejecutar…),
+  la más reciente **arriba** y las demás cada vez más difuminadas; las anteriores, con **scroll** (al pasar el ratón
+  o desplazarse se ven todas nítidas). La nueva entra deslizándose y las otras bajan a su sitio
+  (`Views/RecentActionList.cs`).
 
 ### Voz
 
@@ -284,7 +285,8 @@ esa carpeta, el principal, el que se llame Codi… o el primero; si no hay ningu
 muestra la sesión leída de su transcripción (`transcript_path` del hook, `Services/ClaudeTranscript.cs`): lo que
 pediste, las acciones y las respuestas, sin razonamientos ni salidas de herramientas. Lo que escribas ahí continúa
 esa misma sesión (`claude --resume <id>`) con las aprobaciones del notch. El aviso y la notificación abren esa
-pestaña. `UserPromptSubmit` (una vez por mensaje, no por herramienta) hace que aparezca en cuanto empiezas. Las
+pestaña. El aviso de inactividad de Claude Code («Claude is waiting for your input», que llega un rato después de
+terminar) se ignora: ya avisó el `Stop`. `UserPromptSubmit` (una vez por mensaje, no por herramienta) hace que aparezca en cuanto empiezas. Las
 sesiones que lanza el propio notch no cuentan (llevan `COUCOU_AGENT_ID`).
 
 **Codex** avisa con su opción `notify` (~/.codex/config.toml → `AgentManagerNotch.exe --codex-event <json>` al

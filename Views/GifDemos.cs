@@ -229,7 +229,8 @@ namespace AgentManagerNotch.Views
                 "Edit  src/utils/fechas.ts", "Bash  npm test -- fechas", "Edit  test/fechas.test.ts", "Bash  npm test"
             }.Select(t => new Models.ChatMessage { Role = Models.ChatRole.Tool, Text = t }).ToList();
 
-            var panel = new StackPanel { Width = 230, Height = 210, ClipToBounds = true };
+            var panel = new StackPanel { Width = 230 };
+            var scroll = new ScrollViewer { Content = panel, Height = 190, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden };
             var claude = Color.FromRgb(0xD9, 0x77, 0x57);
             var head = new StackPanel
             {
@@ -241,7 +242,7 @@ namespace AgentManagerNotch.Views
                                     VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) }
                 }
             };
-            var host = new Border { Background = NotchBg, Padding = new Thickness(16, 12, 16, 12), Child = new StackPanel { Children = { head, panel } } };
+            var host = new Border { Background = NotchBg, Padding = new Thickness(16, 12, 16, 12), Child = new StackPanel { Children = { head, scroll } } };
             var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
             await ShowOffscreenAsync(win);
             RecentActionList.Update(panel, actions.Take(2).Reverse().Cast<object>().ToList(), template, animate: false);
@@ -250,10 +251,14 @@ namespace AgentManagerNotch.Views
                 await Task.Delay(700);
                 for (int i = 3; i <= actions.Count; i++)
                 {
-                    RecentActionList.Update(panel, actions.Take(i).Reverse().Take(RecentActionList.Count).Cast<object>().ToList(), template, animate: true);
+                    RecentActionList.Update(panel, actions.Take(i).Reverse().Cast<object>().ToList(), template, animate: true);
                     await Task.Delay(900);
                 }
-                await Task.Delay(800);
+                // Con scroll se ven las anteriores, ya nítidas
+                await Task.Delay(500);
+                RecentActionList.SetSharp(panel, true);
+                for (int k = 1; k <= 12; k++) { scroll.ScrollToVerticalOffset(scroll.ScrollableHeight * k / 12); await Task.Delay(40); }
+                await Task.Delay(1400);
             });
             win.Close();
             return n;

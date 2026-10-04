@@ -835,8 +835,9 @@ namespace AgentManagerNotch.Views
             ChatList.ItemsSource = s == null ? null : new ListCollectionView(s.Messages) { Filter = o => !IsAction(o) };
             ActionsList.ItemsSource = s == null || s.IsCode ? null : new ListCollectionView(s.Messages) { Filter = IsAction };
             TaskScroll.Visibility = s?.IsCode == true ? Visibility.Collapsed : Visibility.Visible;
-            RecentActions.Visibility = s?.IsCode == true ? Visibility.Visible : Visibility.Collapsed;
+            RecentScroll.Visibility = s?.IsCode == true ? Visibility.Visible : Visibility.Collapsed;
             RecentActions.Children.Clear();
+            RecentScroll.ScrollToTop();
             RefreshRecentActions(animate: false);
             if (s != null)
             {
@@ -902,8 +903,19 @@ namespace AgentManagerNotch.Views
         {
             var s = _selected;
             if (s == null || !s.IsCode) { RecentActions.Children.Clear(); return; }
-            var latest = s.Messages.Where(IsAction).Reverse().Take(RecentActionList.Count).Cast<object>().ToList();
-            RecentActionList.Update(RecentActions, latest, (DataTemplate)FindResource("ActionLineTemplate"), animate);
+            var all = s.Messages.Where(IsAction).Reverse().Take(RecentActionList.MaxRows).Cast<object>().ToList();
+            RecentActionList.Update(RecentActions, all, (DataTemplate)FindResource("ActionLineTemplate"), animate, RecentSharp);
+            RecentScroll.MaxHeight = RecentActionList.VisibleHeight(RecentActions);
+        }
+
+        /// <summary>Al mirar las anteriores (ratón encima o desplazado) se ven todas nítidas.</summary>
+        private bool RecentSharp => RecentScroll.IsMouseOver || RecentScroll.VerticalOffset > 1;
+
+        private void RecentScroll_Hover(object sender, MouseEventArgs e) => RecentActionList.SetSharp(RecentActions, RecentSharp);
+
+        private void RecentScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.VerticalChange != 0) RecentActionList.SetSharp(RecentActions, RecentSharp);
         }
 
         private static bool IsAction(object o) => o is ChatMessage { Role: ChatRole.Tool or ChatRole.Permission };

@@ -562,13 +562,17 @@
 
                         <!-- Acciones del agente debajo del personaje (leer, escribir, ejecutar…): ocupan toda la columna,
                              siempre lo más reciente y el resto difuminado. En el chat ya no aparecen. En los agentes de
-                             código solo se ven las 5 últimas, la más reciente arriba (RecentActions). -->
+                             código la más reciente va arriba y se ven 5; el resto, con scroll (RecentActions). -->
                         <Grid Grid.Row="1" Grid.RowSpan="3" Margin="0,2,0,0">
                             <ScrollViewer x:Name="TaskScroll" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
                                           Padding="2,2,10,2">
                                 <ItemsControl x:Name="ActionsList" ItemTemplate="{StaticResource ActionLineTemplate}"/>
                             </ScrollViewer>
-                            <StackPanel x:Name="RecentActions" Visibility="Collapsed" Margin="2,2,10,2" VerticalAlignment="Top" ClipToBounds="True"/>
+                            <ScrollViewer x:Name="RecentScroll" Visibility="Collapsed" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto"
+                                          VerticalAlignment="Top" Padding="2,2,10,2" MouseEnter="RecentScroll_Hover" MouseLeave="RecentScroll_Hover"
+                                          ScrollChanged="RecentScroll_ScrollChanged">
+                                <StackPanel x:Name="RecentActions"/>
+                            </ScrollViewer>
                             <TextBlock x:Name="NoActions" Text="Aquí verás lo que hace el agente: leer, editar, ejecutar…" FontSize="10.5"
                                        Foreground="#55555F" TextWrapping="Wrap" Margin="2,2,10,0" VerticalAlignment="Top" IsHitTestVisible="False"/>
                         </Grid>
