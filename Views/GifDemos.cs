@@ -161,6 +161,9 @@ namespace AgentManagerNotch.Views
             });
             win.Close();
             Controls.MochiView.SpeechLevel = null;
+            return n;
+        }
+
         /// <summary>La ventana del instalador, cambiando sus opciones (no instala nada).</summary>
         private static async Task<int> InstallerAsync(string path)
         {
