@@ -131,9 +131,26 @@ namespace AgentManagerNotch.Services
                 if (!IsClaudeIntegrationInstalled()) return;
                 var text = File.ReadAllText(ClaudeSettingsPath);
                 var exe = (Environment.ProcessPath ?? "").Replace('\\', '/');
-                if (exe != "" && !text.Contains(exe)) SetClaudeIntegration(true);
+                // También si falta algún evento nuevo (UserPromptSubmit se añadió después)
+                if ((exe != "" && !text.Contains(exe)) || !HasAllEvents(text)) SetClaudeIntegration(true);
             }
             catch (Exception ex) { Log.Error("Actualizar hooks de Claude Code", ex); }
+        }
+
+        /// <summary>
+        /// Eventos que se escuchan: Stop y Notification avisan; UserPromptSubmit (una vez por mensaje, no por herramienta)
+        /// muestra la sesión en el notch en cuanto empieza.
+        /// </summary>
+        private static readonly string[] HookEvents = { "Stop", "Notification", "UserPromptSubmit" };
+
+        private static bool HasAllEvents(string settingsText)
+        {
+            try
+            {
+                var hooks = JsonNode.Parse(settingsText)?["hooks"] as JsonObject;
+                return HookEvents.All(ev => hooks?[ev]?.ToJsonString().Contains("--claude-event") == true);
+            }
+            catch { return true; } // si no se puede leer, no se toca
         }
 
         public static bool IsClaudeIntegrationInstalled()
@@ -142,7 +159,7 @@ namespace AgentManagerNotch.Services
             catch { return false; }
         }
 
-        /// <summary>Añade (o quita) los hooks Stop y Notification en ~/.claude/settings.json, con copia de seguridad.</summary>
+        /// <summary>Añade (o quita) los hooks de <see cref="HookEvents"/> en ~/.claude/settings.json, con copia de seguridad.</summary>
         public static void SetClaudeIntegration(bool install)
         {
             var path = ClaudeSettingsPath;
@@ -157,7 +174,7 @@ namespace AgentManagerNotch.Services
             var hooks = root["hooks"] as JsonObject ?? new JsonObject();
             root["hooks"] = hooks;
 
-            foreach (var ev in new[] { "Stop", "Notification" })
+            foreach (var ev in HookEvents)
             {
                 var arr = hooks[ev] as JsonArray ?? new JsonArray();
                 // Quita entradas previas de Agent Manager Notch

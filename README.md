@@ -259,10 +259,19 @@ Ejemplo: `npm run build; AgentManagerNotch.exe --notify "Build" "Terminó con c�
 
 ### Avisos de tus sesiones normales de Claude Code
 
-En el menú de la bandeja → **"Avisarme de mis sesiones de Claude Code"**. Añade hooks `Stop` y
-`Notification` a `~/.claude/settings.json` (guarda antes una copia en `settings.json.coucou-backup`) para
+En el menú de la bandeja → **"Avisarme de mis sesiones de Claude Code"**. Añade hooks `Stop`, `Notification` y
+`UserPromptSubmit` a `~/.claude/settings.json` (guarda antes una copia en `settings.json.coucou-backup`) para
 que el notch te avise cuando una sesión que abriste en la terminal termina o necesita permiso.
-Desmarcarlo los quita. Es opcional y no se activa solo.
+Desmarcarlo los quita. Es opcional y no se activa solo (si ya estaba activado, se añade solo el evento nuevo).
+
+Cada sesión de la terminal se **asocia a una pestaña** de un agente de código que use Claude Code: el que ya tenga
+esa carpeta, el principal, el que se llame Codi… o el primero; si no hay ninguno se crea **codi-claude**. La pestaña
+muestra la sesión leída de su transcripción (`transcript_path` del hook, `Services/ClaudeTranscript.cs`): lo que
+pediste, las acciones y las respuestas, sin razonamientos ni salidas de herramientas. Lo que escribas ahí continúa
+esa misma sesión (`claude --resume <id>`) con las aprobaciones del notch. El aviso y la notificación abren esa
+pestaña. `UserPromptSubmit` (una vez por mensaje, no por herramienta) hace que aparezca en cuanto empiezas. Las
+sesiones que lanza el propio notch no cuentan (llevan `COUCOU_AGENT_ID`). Solo Claude Code: Codex y Gemini no
+tienen hooks equivalentes.
 
 ## Estructura
 
@@ -282,6 +291,7 @@ Services/ControlChannel.cs --notify / --ask / --claude-event e integración opci
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
 Services/VoiceService.cs   voz: TTS en streaming, dictado (STT) y volumen para la boca del personaje
+Services/ClaudeTranscript.cs lee la sesión de Claude Code de la terminal (JSONL) para mostrarla en una pestaña
 Services/Installer.cs      instalar/desinstalar por usuario (accesos, registro, inicio con Windows)
 Views/InstallerWindow.*    ventana del instalador
 Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
