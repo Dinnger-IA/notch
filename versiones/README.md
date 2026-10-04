@@ -38,6 +38,7 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 | `voz` | El personaje leyendo su respuesta en voz alta (solo en la rama `agent-manager`). |
 | `instalador` | La ventana del instalador cambiando sus opciones (no instala nada). |
 | `terminal` | El aviso de una sesión de Claude Code de la terminal y esa sesión en una pestaña de codi-claude. |
+| `aviso-panel` | El aviso de Claude Code de la terminal flotando sobre el panel abierto. |
 
 Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
 ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo

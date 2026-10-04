@@ -854,6 +854,29 @@
 
                     </Grid>
                 </Grid>
+
+                <!-- ============ Aviso con el panel abierto (Claude Code o Codex de la terminal, avisos externos) ============ -->
+                <Border x:Name="PanelNotice" Visibility="Collapsed" Opacity="0" VerticalAlignment="Top" HorizontalAlignment="Center"
+                        Margin="0,44,0,0" MaxWidth="520" Padding="10,8,6,8" CornerRadius="14" Cursor="Hand"
+                        Background="#2A2A31" BorderBrush="#3A3A44" BorderThickness="1" MouseLeftButtonUp="PanelNotice_Click">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.5" Color="Black"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <c:MochiView x:Name="PanelNoticeMochi" Width="34" Height="34" Interactive="False"/>
+                        <StackPanel Grid.Column="1" Margin="10,0,6,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="PanelNoticeTitle" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="PanelNoticeBody" FontSize="11.5" Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10" VerticalAlignment="Center"
+                                Click="PanelNoticeClose_Click" ToolTip="Cerrar"/>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
     </Grid>

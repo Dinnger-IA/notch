@@ -271,7 +271,9 @@ Ejemplo: `npm run build; AgentManagerNotch.exe --notify "Build" "Terminó con c�
 
 En el menú de la bandeja → **"Avisarme de mis sesiones de Claude Code"**. Añade hooks `Stop`, `Notification` y
 `UserPromptSubmit` a `~/.claude/settings.json` (guarda antes una copia en `settings.json.coucou-backup`) para
-que el notch te avise cuando una sesión que abriste en la terminal termina o necesita permiso.
+que el notch te avise cuando una sesión que abriste en la terminal termina o necesita permiso. Con el notch plegado
+el aviso sale en la píldora; con el panel abierto, como una tarjeta flotante bajo la barra superior (lo mismo para
+Codex y `--notify`). Pulsarla abre la sesión.
 Desmarcarlo los quita. Es opcional y no se activa solo (si ya estaba activado, se añade solo el evento nuevo).
 
 Cada sesión de la terminal se **asocia a una pestaña** de un agente de código que use Claude Code: el que ya tenga

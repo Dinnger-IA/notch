@@ -163,6 +163,7 @@ namespace AgentManagerNotch.Views
         {
             var prev = _mode;
             _mode = m;
+            if (m is Mode.Collapsed or Mode.Banner) HidePanelNotice(animate: false);
             if (prev != m || !animate)
             {
                 ShowView(CollapsedView, m == Mode.Collapsed);
@@ -377,7 +378,8 @@ namespace AgentManagerNotch.Views
 
         public void ShowBannerRaw(Color color, MochiState state, string title, string body, string? sessionKey, bool sticky)
         {
-            if (_mode is not (Mode.Collapsed or Mode.Banner) || !Authed) return;
+            if (!Authed) return;
+            if (_mode is not (Mode.Collapsed or Mode.Banner)) { ShowPanelNotice(color, state, title, body, sessionKey, sticky); return; }
             if (HideNotch)
             {
                 AppRef.Notifier.Toast(title, body, sessionKey,
@@ -396,6 +398,59 @@ namespace AgentManagerNotch.Views
             _bannerTimer.Interval = TimeSpan.FromSeconds(sticky ? 15 : 6);
             _bannerTimer.Start();
         }
+
+        // =============================================================== aviso con el panel abierto
+        private string? _noticeKey;
+        private DispatcherTimer? _noticeTimer;
+
+        /// <summary>
+        /// Con el panel abierto no hay píldora donde enseñar el aviso: sale una tarjeta flotante bajo la barra superior.
+        /// Pulsarla abre la sesión del aviso.
+        /// </summary>
+        private void ShowPanelNotice(Color color, MochiState state, string title, string body, string? sessionKey, bool sticky)
+        {
+            _noticeKey = sessionKey;
+            PanelNoticeMochi.BodyColor = color;
+            PanelNoticeMochi.State = state;
+            PanelNoticeTitle.Text = title;
+            PanelNoticeBody.Text = body;
+            PanelNotice.Visibility = Visibility.Visible;
+            PanelNotice.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(180)));
+            if (_noticeTimer == null)
+            {
+                _noticeTimer = new DispatcherTimer();
+                _noticeTimer.Tick += (_, _) => { if (!PanelNotice.IsMouseOver) HidePanelNotice(); };
+            }
+            _noticeTimer.Stop();
+            _noticeTimer.Interval = TimeSpan.FromSeconds(sticky ? 15 : 6);
+            _noticeTimer.Start();
+        }
+
+        private void HidePanelNotice(bool animate = true)
+        {
+            _noticeTimer?.Stop();
+            if (PanelNotice.Visibility != Visibility.Visible) return;
+            if (!animate)
+            {
+                PanelNotice.BeginAnimation(OpacityProperty, null);
+                PanelNotice.Opacity = 0;
+                PanelNotice.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(180));
+            fade.Completed += (_, _) => { if (PanelNotice.Opacity == 0) PanelNotice.Visibility = Visibility.Collapsed; };
+            PanelNotice.BeginAnimation(OpacityProperty, fade);
+        }
+
+        private void PanelNotice_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (e.OriginalSource is DependencyObject d && FindAncestor<Button>(d) != null) return;
+            var key = _noticeKey;
+            HidePanelNotice();
+            if (key != null) Expand(focusInput: true, sessionKey: key);
+        }
+
+        private void PanelNoticeClose_Click(object sender, RoutedEventArgs e) => HidePanelNotice();
 
         private void UpdateCollapsedSize()
         {
@@ -511,12 +566,13 @@ namespace AgentManagerNotch.Views
         private void Chip_Click(object sender, MouseButtonEventArgs e)
         {
             // El agente del chip pasa a la tarjeta grande y queda como principal (se recuerda al cerrar
-            // y sale en grande en la píldora); el que estaba ahí baja a los chips
+            // y sale en grande en la píldora); el que estaba ahí baja a los chips, al sitio del pulsado
             if ((sender as FrameworkElement)?.DataContext is AgentEntry a)
             {
                 var old = _focused;
                 var fromChip = BoundsInSwapLayer(ChipMochiFor(a));
                 var fromCard = BoundsInSwapLayer(FocusMochi);
+                if (old != null) AppRef.SwapOrder(a, old);
                 if (!a.IsDefault) { AppRef.SetDefault(a); RebuildPill(); }
                 SetFocused(a);
                 AnimateSwap(a, old, fromChip, fromCard);

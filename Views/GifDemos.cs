@@ -21,7 +21,8 @@ namespace AgentManagerNotch.Views
             "Vistas: notas[=X.Y.Z] (ventana de notas recorriendo las pestañas desde esa versión) · " +
             "actualizacion[=X.Y.Z] (tarjeta de versión nueva con las novedades de esa versión) · " +
             "tabla (respuesta del chat con tablas Markdown) · voz (el agente leyendo su respuesta en voz alta) · instalador (ventana del instalador) · " +
-            "terminal (sesión de Claude Code de la terminal en una pestaña de codi-claude)";
+            "terminal (sesión de Claude Code de la terminal en una pestaña de codi-claude) · " +
+            "aviso-panel (aviso de Claude Code de la terminal con el panel abierto)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -38,6 +39,7 @@ namespace AgentManagerNotch.Views
                 "tabla" => await ChatTableAsync(path),
                 "voz" => await VoiceAsync(path),
                 "terminal" => await TerminalSessionAsync(path),
+                "aviso-panel" => await PanelNoticeAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -193,6 +195,84 @@ namespace AgentManagerNotch.Views
                 next.RaiseEvent(new RoutedEventArgs(click)); // → Opciones (no instala nada)
                 await Task.Delay(1200);
                 desktop.IsChecked = true; await Task.Delay(1800);
+            });
+            win.Close();
+            return n;
+        }
+
+        /// <summary>Con el panel abierto, el aviso de Claude Code de la terminal aparece flotando sobre la vista general.</summary>
+        private static async Task<int> PanelNoticeAsync(string path)
+        {
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            var dim = Frozen(Color.FromRgb(0x8C, 0x8C, 0x99));
+            var pane = Frozen(Color.FromRgb(0x12, 0x12, 0x17));
+            var claude = Color.FromRgb(0xD9, 0x77, 0x57);
+
+            // Panel abierto (maqueta): barra superior, tarjeta grande y chips
+            var card = new Border
+            {
+                Background = pane, CornerRadius = new CornerRadius(18), Padding = new Thickness(16), Width = 300, Height = 170,
+                Child = new StackPanel
+                {
+                    Children =
+                    {
+                        new Controls.MochiView { Width = 70, Height = 70, BodyColor = Color.FromRgb(0x8E, 0xB8, 0xFF), Interactive = false, HorizontalAlignment = HorizontalAlignment.Left },
+                        new TextBlock { Text = "Mochi", FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = text, Margin = new Thickness(0, 10, 0, 0) },
+                        new TextBlock { Text = "Asistente general", FontSize = 12, Foreground = dim }
+                    }
+                }
+            };
+            var chips = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2, Width = 270, Margin = new Thickness(10, 0, 0, 0) };
+            foreach (var (name, c) in new[] { ("codi-claude", claude), ("Doky", Color.FromRgb(0xFF, 0xB0, 0x20)), ("Clima", Color.FromRgb(0x5E, 0xC2, 0x9A)), ("Escritor", Color.FromRgb(0xC0, 0x8E, 0xFF)) })
+                chips.Children.Add(new Border
+                {
+                    Background = pane, CornerRadius = new CornerRadius(14), Margin = new Thickness(4), Padding = new Thickness(8),
+                    Child = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Children =
+                        {
+                            new Controls.MochiView { Width = 30, Height = 30, BodyColor = c, Interactive = false },
+                            new TextBlock { Text = name, FontSize = 12, Foreground = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) }
+                        }
+                    }
+                });
+            var body = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 44, 0, 0), Children = { card, chips } };
+            var top = new TextBlock { Text = "⌂   Agentes", FontSize = 12, Foreground = dim, Margin = new Thickness(6, 12, 0, 0), VerticalAlignment = VerticalAlignment.Top };
+
+            // El aviso flotante, como PanelNotice en NotchWindow.xaml
+            var notice = new Border
+            {
+                Background = Frozen(Color.FromRgb(0x2A, 0x2A, 0x31)), BorderBrush = Frozen(Color.FromRgb(0x3A, 0x3A, 0x44)), BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14), Padding = new Thickness(10, 8, 14, 8), Margin = new Thickness(0, 44, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Opacity = 0,
+                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 2, Opacity = 0.5, Color = Colors.Black },
+                Child = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new Controls.MochiView { Width = 34, Height = 34, BodyColor = claude, State = Controls.MochiState.Waiting, Interactive = false },
+                        new StackPanel
+                        {
+                            Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+                            Children =
+                            {
+                                new TextBlock { Text = "Claude Code · mi-proyecto", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = text },
+                                new TextBlock { Text = "Claude needs your permission to use Bash", FontSize = 11.5, Foreground = dim }
+                            }
+                        }
+                    }
+                }
+            };
+            var host = new Border { Background = NotchBg, Padding = new Thickness(14, 0, 14, 14), Child = new Grid { Children = { top, body, notice } } };
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 600).RecordAsync(path, async () =>
+            {
+                await Task.Delay(1200);
+                for (int i = 1; i <= 6; i++) { notice.Opacity = i / 6.0; await Task.Delay(30); }
+                await Task.Delay(3500);
             });
             win.Close();
             return n;
