@@ -167,6 +167,9 @@ a la derecha**.
   ▶ en curso, ○ pendiente) y los pasos de la tarea en curso. Cada mensaje es una tarea; si escribes mientras
   trabaja, se **encola**. Los pasos salen de un bloque `[[tasks]]` que Agent Manager Notch pide al agente (se oculta del chat)
   o de las listas nativas del CLI (`todo_list` de Codex, `TodoWrite`, `write_todos`).
+- En los agentes de **código**, bajo el personaje solo se ven las **5 últimas acciones** (leer, editar, ejecutar…),
+  la más reciente **arriba** y las demás cada vez más difuminadas. La nueva entra deslizándose y las otras bajan a
+  su sitio (`Views/RecentActionList.cs`).
 
 ### Voz
 
