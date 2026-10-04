@@ -1013,8 +1013,6 @@ namespace AgentManagerNotch.Views
             SetSounds.IsChecked = st.Sounds;
             SetNotifyDone.IsChecked = st.NotifyOnDone;
             SetSpeakReplies.IsChecked = st.SpeakReplies;
-            SetVoiceMale.IsChecked = st.Voice == MaleVoice;
-            SetVoiceFemale.IsChecked = st.Voice != MaleVoice;
             SetClaudeHooks.IsChecked = ControlChannel.IsClaudeIntegrationInstalled();
             SetHover.IsChecked = st.ExpandOnHover;
             SetHideNotch.IsChecked = st.HideNotch;
@@ -1053,9 +1051,6 @@ namespace AgentManagerNotch.Views
                 case var c when c == SetSounds: st.Sounds = SetSounds.IsChecked == true; break;
                 case var c when c == SetNotifyDone: st.NotifyOnDone = SetNotifyDone.IsChecked == true; break;
                 case var c when c == SetSpeakReplies: st.SpeakReplies = SetSpeakReplies.IsChecked == true; UpdateVoiceButtons(); break;
-                case var c when c == SetVoiceFemale || c == SetVoiceMale:
-                    st.Voice = SetVoiceMale.IsChecked == true ? MaleVoice : VoiceService.DefaultVoice;
-                    break;
                 case var c when c == SetHover: st.ExpandOnHover = SetHover.IsChecked == true; break;
                 case var c when c == SetHideNotch: st.HideNotch = SetHideNotch.IsChecked == true; _lineHover = false; break;
                 case var c when c == SetStartup: NotificationService.SetStartup(SetStartup.IsChecked == true); break;
@@ -1072,8 +1067,6 @@ namespace AgentManagerNotch.Views
         }
 
         private void SetAgentEdit_Click(object sender, RoutedEventArgs e) { if (_settingsTarget != null) OpenEditor(_settingsTarget); }
-
-        private const string MaleVoice = "es_MX-ald-medium";
 
         private void SetVoiceTest_Click(object sender, RoutedEventArgs e)
         {

@@ -741,10 +741,6 @@
                                         </StackPanel>
                                         <CheckBox x:Name="SetSpeakReplies" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
                                     </Grid>
-                                    <RadioButton x:Name="SetVoiceFemale" Style="{StaticResource Choice}" GroupName="voice" Margin="0,4"
-                                                 Content="Voz femenina" Click="SettingToggle_Click"/>
-                                    <RadioButton x:Name="SetVoiceMale" Style="{StaticResource Choice}" GroupName="voice" Margin="0,4,0,2"
-                                                 Content="Voz masculina" Click="SettingToggle_Click"/>
                                     <Button Style="{StaticResource SettingsButton}" Click="SetVoiceTest_Click">
                                         <TextBlock><Run Text="&#xE767;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Probar la voz"/></TextBlock>
                                     </Button>

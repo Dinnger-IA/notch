@@ -178,8 +178,7 @@ Usa el servidor de voz interno (`https://10.6.100.60:8880`, compatible con la AP
 - **Altavoz**: activa o desactiva leer todas las respuestas; mientras el agente habla, lo calla. Clic derecho en
   un mensaje → *Escuchar*.
 - Antes de leer se quita el Markdown: las tablas se leen fila a fila y los bloques de código no se leen.
-- ⚙ Configuración → *Voz*: leer siempre, voz femenina (`es_MX-claude-high`) o masculina (`es_MX-ald-medium`) y
-  *Probar la voz*. La dirección y la velocidad están en `config.json` (`VoiceUrl`, `VoiceSpeed`).
+- ⚙ Configuración → *Voz*: leer siempre y *Probar la voz*. La voz es siempre la femenina (`es_MX-claude-high`). La dirección y la velocidad están en `config.json` (`VoiceUrl`, `VoiceSpeed`).
 
 ### Ejemplo: agente del clima
 

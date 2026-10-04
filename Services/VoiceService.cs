@@ -25,7 +25,8 @@ namespace AgentManagerNotch.Services
     public sealed class VoiceService : INotifyPropertyChanged, IDisposable
     {
         public const string DefaultUrl = "https://10.6.100.60:8880";
-        public const string DefaultVoice = "es_MX-claude-high";
+        /// <summary>Voz femenina: es la única que se usa, sea cual sea la guardada en la configuración.</summary>
+        public const string Voice = "es_MX-claude-high";
         private const int TtsRate = 24000, MicRate = 16000;
         /// <summary>El servidor rechaza textos demasiado largos: se envía por trozos de como mucho esto.</summary>
         private const int MaxChunk = 1200;
@@ -94,7 +95,7 @@ namespace AgentManagerNotch.Services
                     {
                         model = "tts-1",
                         input = chunk,
-                        voice = string.IsNullOrWhiteSpace(st.Voice) ? DefaultVoice : st.Voice,
+                        voice = Voice,
                         response_format = "pcm",
                         speed = Math.Clamp(st.VoiceSpeed <= 0 ? 1 : st.VoiceSpeed, 0.5, 2)
                     });

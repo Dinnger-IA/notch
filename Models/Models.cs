@@ -361,7 +361,6 @@ namespace AgentManagerNotch.Models
         public bool SpeakReplies { get; set; }
         /// <summary>Servidor de voz (TTS/STT compatible con la API de audio de OpenAI).</summary>
         public string VoiceUrl { get; set; } = Services.VoiceService.DefaultUrl;
-        public string Voice { get; set; } = Services.VoiceService.DefaultVoice;
         public double VoiceSpeed { get; set; } = 1.0;
     }
 
