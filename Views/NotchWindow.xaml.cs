@@ -1297,6 +1297,11 @@ namespace AgentManagerNotch.Views
                 try { Clipboard.SetText(m.Text); } catch { }
         }
 
+        private void ContinueInNewSession_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is ChatMessage m) _selected?.ContinueInNewSession(m);
+        }
+
         private void Attach_Click(object sender, RoutedEventArgs e)
         {
             _modalOpen = true;

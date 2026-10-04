@@ -378,6 +378,17 @@ namespace AgentManagerNotch.Models
         /// <summary>Solo en Permission: Allow, AllowAlways o Deny.</summary>
         public string? Decision { get; set; }
 
+        private string? _action;
+        /// <summary>Botón bajo un error (<see cref="ActionNewSession"/>); se quita al pulsarlo.</summary>
+        public string? Action
+        {
+            get => _action;
+            set { if (_action != value) { _action = value; OnChanged(); } }
+        }
+        /// <summary>Mensaje que se vuelve a enviar al pulsar el botón.</summary>
+        public string? ActionPrompt { get; set; }
+        public const string ActionNewSession = "NewSession";
+
         public ChatMessage() { }
         public ChatMessage(ChatRole role, string text) { Role = role; _text = text; }
 

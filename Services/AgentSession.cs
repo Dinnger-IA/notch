@@ -433,18 +433,33 @@ namespace AgentManagerNotch.Services
         /// Errores de Codex al continuar una sesión, explicados: la sesión sigue abierta en otro sitio (Codex solo deja
         /// escribir en ella a un proceso) o Codex ya no la tiene (entonces se olvida y el próximo mensaje empieza otra).
         /// </summary>
-        private string ExplainResumeError(string error)
+        private ChatMessage ExplainResumeError(string error, string prompt)
         {
             if (error.Contains("already has an active writer", StringComparison.OrdinalIgnoreCase))
-                return "Esa sesión de Codex sigue abierta en la terminal o en la app de Codex, y Codex solo deja usarla a un " +
-                       "programa a la vez. Ciérrala allí (o espera a que termine) y vuelve a enviar el mensaje.";
+                return new ChatMessage(ChatRole.Error,
+                    "Esa sesión de Codex sigue abierta en otro programa: la terminal, la app de Codex o su servicio de fondo, " +
+                    "que sigue en marcha aunque cierres la app. Codex solo deja usarla a uno a la vez.\n" +
+                    "Ciérrala allí y vuelve a enviar el mensaje, o sigue aquí en una sesión nueva (sin lo hablado antes).")
+                { Action = ChatMessage.ActionNewSession, ActionPrompt = prompt };
             if (error.Contains("no rollout found", StringComparison.OrdinalIgnoreCase))
             {
                 SessionId = null;
-                return "Codex ya no tiene guardada esa sesión, así que no se puede continuar. Vuelve a enviar el mensaje: " +
-                       "empezará una sesión nueva en esta carpeta.";
+                return new ChatMessage(ChatRole.Error,
+                    "Codex ya no tiene guardada esa sesión, así que no se puede continuar. Vuelve a enviar el mensaje: " +
+                    "empezará una sesión nueva en esta carpeta.");
             }
-            return error;
+            return new ChatMessage(ChatRole.Error, error);
+        }
+
+        /// <summary>Botón «Seguir en una sesión nueva» de un error: olvida la sesión y vuelve a enviar lo pedido.</summary>
+        public void ContinueInNewSession(ChatMessage error)
+        {
+            if (IsBusy || string.IsNullOrWhiteSpace(error.ActionPrompt)) return;
+            var prompt = error.ActionPrompt!;
+            error.Action = null;
+            SessionId = null;
+            AddNotice("Sesión nueva: Codex no recuerda lo hablado antes en esta pestaña.");
+            _ = SendAsync(prompt);
         }
 
         public void AddNotice(string text, bool error = false)
@@ -677,8 +692,9 @@ namespace AgentManagerNotch.Services
             }
             else if (!success && !string.IsNullOrWhiteSpace(error))
             {
-                error = ExplainResumeError(error!);
-                Messages.Add(new ChatMessage(ChatRole.Error, error));
+                var shown = ExplainResumeError(error!, text);
+                error = shown.Text;
+                Messages.Add(shown);
             }
 
             ExtractSchedules(firstNew);

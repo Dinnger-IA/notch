@@ -24,7 +24,8 @@ namespace AgentManagerNotch.Views
             "terminal (sesión de Claude Code de la terminal en una pestaña de codi-claude) · " +
             "aviso-panel (aviso de Claude Code de la terminal con el panel abierto) · " +
             "acciones (las 5 últimas acciones de un agente de código, la más reciente arriba) · " +
-            "editor-color (los colores del editor de agentes, en una sola fila)";
+            "editor-color (los colores del editor de agentes, en una sola fila) · " +
+            "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -43,6 +44,7 @@ namespace AgentManagerNotch.Views
                 "aviso-panel" => await PanelNoticeAsync(path),
                 "acciones" => await RecentActionsAsync(path),
                 "editor-color" => await EditorColorAsync(path),
+                "sesion-ocupada" => await BusySessionAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -237,6 +239,66 @@ namespace AgentManagerNotch.Views
                     await Task.Delay(800);
                 }
                 await Task.Delay(600);
+            });
+            win.Close();
+            return n;
+        }
+
+        /// <summary>
+        /// La sesión de Codex sigue abierta en otro programa: el error lo explica y su botón continúa en una sesión nueva
+        /// (maqueta del chat, como la plantilla Message de NotchWindow.xaml).
+        /// </summary>
+        private static async Task<int> BusySessionAsync(string path)
+        {
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            var dim = Frozen(Color.FromRgb(0x6E, 0x6E, 0x7C));
+            Border Bubble(string s) => new()
+            {
+                Background = Frozen(Color.FromRgb(0x2C, 0x2C, 0x33)), CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 7, 14, 7),
+                HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 6),
+                Child = new TextBlock { Text = s, FontSize = 13.5, Foreground = text }
+            };
+            var button = new Button { Content = "Seguir en una sesión nueva", Padding = new Thickness(12, 5, 12, 5), FontSize = 12,
+                                      Margin = new Thickness(0, 8, 0, 2), HorizontalAlignment = HorizontalAlignment.Left };
+            if (Application.Current.TryFindResource("PillButton") is Style pill) button.Style = pill;
+            var error = new Border
+            {
+                Background = (Brush)Application.Current.TryFindResource("ErrorBg") ?? Frozen(Color.FromRgb(0x3A, 0x1E, 0x22)),
+                CornerRadius = new CornerRadius(16), Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(0, 6, 0, 6),
+                HorizontalAlignment = HorizontalAlignment.Left, MaxWidth = 500,
+                Child = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                            Foreground = (Brush)Application.Current.TryFindResource("ErrorFg") ?? Frozen(Color.FromRgb(0xFF, 0x8A, 0x8A)),
+                            Text = "Esa sesión de Codex sigue abierta en otro programa: la terminal, la app de Codex o su servicio de fondo, " +
+                                   "que sigue en marcha aunque cierres la app. Codex solo deja usarla a uno a la vez.\n" +
+                                   "Ciérrala allí y vuelve a enviar el mensaje, o sigue aquí en una sesión nueva (sin lo hablado antes)."
+                        },
+                        button
+                    }
+                }
+            };
+            var notice = new TextBlock { Text = "Sesión nueva: Codex no recuerda lo hablado antes en esta pestaña.", FontSize = 11, Foreground = dim,
+                                         HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 3, 0, 3) };
+            var again = Bubble("¿Es un problema de red?");
+            var answer = MarkdownBlock("Sí: el error **invalid peer certificate** viene de la inspección TLS de la red, no del repositorio.", text);
+            var chat = new StackPanel { Children = { Bubble("¿Es un problema de red?"), error } };
+            var host = new Border { Background = NotchBg, Padding = new Thickness(16, 10, 16, 10), Width = 560, Height = 330, Child = chat };
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 560).RecordAsync(path, async () =>
+            {
+                await Task.Delay(3200);
+                button.Visibility = Visibility.Collapsed;
+                chat.Children.Add(notice);
+                chat.Children.Add(again);
+                await Task.Delay(1100);
+                chat.Children.Add(answer);
+                await Task.Delay(2600);
             });
             win.Close();
             return n;

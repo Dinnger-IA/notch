@@ -72,6 +72,10 @@
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <RichTextBox x:Name="Md" Style="{StaticResource SelectableDoc}" FontSize="13.5"
                                  Foreground="#ECECF2" Block.LineHeight="20" v:Markdown.Text="{Binding Text}">
                         <RichTextBox.ContextMenu>
@@ -83,6 +87,9 @@
                     </RichTextBox>
                     <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"
                              FontSize="13.5" Visibility="Collapsed"/>
+                    <!-- Error con salida: la sesión de Codex está ocupada en otro programa -->
+                    <Button x:Name="NewSessionButton" Grid.Row="1" Content="Seguir en una sesión nueva" Style="{StaticResource SettingsButton}"
+                            Margin="0,8,0,2" Visibility="Collapsed" Click="ContinueInNewSession_Click"/>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
@@ -120,6 +127,9 @@
                     <Setter TargetName="Bubble" Property="Padding" Value="12,7"/>
                     <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource ErrorFg}"/>
                     <Setter TargetName="Txt" Property="FontSize" Value="12"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Action}" Value="{x:Static m:ChatMessage.ActionNewSession}">
+                    <Setter TargetName="NewSessionButton" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
