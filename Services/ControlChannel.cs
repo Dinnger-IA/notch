@@ -102,6 +102,8 @@ namespace AgentManagerNotch.Services
                     {
                         // Codex lo llama al terminar cada turno de una sesión de la terminal (opción notify), con el JSON
                         // como último argumento. Las sesiones de los agentes del notch no cuentan.
+                        // Si notify lo usaba otra app (p. ej. la app de Codex), se le sigue pasando el aviso.
+                        if (args.Length > 1) CodexNotify.ForwardToPrevious(args[^1]);
                         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COUCOU_AGENT_ID"))) return 0;
                         try
                         {

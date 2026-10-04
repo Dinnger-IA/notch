@@ -40,7 +40,7 @@ Va **por etapas**: *Herramientas* (muestra si Claude Code y Codex están instala
 de los que falten, y la opción de conectar sus avisos de la terminal) → *Opciones* → *Instalación* (cada paso con su
 resultado; el notch se abre al final). Claude Code se instala con su instalador oficial de Windows y Codex con npm
 (antes Node LTS con winget si falta), en `Services/CliSetup.cs`. Los avisos apuntan al programa instalado: hooks de
-Claude Code y la opción `notify` de Codex, que solo se usa si está libre (la app de Codex puede ocuparla).
+Claude Code y la opción `notify` de Codex (si la usaba otra app, se encadena: ver más abajo).
 
 Se desinstala desde *Configuración de Windows → Aplicaciones instaladas* (o `AgentManagerNotch.exe --desinstalar`),
 con la opción de borrar también los datos. Para instalar desde un script: `AgentManagerNotch-Setup-X.Y.Z.exe
@@ -235,8 +235,10 @@ sesiones que lanza el propio notch no cuentan (llevan `COUCOU_AGENT_ID`).
 **Codex** avisa con su opción `notify` (~/.codex/config.toml → `AgentManagerNotch.exe --codex-event <json>` al
 terminar cada turno). Su JSON no trae la transcripción, así que la pestaña (de un agente de código de Codex, o de
 **codi-codex**) va sumando lo pedido y la respuesta de cada turno, y guarda el `thread-id` para continuar la sesión.
-Codex solo admite un `notify`: si ya lo usa otra aplicación (p. ej. la app de Codex), no se toca. Gemini no tiene un
-mecanismo equivalente.
+Codex solo admite un `notify`: si ya lo usa otra aplicación (p. ej. la app de Codex), el notch lo toma, guarda el
+anterior en `%APPDATA%\AgentManagerNotch\codex-notify-anterior.txt` y le **reenvía cada aviso**, así que esa app
+sigue funcionando; al quitarlo se restaura. Se activa en el instalador o en ⚙ Configuración → *Avisos de mis
+sesiones de Codex*. Gemini no tiene un mecanismo equivalente.
 
 ## Estructura
 
