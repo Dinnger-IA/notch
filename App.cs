@@ -558,6 +558,9 @@ namespace AgentManagerNotch
             else if (ev == "Notification")
             {
                 var m = p["message"]?.GetValue<string>() ?? "Claude Code necesita tu atención";
+                // «Claude is waiting for your input»: Claude Code lo manda tras un rato inactivo después de terminar.
+                // No pide nada (el Stop ya avisó de que terminó), así que no se avisa.
+                if (IsIdleNotification(Get("notification_type"), m)) return;
                 Notch.ShowBannerRaw(ClaudeColor, MochiState.Waiting, $"Claude Code · {project}", m, key, sticky: true);
                 Notifier.Toast($"Claude Code · {project}", m, key, System.Windows.Forms.ToolTipIcon.Warning);
                 Notifier.Play(NotificationService.SoundKind.Attention);
@@ -591,6 +594,10 @@ namespace AgentManagerNotch
             if (Store.Config.Settings.NotifyOnDone) Notifier.Toast($"Codex terminó · {project}", body, tab?.Key);
             Notifier.Play(NotificationService.SoundKind.Done);
         }
+
+        /// <summary>Notificación de inactividad de Claude Code (no pide permiso ni respuesta: ya terminó).</summary>
+        private static bool IsIdleNotification(string type, string message) =>
+            type == "idle_prompt" || message.Contains("waiting for your input", StringComparison.OrdinalIgnoreCase);
 
         private static readonly System.Windows.Media.Color CodexColor = System.Windows.Media.Color.FromRgb(0x10, 0xA3, 0x7F);
 
