@@ -16,8 +16,11 @@ namespace AgentManagerNotch.Services
     /// </summary>
     public static class ClaudeTranscript
     {
-        /// <summary>Mensajes de la sesión (los últimos <paramref name="max"/>), o null si no se pudo leer.</summary>
-        public static List<ChatMessage>? Read(string path, int max = 300)
+        /// <summary>
+        /// Mensajes de la sesión (los últimos <paramref name="max"/>), o null si no se pudo leer. Por debajo del límite
+        /// del historial (300) para que quepan el aviso de la pestaña y lo que se siga escribiendo.
+        /// </summary>
+        public static List<ChatMessage>? Read(string path, int max = 250)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var list = new List<ChatMessage>();
