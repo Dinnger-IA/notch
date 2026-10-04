@@ -49,15 +49,7 @@
                 <CheckBox x:Name="DefaultCheck" Content="Usar como agente principal (se ve grande en el notch)" Margin="0,0,0,12"/>
 
                 <TextBlock Text="Color" FontSize="12" Opacity="0.7"/>
-                <WrapPanel x:Name="Swatches" Margin="0,6,0,4"/>
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="ColorBox" TextChanged="ColorBox_Changed" ToolTip="Color en hexadecimal, p. ej. #FF8A65"/>
-                    <Button Grid.Column="1" Content="Elegir…" Margin="6,0,0,0" Click="PickColor_Click"/>
-                </Grid>
+                <WrapPanel x:Name="Swatches" Margin="0,6,0,6"/>
 
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>

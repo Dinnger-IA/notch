@@ -40,8 +40,11 @@ namespace AgentManagerNotch.Views
         {
             "#FF8A65", "#FFB74D", "#FFD54F", "#AED581", "#4DD0A1", "#4DD0E1",
             "#64B5F6", "#7986CB", "#9C8CFF", "#BA68C8", "#F06292", "#E57373",
-            "#A1887F", "#B0BEC5", "#F5F5F5", "#455A64"
+            "#A1887F", "#B0BEC5", "#F5F5F5"
         };
+
+        /// <summary>Color elegido (hex). Un agente antiguo puede tener uno que no está en la paleta: se conserva.</summary>
+        private string _colorHex = "";
 
         private record Preset(string Name, string Color, ProviderKind Provider, ApprovalMode Approval, string Prompt);
         private static readonly Preset[] Presets =
@@ -107,10 +110,10 @@ namespace AgentManagerNotch.Views
                 var sw = new Border
                 {
                     Width = 26, Height = 26, CornerRadius = new CornerRadius(9), Margin = new Thickness(0, 0, 6, 6),
-                    Background = new SolidColorBrush(c), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = hex,
+                    Background = new SolidColorBrush(c), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = hex, Tag = hex,
                     BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)), BorderThickness = new Thickness(1)
                 };
-                sw.MouseLeftButtonUp += (_, _) => ColorBox.Text = hex;
+                sw.MouseLeftButtonUp += (_, _) => SetColor(hex);
                 Swatches.Children.Add(sw);
             }
 
@@ -136,7 +139,7 @@ namespace AgentManagerNotch.Views
             PreviewState.SelectedIndex = 0;
 
             NameBox.Text = _p.Name;
-            ColorBox.Text = _p.ColorHex;
+            SetColor(_p.ColorHex);
             ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderKind)i.Tag == _p.Provider);
             ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == _p.Approval);
             ModelBox.Text = _p.Model;
@@ -287,7 +290,7 @@ namespace AgentManagerNotch.Views
         private void ApplyTemplate(Preset t)
         {
             if (string.IsNullOrWhiteSpace(NameBox.Text) || NameBox.Text == "Nuevo agente") NameBox.Text = t.Name;
-            ColorBox.Text = t.Color;
+            SetColor(t.Color);
             ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderKind)i.Tag == t.Provider);
             ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == t.Approval);
             PromptBox.Text = t.Prompt;
@@ -321,26 +324,18 @@ namespace AgentManagerNotch.Views
 
         private void Name_Changed(object sender, TextChangedEventArgs e) { }
 
-        private void ColorBox_Changed(object sender, TextChangedEventArgs e)
+        /// <summary>Elige un color: lo aplica a la vista previa y resalta su muestra.</summary>
+        private void SetColor(string hex)
         {
-            try
+            var c = AgentSession.ParseColor(hex);
+            _colorHex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+            Preview.BodyColor = c;
+            foreach (var sw in Swatches.Children.OfType<Border>())
             {
-                var c = (Color)ColorConverter.ConvertFromString(ColorBox.Text.Trim());
-                Preview.BodyColor = c;
+                bool sel = string.Equals((string)sw.Tag, _colorHex, StringComparison.OrdinalIgnoreCase);
+                sw.BorderBrush = new SolidColorBrush(sel ? Colors.White : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
+                sw.BorderThickness = new Thickness(sel ? 2 : 1);
             }
-            catch { /* mientras escribe */ }
-        }
-
-        private void PickColor_Click(object sender, RoutedEventArgs e)
-        {
-            var cur = Preview.BodyColor;
-            using var dlg = new System.Windows.Forms.ColorDialog
-            {
-                FullOpen = true,
-                Color = System.Drawing.Color.FromArgb(cur.R, cur.G, cur.B)
-            };
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                ColorBox.Text = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
         }
 
         private void PreviewState_Changed(object sender, SelectionChangedEventArgs e)
@@ -389,7 +384,7 @@ namespace AgentManagerNotch.Views
         /// <summary>Estado del formulario, para saber si hay cambios sin guardar.</summary>
         private string Snapshot() => string.Join("\u001F", new[]
         {
-            NameBox.Text, ColorBox.Text, ModelBox.Text, DirBox.Text, PromptBox.Text, ExtraBox.Text, CustomBox.Text,
+            NameBox.Text, _colorHex, ModelBox.Text, DirBox.Text, PromptBox.Text, ExtraBox.Text, CustomBox.Text,
             SelectedKind.ToString(), SelectedProvider.ToString(), (ApprovalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
             DefaultCheck.IsChecked.ToString(), InstructionBox.Text, ModeFixed.IsChecked.ToString(),
             (IntervalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "", FromBox.Text, ToBox.Text, TimesBox.Text,
@@ -437,13 +432,6 @@ namespace AgentManagerNotch.Views
         {
             var name = NameBox.Text.Trim();
             if (name == "") { NameBox.Focus(); return false; }
-            string hex;
-            try
-            {
-                var c = (Color)ColorConverter.ConvertFromString(ColorBox.Text.Trim());
-                hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
-            }
-            catch { ColorBox.Focus(); return false; }
             if (SelectedProvider == ProviderKind.Custom && string.IsNullOrWhiteSpace(CustomBox.Text)) { CustomBox.Focus(); return false; }
 
             var kind = SelectedKind;
@@ -469,7 +457,7 @@ namespace AgentManagerNotch.Views
             _p.Kind = kind;
             MakeDefault = DefaultCheck.IsChecked == true;
             _p.Name = name;
-            _p.ColorHex = hex;
+            _p.ColorHex = _colorHex;
             _p.Provider = SelectedProvider;
             _p.Approval = ApprovalBox.SelectedItem is ComboBoxItem a ? (ApprovalMode)a.Tag : ApprovalMode.Ask;
             _p.Model = ModelBox.Text.Trim();
