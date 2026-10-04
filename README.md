@@ -178,12 +178,14 @@ a la derecha**.
 Usa el servidor de voz interno (`https://10.6.100.60:8880`, compatible con la API de audio de OpenAI:
 `/v1/audio/speech` para leer y `/v1/audio/transcriptions` para dictar). El audio va por waveOut/waveIn de Windows.
 
-- **Micrófono** (barra del chat): un clic empieza a escuchar, otro clic transcribe y envía el mensaje; la respuesta
-  se lee en voz alta. Esc cancela la grabación.
-- **Altavoz**: activa o desactiva leer todas las respuestas; mientras el agente habla, lo calla. Clic derecho en
-  un mensaje → *Escuchar*.
+- **Micrófono** (barra del chat): se **mantiene pulsado** mientras se habla y al soltarlo se transcribe y se envía.
+  Mientras escucha, la barra se marca en rojo, el micrófono late y dice «Escuchando… suelta para enviar». Para
+  cancelar, aleja el cursor antes de soltar («Suelta para cancelar») o pulsa Esc. Un clic corto no graba: la caja
+  recuerda que hay que mantenerlo pulsado.
+- **Solo se responde en voz alta lo que se pide hablando**; lo escrito se responde por escrito.
+- **Callar**: mientras el agente habla aparece un botón para callarlo. Clic derecho en un mensaje → *Escuchar*.
 - Antes de leer se quita el Markdown: las tablas se leen fila a fila y los bloques de código no se leen.
-- ⚙ Configuración → *Voz*: leer siempre y *Probar la voz*. La voz es siempre la femenina (`es_MX-claude-high`). La dirección y la velocidad están en `config.json` (`VoiceUrl`, `VoiceSpeed`).
+- ⚙ Configuración → *Voz*: cómo se usa el micrófono y *Probar la voz*. La voz es siempre la femenina (`es_MX-claude-high`). La dirección y la velocidad están en `config.json` (`VoiceUrl`, `VoiceSpeed`).
 
 ### Ejemplo: agente del clima
 

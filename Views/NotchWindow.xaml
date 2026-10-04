@@ -655,6 +655,7 @@
 
                         <!-- Entrada -->
                         <Border x:Name="InputBar" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="8,4" CornerRadius="20" Background="#1EFFFFFF"
+                                BorderThickness="1" BorderBrush="Transparent"
                                 Visibility="{Binding CanType, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -669,15 +670,30 @@
                                              Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
                                     <TextBlock x:Name="Placeholder" Text="Continuar…" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
                                                Foreground="#6E6E7C" FontSize="13.5"/>
+                                    <!-- Mientras se graba con el micrófono pulsado: tapa la caja de texto y explica qué hacer -->
+                                    <StackPanel x:Name="RecordingHint" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0"
+                                                IsHitTestVisible="False" Visibility="Collapsed">
+                                        <Ellipse x:Name="RecordingDot" Width="8" Height="8" Fill="{StaticResource ErrorFg}" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="RecordingText" Margin="8,0,0,0" FontSize="13.5" Foreground="#ECECF2" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
                                 </Grid>
                                 <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
                                         Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
                                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"/>
                                 <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
-                                <!-- Voz: leer las respuestas en voz alta (o callar al agente) y dictar un mensaje -->
-                                <Button x:Name="SpeakerButton" Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE74F;" Click="Speaker_Click" VerticalAlignment="Bottom"/>
-                                <Button x:Name="MicButton" Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE720;" Click="Mic_Click" VerticalAlignment="Bottom"
-                                        ToolTip="Hablar: pulsa, di tu mensaje y vuelve a pulsar para enviarlo (Esc cancela)"/>
+                                <!-- Voz: callar al agente mientras habla (solo se ve entonces) y micrófono para hablar manteniéndolo pulsado -->
+                                <Button x:Name="SpeakerButton" Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE71A;" Click="Speaker_Click"
+                                        VerticalAlignment="Bottom" ToolTip="Dejar de hablar" Visibility="Collapsed"/>
+                                <Grid Grid.Column="4" VerticalAlignment="Bottom">
+                                    <Ellipse x:Name="MicPulse" Fill="{StaticResource ErrorFg}" Opacity="0" IsHitTestVisible="False"
+                                             RenderTransformOrigin="0.5,0.5" Margin="2">
+                                        <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Button x:Name="MicButton" Style="{StaticResource IconButton}" Content="&#xE720;"
+                                            PreviewMouseLeftButtonDown="Mic_Down" PreviewMouseLeftButtonUp="Mic_Up" PreviewMouseMove="Mic_Move" LostMouseCapture="Mic_LostCapture"
+                                            ToolTip="Mantén pulsado para hablar y suelta para enviar. Aleja el cursor antes de soltar (o pulsa Esc) para cancelar."/>
+                                </Grid>
                             </Grid>
                         </Border>
                     </Grid>
@@ -751,14 +767,11 @@
                             <Border Style="{StaticResource SettingsCard}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SettingsTitle}" Text="VOZ"/>
-                                    <Grid Style="{StaticResource SettingsRow}">
-                                        <StackPanel VerticalAlignment="Center" Margin="0,4,46,4">
-                                            <TextBlock Text="Leer las respuestas en voz alta" FontSize="12.5" Foreground="#ECECF2" TextWrapping="Wrap"/>
-                                            <TextBlock Text="Lo que pidas hablando (botón del micrófono) se lee siempre."
-                                                       FontSize="10.5" Foreground="#6E6E7C" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="SetSpeakReplies" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
-                                    </Grid>
+                                    <StackPanel Margin="0,4,0,8">
+                                        <TextBlock Text="Mantén pulsado el micrófono mientras hablas y suéltalo para enviar." FontSize="12.5" Foreground="#ECECF2" TextWrapping="Wrap"/>
+                                        <TextBlock Text="El agente responde en voz alta solo a lo que le pides hablando; lo que escribes lo responde por escrito."
+                                                   FontSize="10.5" Foreground="#6E6E7C" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
                                     <Button Style="{StaticResource SettingsButton}" Click="SetVoiceTest_Click">
                                         <TextBlock><Run Text="&#xE767;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Probar la voz"/></TextBlock>
                                     </Button>

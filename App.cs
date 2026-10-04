@@ -459,10 +459,10 @@ namespace AgentManagerNotch
                 Notifier.Toast(title, body, s.Key);
             Notifier.Play(r.Success ? NotificationService.SoundKind.Done : NotificationService.SoundKind.Error);
 
-            // Voz: se lee la respuesta si se pidió hablando o si está activado «Leer las respuestas en voz alta»
+            // Voz: la respuesta se lee en voz alta solo si se pidió hablando (micrófono)
             bool byVoice = s.ReplyByVoice;
             s.ReplyByVoice = false;
-            if (r.Success && !r.FromSchedule && (byVoice || Store.Config.Settings.SpeakReplies) && !string.IsNullOrWhiteSpace(r.FinalText))
+            if (r.Success && !r.FromSchedule && byVoice && !string.IsNullOrWhiteSpace(r.FinalText))
                 Speak(s, r.FinalText);
         }
 
