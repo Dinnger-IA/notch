@@ -797,7 +797,11 @@ namespace AgentManagerNotch.Views
             ChatView.DataContext = s;
             // Mismo historial, dos vistas: la conversación sin las acciones, y las acciones en el panel izquierdo
             ChatList.ItemsSource = s == null ? null : new ListCollectionView(s.Messages) { Filter = o => !IsAction(o) };
-            ActionsList.ItemsSource = s == null ? null : new ListCollectionView(s.Messages) { Filter = IsAction };
+            ActionsList.ItemsSource = s == null || s.IsCode ? null : new ListCollectionView(s.Messages) { Filter = IsAction };
+            TaskScroll.Visibility = s?.IsCode == true ? Visibility.Collapsed : Visibility.Visible;
+            RecentActions.Visibility = s?.IsCode == true ? Visibility.Visible : Visibility.Collapsed;
+            RecentActions.Children.Clear();
+            RefreshRecentActions(animate: false);
             if (s != null)
             {
                 s.Messages.CollectionChanged += Messages_CollectionChanged;
@@ -850,7 +854,21 @@ namespace AgentManagerNotch.Views
                 BannerMochi.State = _bannerSession!.State;
         }
 
-        private void Messages_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyChat();
+        private void Messages_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            UpdateEmptyChat();
+            RefreshRecentActions(animate: true);
+        }
+
+        // =============================================================== últimas acciones (agentes de código)
+        /// <summary>Las 5 últimas acciones del agente de código, la más reciente arriba (ver <see cref="RecentActionList"/>).</summary>
+        private void RefreshRecentActions(bool animate)
+        {
+            var s = _selected;
+            if (s == null || !s.IsCode) { RecentActions.Children.Clear(); return; }
+            var latest = s.Messages.Where(IsAction).Reverse().Take(RecentActionList.Count).Cast<object>().ToList();
+            RecentActionList.Update(RecentActions, latest, (DataTemplate)FindResource("ActionLineTemplate"), animate);
+        }
 
         private static bool IsAction(object o) => o is ChatMessage { Role: ChatRole.Tool or ChatRole.Permission };
 

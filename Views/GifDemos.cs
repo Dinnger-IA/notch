@@ -22,7 +22,8 @@ namespace AgentManagerNotch.Views
             "actualizacion[=X.Y.Z] (tarjeta de versión nueva con las novedades de esa versión) · " +
             "tabla (respuesta del chat con tablas Markdown) · instalador (ventana del instalador) · " +
             "terminal (sesión de Claude Code de la terminal en una pestaña de codi-claude) · " +
-            "aviso-panel (aviso de Claude Code de la terminal con el panel abierto)";
+            "aviso-panel (aviso de Claude Code de la terminal con el panel abierto) · " +
+            "acciones (las 5 últimas acciones de un agente de código, la más reciente arriba)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -39,6 +40,7 @@ namespace AgentManagerNotch.Views
                 "tabla" => await ChatTableAsync(path),
                 "terminal" => await TerminalSessionAsync(path),
                 "aviso-panel" => await PanelNoticeAsync(path),
+                "acciones" => await RecentActionsAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -149,6 +151,63 @@ namespace AgentManagerNotch.Views
                 next.RaiseEvent(new RoutedEventArgs(click)); // → Opciones (no instala nada)
                 await Task.Delay(1200);
                 desktop.IsChecked = true; await Task.Delay(1800);
+            });
+            win.Close();
+            return n;
+        }
+
+        /// <summary>Las últimas acciones de un agente de código: cada nueva entra arriba y las demás bajan difuminándose.</summary>
+        private static async Task<int> RecentActionsAsync(string path)
+        {
+            // Misma fila que ActionLineTemplate de NotchWindow.xaml (icono, herramienta y detalle)
+            var template = (DataTemplate)System.Windows.Markup.XamlReader.Parse("""
+                <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                              xmlns:v="clr-namespace:AgentManagerNotch.Views;assembly=AgentManagerNotch">
+                    <Grid Margin="0,3">
+                        <Grid.Resources><v:ToolActionConverter x:Key="ToolAction" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"/></Grid.Resources>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=icon}"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10.5" Foreground="#8C8C99" Margin="0,2,0,0"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=name}"
+                                       FontSize="11" FontWeight="SemiBold" Foreground="#C8C8D2" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Text, Converter={StaticResource ToolAction}, ConverterParameter=detail}"
+                                       FontFamily="Cascadia Mono, Consolas" FontSize="10" Foreground="#6E6E7C" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+                """);
+            var actions = new[]
+            {
+                "Bash  npm test -- fechas", "Read  src/utils/fechas.ts", "Grep  formatearFecha", "Read  src/utils/zona.ts",
+                "Edit  src/utils/fechas.ts", "Bash  npm test -- fechas", "Edit  test/fechas.test.ts", "Bash  npm test"
+            }.Select(t => new Models.ChatMessage { Role = Models.ChatRole.Tool, Text = t }).ToList();
+
+            var panel = new StackPanel { Width = 230, Height = 210, ClipToBounds = true };
+            var claude = Color.FromRgb(0xD9, 0x77, 0x57);
+            var head = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10),
+                Children =
+                {
+                    new Controls.MochiView { Width = 40, Height = 40, BodyColor = claude, State = Controls.MochiState.Working, Interactive = false },
+                    new TextBlock { Text = "codi-claude", FontSize = 13.5, FontWeight = FontWeights.SemiBold, Foreground = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2)),
+                                    VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) }
+                }
+            };
+            var host = new Border { Background = NotchBg, Padding = new Thickness(16, 12, 16, 12), Child = new StackPanel { Children = { head, panel } } };
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            RecentActionList.Update(panel, actions.Take(2).Reverse().Cast<object>().ToList(), template, animate: false);
+            var n = await new GifWriter(host, NotchBg, 262).RecordAsync(path, async () =>
+            {
+                await Task.Delay(700);
+                for (int i = 3; i <= actions.Count; i++)
+                {
+                    RecentActionList.Update(panel, actions.Take(i).Reverse().Take(RecentActionList.Count).Cast<object>().ToList(), template, animate: true);
+                    await Task.Delay(900);
+                }
+                await Task.Delay(800);
             });
             win.Close();
             return n;
