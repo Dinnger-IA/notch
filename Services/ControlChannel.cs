@@ -15,6 +15,7 @@ namespace AgentManagerNotch.Services
     ///   AgentManagerNotch.exe --notify "Título" "Mensaje" [--agent Nombre]
     ///   AgentManagerNotch.exe --ask Nombre "texto para el agente"
     ///   AgentManagerNotch.exe --claude-event      (hook global de Claude Code; JSON por stdin)
+    ///   AgentManagerNotch.exe --codex-event JSON  (notify de Codex; JSON como último argumento)
     /// </summary>
     public static class ControlChannel
     {
@@ -97,6 +98,19 @@ namespace AgentManagerNotch.Services
                         if (args.Length < 3) return 2;
                         return Send(new { cmd = "ask", agent = args[1], text = string.Join(" ", args.Skip(2)) }) ? 0 : 1;
                     }
+                case "--codex-event":
+                    {
+                        // Codex lo llama al terminar cada turno de una sesión de la terminal (opción notify), con el JSON
+                        // como último argumento. Las sesiones de los agentes del notch no cuentan.
+                        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COUCOU_AGENT_ID"))) return 0;
+                        try
+                        {
+                            if (args.Length > 1 && JsonNode.Parse(args[^1]) is JsonObject payload)
+                                Send(new { cmd = "codex-event", payload }, 800);
+                        }
+                        catch (Exception ex) { Log.Error("codex-event", ex); }
+                        return 0;
+                    }
                 case "--claude-event":
                     {
                         // Nunca bloquea a Claude Code: si Agent Manager Notch no está, sale enseguida.
@@ -121,7 +135,7 @@ namespace AgentManagerNotch.Services
         private static string ClaudeSettingsPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "settings.json");
 
-        private static string HookCommand => $"\"{(Environment.ProcessPath ?? "AgentManagerNotch.exe").Replace('\\', '/')}\" --claude-event";
+        private static string HookCommand(string? exe) => $"\"{(exe ?? Environment.ProcessPath ?? "AgentManagerNotch.exe").Replace('\\', '/')}\" --claude-event";
 
         /// <summary>Si los hooks globales apuntan a otro ejecutable (p. ej. el nombre anterior), los actualiza.</summary>
         public static void RefreshClaudeIntegrationPath()
@@ -160,7 +174,8 @@ namespace AgentManagerNotch.Services
         }
 
         /// <summary>Añade (o quita) los hooks de <see cref="HookEvents"/> en ~/.claude/settings.json, con copia de seguridad.</summary>
-        public static void SetClaudeIntegration(bool install)
+        /// <param name="exe">Ejecutable al que llaman los hooks (por defecto este; el instalador pasa el instalado).</param>
+        public static void SetClaudeIntegration(bool install, string? exe = null)
         {
             var path = ClaudeSettingsPath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -190,7 +205,7 @@ namespace AgentManagerNotch.Services
                         ["hooks"] = new JsonArray(new JsonObject
                         {
                             ["type"] = "command",
-                            ["command"] = HookCommand,
+                            ["command"] = HookCommand(exe),
                             ["timeout"] = 5
                         })
                     });

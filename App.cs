@@ -577,6 +577,9 @@ namespace AgentManagerNotch
                     case "claude-event":
                         HandleClaudeEvent(msg["payload"] as System.Text.Json.Nodes.JsonObject);
                         break;
+                    case "codex-event":
+                        HandleCodexEvent(msg["payload"] as System.Text.Json.Nodes.JsonObject);
+                        break;
                 }
             }
             catch (Exception ex) { Log.Error("HandleControl", ex); }
@@ -594,7 +597,9 @@ namespace AgentManagerNotch
             var ev = Get("hook_event_name");
             var cwd = Get("cwd");
             var project = string.IsNullOrEmpty(cwd) ? "tu terminal" : System.IO.Path.GetFileName(cwd.TrimEnd('\\', '/'));
-            var key = LinkTerminalSession(cwd, Get("session_id"), Get("transcript_path"))?.Key;
+            var tab = TerminalTab(ProviderKind.ClaudeCode, cwd, Get("session_id"));
+            tab?.AttachTerminalSession(Get("session_id"), ClaudeTranscript.Read(Get("transcript_path")));
+            var key = tab?.Key;
             if (ev == "Stop")
             {
                 Notch.ShowBannerRaw(ClaudeColor, MochiState.Done, "Claude Code terminó", $"Sesión en {project}", key, sticky: false);
@@ -616,7 +621,36 @@ namespace AgentManagerNotch
         /// tenga esa carpeta, el principal, el que se llame Codi… o el primero); si no hay ninguno se crea «codi-claude».
         /// Devuelve null si el evento no trae carpeta o sesión.
         /// </summary>
-        private AgentSession? LinkTerminalSession(string cwd, string sessionId, string transcriptPath)
+        /// <summary>
+        /// Turno terminado en una sesión de Codex de la terminal (opción notify): se añade lo pedido y la respuesta a
+        /// su pestaña (en codi-codex si no hay agente de código de Codex) y se avisa.
+        /// </summary>
+        private void HandleCodexEvent(System.Text.Json.Nodes.JsonObject? p)
+        {
+            if (p == null || p["type"]?.GetValue<string>() != "agent-turn-complete") return;
+            string Get(string key) => p[key] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+            var cwd = Get("cwd");
+            var answer = Get("last-assistant-message");
+            var asked = (p["input-messages"] as System.Text.Json.Nodes.JsonArray)?
+                .Select(n => n is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : "").ToList() ?? new();
+            var threadId = Get("thread-id");
+            var tab = TerminalTab(ProviderKind.Codex, cwd, threadId);
+            tab?.AppendTerminalTurn(threadId, asked, answer, "Codex");
+            var project = string.IsNullOrEmpty(cwd) ? "tu terminal" : System.IO.Path.GetFileName(cwd.TrimEnd('\\', '/'));
+            var body = FirstLine(answer) is { Length: > 0 } first ? first : $"Sesión en {project}";
+            Notch.ShowBannerRaw(CodexColor, MochiState.Done, $"Codex terminó · {project}", body, tab?.Key, sticky: false);
+            if (Store.Config.Settings.NotifyOnDone) Notifier.Toast($"Codex terminó · {project}", body, tab?.Key);
+            Notifier.Play(NotificationService.SoundKind.Done);
+        }
+
+        private static readonly System.Windows.Media.Color CodexColor = System.Windows.Media.Color.FromRgb(0x10, 0xA3, 0x7F);
+
+        /// <summary>
+        /// Pestaña para una sesión de un CLI abierta en la terminal: en un agente de código que use ese CLI (el que ya
+        /// tenga esa carpeta, el principal, el que se llame Codi… o el primero); si no hay ninguno se crea
+        /// «codi-claude» o «codi-codex». Devuelve null si el evento no trae carpeta o sesión.
+        /// </summary>
+        private AgentSession? TerminalTab(ProviderKind cli, string cwd, string sessionId)
         {
             if (string.IsNullOrWhiteSpace(cwd) || string.IsNullOrWhiteSpace(sessionId) || !System.IO.Directory.Exists(cwd)) return null;
             try
@@ -624,23 +658,24 @@ namespace AgentManagerNotch
                 var folder = System.IO.Path.GetFullPath(cwd).TrimEnd('\\');
                 bool SameFolder(AgentSession s) => s.Workspace != null &&
                     string.Equals(System.IO.Path.GetFullPath(s.WorkDir).TrimEnd('\\'), folder, StringComparison.OrdinalIgnoreCase);
-                var codis = Agents.Where(a => a.IsCode && a.Profile.Provider == ProviderKind.ClaudeCode).ToList();
+                var codis = Agents.Where(a => a.IsCode && a.Profile.Provider == cli).ToList();
                 var target = codis.FirstOrDefault(a => a.Tabs.Any(SameFolder))
                              ?? codis.FirstOrDefault(a => a.IsDefault)
                              ?? codis.FirstOrDefault(a => a.Name.StartsWith("Codi", StringComparison.OrdinalIgnoreCase))
                              ?? codis.FirstOrDefault();
                 if (target == null)
                 {
-                    target = AddAgent(ConfigStore.NewCodeAgent(null, "codi-claude", "#D97757"));
-                    Log.Info("Sesión de Claude Code en la terminal: se creó el agente codi-claude");
+                    var name = cli == ProviderKind.Codex ? "codi-codex" : "codi-claude";
+                    var profile = ConfigStore.NewCodeAgent(null, name, cli == ProviderKind.Codex ? "#10A37F" : "#D97757");
+                    profile.Provider = cli;
+                    target = AddAgent(profile);
+                    Log.Info($"Sesión de {ProviderFactory.Label(cli)} en la terminal: se creó el agente {name}");
                 }
-                var tab = AddWorkspace(folder, target);
-                tab.AttachTerminalSession(sessionId, ClaudeTranscript.Read(transcriptPath));
-                return tab;
+                return AddWorkspace(folder, target);
             }
             catch (Exception ex)
             {
-                Log.Error("Asociar la sesión de Claude Code de la terminal", ex);
+                Log.Error($"Asociar la sesión de {ProviderFactory.Label(cli)} de la terminal", ex);
                 return null;
             }
         }

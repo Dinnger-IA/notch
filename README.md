@@ -36,16 +36,27 @@ en `%LOCALAPPDATA%\Programs\Agent Manager Notch`, con acceso en el menú Inicio 
 Windows**, crear un acceso en el escritorio y abrirlo al terminar. Si ya estaba instalado, lo actualiza (cierra el
 notch abierto y conserva agentes, conversaciones y sesión).
 
+Va **por etapas**: *Herramientas* (muestra si Claude Code y Codex están instalados, con un botón **Instalar** al lado
+de los que falten, y la opción de conectar sus avisos de la terminal) → *Opciones* → *Instalación* (cada paso con su
+resultado; el notch se abre al final). Claude Code se instala con su instalador oficial de Windows y Codex con npm
+(antes Node LTS con winget si falta), en `Services/CliSetup.cs`. Los avisos apuntan al programa instalado: hooks de
+Claude Code y la opción `notify` de Codex, que solo se usa si está libre (la app de Codex puede ocuparla).
+
 Se desinstala desde *Configuración de Windows → Aplicaciones instaladas* (o `AgentManagerNotch.exe --desinstalar`),
 con la opción de borrar también los datos. Para instalar desde un script: `AgentManagerNotch-Setup-X.Y.Z.exe
---silencioso [--sin-inicio-windows] [--escritorio] [--abrir]`, y `--desinstalar --silencioso [--borrar-datos]`.
-**Agent Manager en el instalador** (solo en esta rama): la opción *Usar Agent Manager* viene marcada y exige pulsar
-**Comprobar conexión** antes de instalar (`Services/AgentManagerCheck.cs`): que se resuelve
+--silencioso [--sin-inicio-windows] [--escritorio] [--abrir] [--instalar-cli] [--sin-avisos]`, y `--desinstalar
+--silencioso [--borrar-datos]`.
+
+**Agent Manager en el instalador** (solo en esta rama, `Views/InstallerWindow.AgentManager.cs`): añade la primera
+etapa, *Agent Manager*. La opción *Usar Agent Manager* viene marcada y no deja seguir sin pulsar
+**Comprobar conexión** (`Services/AgentManagerCheck.cs`): que se resuelve
 `agent-manager.distelsa.net` (red de la empresa o VPN), que responde por HTTPS con un certificado de confianza y que
 el puerto 5454 del inicio de sesión está libre. Si algo falla, muestra el motivo y no deja instalar. Sin marcarla se
 instala igual con `UseAgentManager = false` en `config.json`: el notch no pide sesión ni instala el MCP, no crea a
 Doky y los agentes usan los CLI del equipo; se puede activar después en ⚙ Configuración → *Sesión*. En modo
-silencioso se hace la misma comprobación (código 3 si falla) y `--sin-agent-manager` instala sin él.
+silencioso se hace la misma comprobación (código 3 si falla) y `--sin-agent-manager` instala sin él. Con Agent
+Manager, la etapa *Instalación* inicia sesión (o reutiliza la guardada) y añade el MCP de Agent Manager a Claude Code y
+Codex con `McpSetup`; en modo silencioso eso queda para cuando se inicie sesión en el notch.
 
 No se comprime a propósito: comprimido ocupa la mitad, pero tarda ~0,9 s en cada arranque (Claude Code lo lanza en
 cada herramienta) frente a ~0,2 s.
@@ -270,8 +281,13 @@ muestra la sesión leída de su transcripción (`transcript_path` del hook, `Ser
 pediste, las acciones y las respuestas, sin razonamientos ni salidas de herramientas. Lo que escribas ahí continúa
 esa misma sesión (`claude --resume <id>`) con las aprobaciones del notch. El aviso y la notificación abren esa
 pestaña. `UserPromptSubmit` (una vez por mensaje, no por herramienta) hace que aparezca en cuanto empiezas. Las
-sesiones que lanza el propio notch no cuentan (llevan `COUCOU_AGENT_ID`). Solo Claude Code: Codex y Gemini no
-tienen hooks equivalentes.
+sesiones que lanza el propio notch no cuentan (llevan `COUCOU_AGENT_ID`).
+
+**Codex** avisa con su opción `notify` (~/.codex/config.toml → `AgentManagerNotch.exe --codex-event <json>` al
+terminar cada turno). Su JSON no trae la transcripción, así que la pestaña (de un agente de código de Codex, o de
+**codi-codex**) va sumando lo pedido y la respuesta de cada turno, y guarda el `thread-id` para continuar la sesión.
+Codex solo admite un `notify`: si ya lo usa otra aplicación (p. ej. la app de Codex), no se toca. Gemini no tiene un
+mecanismo equivalente.
 
 ## Estructura
 
@@ -291,6 +307,7 @@ Services/ControlChannel.cs --notify / --ask / --claude-event e integración opci
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
 Services/VoiceService.cs   voz: TTS en streaming, dictado (STT) y volumen para la boca del personaje
+Services/CliSetup.cs       instalador: detecta e instala Claude Code y Codex y conecta sus avisos (CodexNotify)
 Services/ClaudeTranscript.cs lee la sesión de Claude Code de la terminal (JSONL) para mostrarla en una pestaña
 Services/Installer.cs      instalar/desinstalar por usuario (accesos, registro, inicio con Windows)
 Views/InstallerWindow.*    ventana del instalador
