@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace AgentManagerNotch.Services
 {
@@ -149,7 +150,14 @@ namespace AgentManagerNotch.Services
 
             // Siempre la copia recién publicada (aunque esta corra desde bin\…): si no, se volvería a abrir la antigua
             var exe = Path.Combine(RepoDir, "publish", "AgentManagerNotch.exe");
-            const string runKey = @"HKCU:\Software\Microsoft\Windows\CurrentVersion\Run";
+            // «Iniciar con Windows» también pasa a la copia publicada. Se hace aquí y no en el script: un PowerShell oculto
+            // que escribe en la clave Run es justo lo que buscan los antivirus heurísticos
+            try
+            {
+                using var run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                if (run?.GetValue("AgentManagerNotch") != null) run.SetValue("AgentManagerNotch", $"\"{exe}\"");
+            }
+            catch (Exception ex) { Log.Error("Actualizaciones: inicio con Windows", ex); }
             var log = Path.Combine(ConfigStore.Root, "update.log");
             var script = Path.Combine(Path.GetTempPath(), "agent-manager-notch-update.ps1");
             File.WriteAllText(script, $$"""
@@ -160,16 +168,12 @@ namespace AgentManagerNotch.Services
                 $env:GIT_TERMINAL_PROMPT = '0'
                 git pull --ff-only
                 if ($LASTEXITCODE -eq 0) { & '.\publish.ps1' } else { Write-Host 'git pull falló: se abre la versión actual' }
-                # «Iniciar con Windows» también pasa a la copia publicada
-                if (Get-ItemProperty -Path '{{runKey}}' -Name AgentManagerNotch -ErrorAction SilentlyContinue) {
-                    Set-ItemProperty -Path '{{runKey}}' -Name AgentManagerNotch -Value '"{{exe}}"'
-                }
                 Stop-Transcript | Out-Null
                 if (Test-Path '{{exe}}') { Start-Process '{{exe}}' } else { Start-Process '{{Environment.ProcessPath}}' }
                 """, new UTF8Encoding(true));
             Process.Start(new ProcessStartInfo("powershell.exe")
             {
-                ArgumentList = { "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script },
+                ArgumentList = { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script },
                 UseShellExecute = false,
                 CreateNoWindow = true
             });

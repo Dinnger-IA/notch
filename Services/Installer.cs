@@ -145,11 +145,18 @@ namespace AgentManagerNotch.Services
             Log.Info($"Desinstalado de {InstallDir} (datos borrados: {removeData})");
 
             var dirs = removeData ? new[] { InstallDir, ConfigStore.Root } : new[] { InstallDir };
-            var rm = string.Join(" & ", dirs.Select(d => $"if exist \"{d}\" rmdir /s /q \"{d}\" 2>nul"));
             // Espera a que se cierre este proceso y borra; reintenta hasta un minuto porque el antivirus o el Explorador
-            // pueden tener abierto el ejecutable un rato (ping hace de pausa: timeout no funciona sin consola)
-            var cmd = $"/c for /l %i in (1,1,60) do @(ping -n 2 127.0.0.1 >nul & {rm})";
-            Process.Start(new ProcessStartInfo("cmd.exe", cmd) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetTempPath() });
+            // pueden tener abierto el ejecutable un rato. Con Wait-Process y no con el truco de «ping 127.0.0.1» como
+            // pausa, que es la firma clásica del malware que se borra a sí mismo y la detectan los antivirus heurísticos
+            var paths = string.Join(",", dirs.Select(d => $"'{d.Replace("'", "''")}'"));
+            var ps = $"Wait-Process -Id {Environment.ProcessId} -Timeout 60 -ErrorAction SilentlyContinue; " +
+                     $"foreach ($i in 1..60) {{ $left = @({paths}) | Where-Object {{ Test-Path -LiteralPath $_ }}; if (-not $left) {{ break }}; " +
+                     "$left | ForEach-Object { Remove-Item -LiteralPath $_ -Recurse -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1 }";
+            Process.Start(new ProcessStartInfo("powershell.exe")
+            {
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", ps },
+                UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetTempPath()
+            });
         }
 
         private static bool IsSelfInstalled() =>

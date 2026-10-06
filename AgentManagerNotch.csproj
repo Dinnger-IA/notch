@@ -14,7 +14,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>
+    <!-- Datos del ejecutable (Propiedades → Detalles): un .exe sin ellos puntúa peor en los antivirus heurísticos -->
     <Product>Agent Manager Notch</Product>
+    <AssemblyTitle>Agent Manager Notch</AssemblyTitle>
+    <Description>Notch de escritorio para gestionar agentes de IA (Claude Code, Codex…)</Description>
+    <Company>Agent Manager Notch</Company>
+    <Copyright>© 2026 Agent Manager Notch</Copyright>
     <ApplicationIcon>Assets\AgentManagerNotch.ico</ApplicationIcon>
   </PropertyGroup>
 

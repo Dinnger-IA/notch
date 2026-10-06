@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using AgentManagerNotch.Models;
@@ -13,7 +14,7 @@ namespace AgentManagerNotch.Services
     /// CLI que usa el notch (Claude Code y Codex) para el instalador: si están instalados y su versión, instalarlos con
     /// su método oficial y conectar sus avisos de la terminal con el notch.
     /// <list type="bullet">
-    /// <item>Claude Code: instalador oficial de Windows (<c>irm https://claude.ai/install.ps1 | iex</c>), sin Node ni
+    /// <item>Claude Code: instalador oficial de Windows (<c>https://claude.ai/install.ps1</c>, descargado y ejecutado con <c>-File</c>), sin Node ni
     /// administrador. Avisos: hooks en ~/.claude/settings.json (<see cref="ControlChannel.SetClaudeIntegration"/>).</item>
     /// <item>Codex: <c>npm install -g @openai/codex</c> (si no hay Node, antes Node LTS con winget). Avisos: la opción
     /// <c>notify</c> de ~/.codex/config.toml. Codex admite uno solo: si ya lo usa otra app (p. ej. la app de Codex), se
@@ -24,6 +25,7 @@ namespace AgentManagerNotch.Services
     {
         public static readonly ProviderKind[] Clis = { ProviderKind.ClaudeCode, ProviderKind.Codex };
         private static readonly TimeSpan InstallTimeout = TimeSpan.FromMinutes(10);
+        private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(2) };
 
         public record CliState(ProviderKind Cli, bool Installed, string? Version, string? Path);
 
@@ -45,8 +47,13 @@ namespace AgentManagerNotch.Services
                 if (cli == ProviderKind.ClaudeCode)
                 {
                     progress?.Report("Descargando el instalador oficial de Claude Code…");
-                    var (code, output) = Run("powershell.exe",
-                        "-NoProfile -ExecutionPolicy Bypass -Command \"irm https://claude.ai/install.ps1 | iex\"", InstallTimeout);
+                    // Se descarga a un archivo y se ejecuta con -File: el clásico «irm … | iex» (descargar y ejecutar en
+                    // memoria) es una firma típica de malware y hace que antivirus como Bitdefender marquen el notch
+                    var script = Path.Combine(Path.GetTempPath(), "claude-code-install.ps1");
+                    try { File.WriteAllText(script, Http.GetStringAsync("https://claude.ai/install.ps1").GetAwaiter().GetResult(), new UTF8Encoding(true)); }
+                    catch (Exception ex) { return $"No se pudo descargar el instalador de Claude Code: {ex.Message}"; }
+                    var (code, output) = Run("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"", InstallTimeout);
+                    try { File.Delete(script); } catch { }
                     Log.Info($"Instalar Claude Code: código {code} · {Tail(output)}");
                     if (Detect(cli).Installed) return null;
                     return code == 0 ? "El instalador terminó pero no se encuentra «claude». Abre una terminal nueva y prueba «claude --version»."
