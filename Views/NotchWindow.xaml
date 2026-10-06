@@ -517,7 +517,8 @@
 
                         <!-- Personaje, a la altura de las pestañas -->
                         <c:MochiView x:Name="ChatMochi" Grid.Row="0" Grid.Column="0" Width="46" Height="46"
-                                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,-4,0,2"/>
+                                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,-4,0,2"
+                                     MouseLeftButtonUp="ChatMochi_Click"/>
 
                         <!-- Barra superior -->
                         <Grid Grid.Column="1" Margin="0,0,0,6">
@@ -543,6 +544,15 @@
                                             Click="NewWorkspace_Click"/>
                                 </StackPanel>
                             </ScrollViewer>
+                            <!-- Git del workspace (solo si la carpeta es un repositorio): rama y nº de cambios -->
+                            <Button x:Name="GitButton" Grid.Column="2" Style="{StaticResource PillButton}" Padding="10,4" Visibility="Collapsed"
+                                    Background="#1FFFFFFF" ToolTip="Cambios de git: preparar, ramas, commit y push" Click="GitToggle_Click">
+                                <TextBlock FontSize="12">
+                                    <Run Text="&#x2442;" FontFamily="Segoe UI Symbol" Foreground="#9A9AA8"/>
+                                    <Run x:Name="GitButtonBranch"/>
+                                    <Run x:Name="GitButtonCount" Foreground="#FFB020"/>
+                                </TextBlock>
+                            </Button>
                         </Grid>
 
                         <!-- Acciones del agente debajo del personaje (leer, escribir, ejecutar…): ocupan toda la columna,
@@ -610,6 +620,82 @@
                                     <Button Style="{StaticResource PillButton}" Content="Seleccionar carpeta…" Margin="0,12,0,0" HorizontalAlignment="Center"
                                             Click="NewWorkspace_Click"/>
                                 </StackPanel>
+                            </Border>
+
+                            <!-- Panel de git del workspace (tapa la conversación mientras está abierto; ver NotchWindow.Git.cs) -->
+                            <Border x:Name="GitView" Grid.Row="0" Grid.RowSpan="2" CornerRadius="16" Background="#F2141418" BorderBrush="#26FFFFFF"
+                                    BorderThickness="1" Padding="12,8,8,10" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid Margin="0,0,0,6">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button x:Name="GitBranchButton" Style="{StaticResource PillButton}" Padding="10,4" Background="#2A2A33"
+                                                    ToolTip="Cambiar de rama o crear una nueva" Click="GitBranch_Click">
+                                                <TextBlock FontSize="12">
+                                                    <Run Text="&#x2442;" FontFamily="Segoe UI Symbol" Foreground="#9A9AA8"/>
+                                                    <Run x:Name="GitBranchName"/>
+                                                    <Run Text="  &#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="8" Foreground="#9A9AA8"/>
+                                                </TextBlock>
+                                            </Button>
+                                            <TextBlock x:Name="GitSync" FontSize="11.5" Foreground="#9A9AA8" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <Button Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="11" Content="&#xE710;"
+                                                    ToolTip="Preparar todo" Click="GitStageAll_Click"/>
+                                            <Button Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="11" Content="&#xE738;"
+                                                    ToolTip="Quitar todo de lo preparado" Click="GitUnstageAll_Click"/>
+                                            <Button Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="11" Content="&#xE72C;"
+                                                    ToolTip="Actualizar" Click="GitRefresh_Click"/>
+                                            <Button Style="{StaticResource IconButton}" Width="26" Height="26" FontSize="10" Content="&#xE711;"
+                                                    ToolTip="Volver a la conversación" Click="GitToggle_Click"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <!-- Nueva rama -->
+                                    <Border x:Name="GitNewBranchBar" Grid.Row="0" Visibility="Collapsed" CornerRadius="13" Background="#2A2A33" Padding="10,2,4,2" Margin="0,0,0,6">
+                                        <Grid>
+                                            <TextBox x:Name="GitNewBranchInput" Style="{StaticResource ChatInput}" AcceptsReturn="False" FontSize="12.5"
+                                                     MinHeight="24" PreviewKeyDown="GitNewBranch_KeyDown"/>
+                                            <TextBlock x:Name="GitNewBranchHint" Text="Nombre de la nueva rama (Enter para crearla, Esc para cancelar)" IsHitTestVisible="False"
+                                                       FontSize="12" Foreground="#6E6E7C" VerticalAlignment="Center" Margin="2,0"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <ScrollViewer x:Name="GitScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                                        <StackPanel x:Name="GitChanges"/>
+                                    </ScrollViewer>
+
+                                    <!-- Mensaje del commit -->
+                                    <Border Grid.Row="2" Margin="0,8,0,0" CornerRadius="12" Background="#1EFFFFFF" Padding="10,4">
+                                        <Grid>
+                                            <TextBox x:Name="GitMessage" Style="{StaticResource ChatInput}" FontSize="12.5" MinHeight="40" MaxHeight="110"
+                                                     VerticalContentAlignment="Top" Padding="0,4" TextChanged="GitMessage_TextChanged"/>
+                                            <TextBlock x:Name="GitMessageHint" IsHitTestVisible="False" FontSize="12" Foreground="#6E6E7C" Margin="2,5,0,0"
+                                                       TextWrapping="Wrap" Text="Mensaje del commit… (pulsa el personaje para que el agente lo escriba)"/>
+                                        </Grid>
+                                    </Border>
+                                    <Grid Grid.Row="3" Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="GitInfo" Style="{StaticResource SelectableText}" FontSize="11.5" Foreground="#9A9AA8"
+                                                 VerticalAlignment="Center" MaxHeight="48" Margin="0,0,8,0"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                            <Button x:Name="GitCommitButton" Style="{StaticResource PillButton}" Padding="12,5" Margin="0,0,6,0"
+                                                    Background="#7C6CF0" FontWeight="SemiBold" Click="GitCommit_Click">
+                                                <TextBlock><Run Text="&#xE73E;" FontFamily="{StaticResource IconFont}" FontSize="10"/><Run Text="  Commit"/></TextBlock>
+                                            </Button>
+                                            <Button x:Name="GitPushButton" Style="{StaticResource PillButton}" Padding="12,5" Click="GitPush_Click">
+                                                <TextBlock><Run Text="&#xE898;" FontFamily="{StaticResource IconFont}" FontSize="10"/><Run x:Name="GitPushLabel" Text="  Push"/></TextBlock>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
                             </Border>
                         </Grid>
 

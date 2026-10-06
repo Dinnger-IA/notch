@@ -25,7 +25,8 @@ namespace AgentManagerNotch.Views
             "aviso-panel (aviso de Claude Code de la terminal con el panel abierto) · " +
             "acciones (las 5 últimas acciones de un agente de código, la más reciente arriba) · " +
             "editor-color (los colores del editor de agentes, en una sola fila) · " +
-            "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva)";
+            "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva) · " +
+            "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -45,6 +46,7 @@ namespace AgentManagerNotch.Views
                 "acciones" => await RecentActionsAsync(path),
                 "editor-color" => await EditorColorAsync(path),
                 "sesion-ocupada" => await BusySessionAsync(path),
+                "git" => await GitPanelAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -475,6 +477,120 @@ namespace AgentManagerNotch.Views
                 banner.Visibility = Visibility.Hidden;
                 chatHost.Visibility = Visibility.Visible;
                 await Task.Delay(4500);
+            });
+            win.Close();
+            return n;
+        }
+
+        /// <summary>
+        /// El panel de git de un workspace: se preparan dos archivos, el personaje escribe el mensaje del commit al
+        /// pulsarlo y se hace commit y push (datos de ejemplo; no toca ningún repositorio).
+        /// </summary>
+        private static async Task<int> GitPanelAsync(string path)
+        {
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            var dim = Frozen(Color.FromRgb(0x9A, 0x9A, 0xA8));
+            var faint = Frozen(Color.FromRgb(0x6E, 0x6E, 0x7C));
+            var claude = Color.FromRgb(0xD9, 0x77, 0x57);
+            Border Pill(UIElement child, Color bg) => new()
+            {
+                Background = Frozen(bg), CornerRadius = new CornerRadius(14), Padding = new Thickness(10, 4, 10, 4),
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0), Child = child
+            };
+            TextBlock Branch(string count)
+            {
+                var t = new TextBlock { FontSize = 12, Foreground = text };
+                t.Inlines.Add(new System.Windows.Documents.Run("⑂ ") { FontFamily = new FontFamily("Segoe UI Symbol"), Foreground = dim });
+                t.Inlines.Add(new System.Windows.Documents.Run("main"));
+                if (count != "") t.Inlines.Add(new System.Windows.Documents.Run(" " + count) { Foreground = Frozen(Color.FromRgb(0xFF, 0xB0, 0x20)) });
+                return t;
+            }
+
+            var changes = new System.Collections.Generic.List<GitChange>
+            {
+                new("docs/zona-horaria.md", '?', '?', null),
+                new("src/utils/fechas.ts", ' ', 'M', null),
+                new("test/fechas.test.ts", ' ', 'M', null)
+            };
+            int ahead = 1;
+            var list = new StackPanel();
+            var topCount = new Border();
+            var sync = new TextBlock { FontSize = 11.5, Foreground = dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+            void Render()
+            {
+                var st = new GitStatus { Branch = "main", Upstream = "origin/main", Ahead = ahead, Changes = changes.OrderBy(c => c.Path).ToList() };
+                NotchWindow.FillGitList(list, st, (_, _) => { }, null);
+                topCount.Child = Pill(Branch(changes.Count > 0 ? $"●{changes.Count}" : ""), Color.FromArgb(0x1F, 0xFF, 0xFF, 0xFF));
+                sync.Text = ahead > 0 ? $"↑{ahead}" : "";
+            }
+            void Stage(string p) { var i = changes.FindIndex(c => c.Path == p); changes[i] = changes[i] with { Index = 'M', WorkTree = ' ' }; Render(); }
+
+            var mochi = new Controls.MochiView { Width = 46, Height = 46, BodyColor = claude, Interactive = false };
+            var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            top.Children.Add(new TextBlock { Text = "codi-claude", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            top.Children.Add(Pill(new TextBlock { Text = "mi-proyecto", FontSize = 12, Foreground = text }, Color.FromRgb(0x2C, 0x2C, 0x33)));
+            top.Children.Add(topCount);
+
+            var head = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            head.Children.Add(Pill(Branch(""), Color.FromRgb(0x2A, 0x2A, 0x33)));
+            head.Children.Add(sync);
+            var message = new TextBlock { FontSize = 12.5, Foreground = text, TextWrapping = TextWrapping.Wrap, MinHeight = 52, Margin = new Thickness(2, 4, 0, 4) };
+            const string hint = "Mensaje del commit… (pulsa el personaje para que el agente lo escriba)";
+            var msgHost = new Border { CornerRadius = new CornerRadius(12), Background = Frozen(Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF)), Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 10, 0, 0), Child = message };
+            var info = new TextBlock { FontSize = 11.5, Foreground = dim, VerticalAlignment = VerticalAlignment.Center };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(Pill(new TextBlock { Text = "✓  Commit", FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = text }, Color.FromRgb(0x7C, 0x6C, 0xF0)));
+            buttons.Children.Add(Pill(new TextBlock { Text = "↑  Push", FontSize = 12.5, Foreground = text }, Color.FromRgb(0x2E, 0x2E, 0x38)));
+            var foot = new Grid { Margin = new Thickness(0, 8, 0, 0), Children = { info, buttons } };
+            var panel = new Border
+            {
+                CornerRadius = new CornerRadius(16), Background = Frozen(Color.FromRgb(0x14, 0x14, 0x18)), BorderBrush = Frozen(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1), Padding = new Thickness(12, 8, 12, 10), Height = 290,
+                Child = new DockPanel { LastChildFill = true }
+            };
+            var dock = (DockPanel)panel.Child;
+            DockPanel.SetDock(head, Dock.Top); DockPanel.SetDock(foot, Dock.Bottom); DockPanel.SetDock(msgHost, Dock.Bottom);
+            dock.Children.Add(head); dock.Children.Add(foot); dock.Children.Add(msgHost); dock.Children.Add(list);
+
+            var stage = new Grid { Width = 600 };
+            stage.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+            stage.ColumnDefinitions.Add(new ColumnDefinition());
+            var right = new StackPanel { Children = { top, panel } };
+            Grid.SetColumn(right, 1);
+            stage.Children.Add(mochi);
+            stage.Children.Add(right);
+            mochi.VerticalAlignment = VerticalAlignment.Top;
+            var host = new Border { Background = NotchBg, Padding = new Thickness(14, 12, 16, 14), Child = stage };
+            Render();
+            message.Text = hint; message.Foreground = faint;
+
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 630).RecordAsync(path, async () =>
+            {
+                await Task.Delay(1200);
+                Stage("src/utils/fechas.ts"); await Task.Delay(900);
+                Stage("test/fechas.test.ts"); await Task.Delay(1100);
+                // Clic en el personaje: escribe el commit
+                mochi.Poke();
+                mochi.State = Controls.MochiState.Thinking;
+                message.Text = "codi-claude está escribiendo el commit… (pulsa otra vez para cancelar)";
+                await Task.Delay(2200);
+                const string msg = "Usar UTC al formatear fechas\n\nEl test fallaba en CI por la zona horaria del servidor: formatearFecha\nahora trabaja en UTC y el test lo comprueba.";
+                message.Foreground = text;
+                for (int i = 6; i < msg.Length; i += 6) { message.Text = msg[..i]; await Task.Delay(40); }
+                message.Text = msg;
+                mochi.State = Controls.MochiState.Done;
+                info.Text = "Mensaje listo para lo preparado.";
+                await Task.Delay(2200);
+                mochi.State = Controls.MochiState.Idle;
+                info.Text = "Confirmando…"; await Task.Delay(600);
+                changes.RemoveAll(c => c.IsStaged); ahead = 2; Render();
+                message.Text = hint; message.Foreground = faint;
+                info.Text = "Commit hecho."; await Task.Delay(1400);
+                info.Text = "Haciendo push…"; await Task.Delay(900);
+                ahead = 0; Render();
+                info.Text = "Push hecho."; await Task.Delay(2200);
             });
             win.Close();
             return n;

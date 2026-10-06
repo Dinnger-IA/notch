@@ -132,6 +132,16 @@ a la derecha**.
 - Para que cambiar de pestaña no trabe el notch, la conversación (y el panel de acciones de los demás agentes) solo
   pinta los **10 últimos mensajes**; al desplazarte hacia arriba se cargan los 10 anteriores sin perder lo que
   estabas leyendo (`Views/MessageWindow.cs`).
+- **Git** en los agentes de código: si la carpeta del workspace es un repositorio, a la derecha de las pestañas se
+  ve la rama y el número de cambios. Al pulsarlo, el panel de git tapa la conversación y muestra los cambios en
+  *preparados* y *sin preparar* (**+** / **−** por archivo o para todos; doble clic abre el archivo), la rama
+  (cambiar a otra o crear una nueva), los commits por subir (↑) o por bajar (↓), el mensaje del commit, **Commit**
+  (si no hay nada preparado, confirma todo) y **Push** (o **Publicar**, que la sube con `-u` al remoto). El estado se
+  refresca solo cada pocos segundos y al terminar cada turno del agente. Con el panel abierto, **pulsa el
+  personaje** y el agente escribe el mensaje del commit: se lanza su CLI en solo lectura y sin sesión con el diff
+  (lo preparado o, si no hay nada, todo) y los últimos commits para seguir su estilo; pulsarlo otra vez lo cancela.
+  Usa el `git` del PATH; las credenciales las pide el administrador de credenciales de Git
+  (`Services/GitService.cs`, `Views/NotchWindow.Git.cs`).
 
 ### Ejemplo: agente del clima
 

@@ -819,6 +819,7 @@ namespace AgentManagerNotch.Views
                 AppRef.Store.Config.Settings.SelectedAgentId = s.Key;
             }
             UpdateEmptyChat();
+            GitOnSelect();
             _autoScroll = true;
             _taskAutoScroll = true;
             ScrollToEnd();
@@ -861,6 +862,8 @@ namespace AgentManagerNotch.Views
                     UpdateCollapsedSize();
                     break;
             }
+            // Al terminar un turno del agente abierto, los cambios de git se ven al momento
+            if (sender == _selected && e.PropertyName == nameof(AgentSession.IsBusy) && !_selected!.IsBusy && _git != null) _ = RefreshGitAsync();
             if (sender == _bannerSession && e.PropertyName == nameof(AgentSession.State) && _mode == Mode.Banner)
                 BannerMochi.State = _bannerSession!.State;
         }
