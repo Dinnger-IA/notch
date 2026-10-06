@@ -128,7 +128,10 @@ a la derecha**.
 - En los agentes de **código**, bajo el personaje se ven las **5 últimas acciones** (leer, editar, ejecutar…),
   la más reciente **arriba** y las demás cada vez más difuminadas; las anteriores, con **scroll** (al pasar el ratón
   o desplazarse se ven todas nítidas). La nueva entra deslizándose y las otras bajan a su sitio
-  (`Views/RecentActionList.cs`).
+  (`Views/RecentActionList.cs`). Se cargan **10** de entrada y otras 10 cada vez que llegas al final (scroll infinito).
+- Para que cambiar de pestaña no trabe el notch, la conversación (y el panel de acciones de los demás agentes) solo
+  pinta los **10 últimos mensajes**; al desplazarte hacia arriba se cargan los 10 anteriores sin perder lo que
+  estabas leyendo (`Views/MessageWindow.cs`).
 
 ### Ejemplo: agente del clima
 

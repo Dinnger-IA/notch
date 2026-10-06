@@ -17,8 +17,6 @@ namespace AgentManagerNotch.Views
     public static class RecentActionList
     {
         public const int Count = 5;
-        /// <summary>Tope de filas en la lista (las más antiguas no se muestran).</summary>
-        public const int MaxRows = 200;
         /// <summary>Opacidad y desenfoque de cada puesto: la más reciente nítida y el resto cada vez más difuso.</summary>
         private static readonly double[] Opacity = { 1, 0.72, 0.5, 0.32, 0.18 };
         private static readonly double[] Blur = { 0, 0, 0.6, 1.1, 1.6 };

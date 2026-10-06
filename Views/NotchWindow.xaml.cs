@@ -35,6 +35,9 @@ namespace AgentManagerNotch.Views
         private AgentEntry? _focused;      // agente de la tarjeta grande
         private AgentEntry? _openEntry;    // agente abierto en el chat
         private AgentSession? _selected;   // pestaña / sesión abierta en el chat
+        private MessageWindow? _chatWindow, _actionsWindow; // últimos mensajes de _selected (ver MessageWindow)
+        private int _recentLimit = MessageWindow.Page;       // acciones cargadas en RecentActions
+        private bool _chatLoadingOlder, _taskLoadingOlder;   // mantener a la vista lo que había al cargar anteriores
         private AgentSession? _bannerSession;
         private string? _bannerKey;
         private RemindersWindow? _reminders;
@@ -796,11 +799,18 @@ namespace AgentManagerNotch.Views
             _selected = s;
             ChatView.DataContext = s;
             // Mismo historial, dos vistas: la conversación sin las acciones, y las acciones en el panel izquierdo
-            ChatList.ItemsSource = s == null ? null : new ListCollectionView(s.Messages) { Filter = o => !IsAction(o) };
-            ActionsList.ItemsSource = s == null || s.IsCode ? null : new ListCollectionView(s.Messages) { Filter = IsAction };
+            // Solo los últimos 10 de cada vista; los anteriores se cargan al desplazarse
+            _chatWindow?.Detach();
+            _actionsWindow?.Detach();
+            _chatWindow = s == null ? null : new MessageWindow(s.Messages, m => !IsAction(m));
+            _actionsWindow = s == null || s.IsCode ? null : new MessageWindow(s.Messages, IsAction);
+            ChatList.ItemsSource = _chatWindow;
+            ActionsList.ItemsSource = _actionsWindow;
+            _chatLoadingOlder = _taskLoadingOlder = false;
             TaskScroll.Visibility = s?.IsCode == true ? Visibility.Collapsed : Visibility.Visible;
             RecentScroll.Visibility = s?.IsCode == true ? Visibility.Visible : Visibility.Collapsed;
             RecentActions.Children.Clear();
+            _recentLimit = MessageWindow.Page;
             RecentScroll.ScrollToTop();
             RefreshRecentActions(animate: false);
             if (s != null)
@@ -867,7 +877,8 @@ namespace AgentManagerNotch.Views
         {
             var s = _selected;
             if (s == null || !s.IsCode) { RecentActions.Children.Clear(); return; }
-            var all = s.Messages.Where(IsAction).Reverse().Take(RecentActionList.MaxRows).Cast<object>().ToList();
+            // Solo las _recentLimit más recientes (10 de entrada): pintar cientos de filas con desenfoque trababa el notch
+            var all = s.Messages.Where(IsAction).Reverse().Take(_recentLimit).Cast<object>().ToList();
             RecentActionList.Update(RecentActions, all, (DataTemplate)FindResource("ActionLineTemplate"), animate, RecentSharp);
             RecentScroll.MaxHeight = RecentActionList.VisibleHeight(RecentActions);
         }
@@ -880,6 +891,19 @@ namespace AgentManagerNotch.Views
         private void RecentScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             if (e.VerticalChange != 0) RecentActionList.SetSharp(RecentActions, RecentSharp);
+            if (e.VerticalChange == 0 || _selected is not { IsCode: true } s) return;
+            // Scroll infinito: al llegar abajo se cargan 10 acciones más antiguas; al volver arriba, otra vez solo 10
+            if (RecentScroll.ScrollableHeight > 0 && RecentScroll.VerticalOffset >= RecentScroll.ScrollableHeight - 4
+                && s.Messages.Count(IsAction) > _recentLimit)
+            {
+                _recentLimit += MessageWindow.Page;
+                RefreshRecentActions(animate: false);
+            }
+            else if (RecentScroll.VerticalOffset <= 0 && _recentLimit > MessageWindow.Page)
+            {
+                _recentLimit = MessageWindow.Page;
+                RefreshRecentActions(animate: false);
+            }
         }
 
         private static bool IsAction(object o) => o is ChatMessage { Role: ChatRole.Tool or ChatRole.Permission };
@@ -898,8 +922,29 @@ namespace AgentManagerNotch.Views
 
         private void ChatScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
+            if (LoadOlderOnScroll(ChatScroll, _chatWindow, e, ref _chatLoadingOlder)) return;
             if (e.ExtentHeightChange == 0) _autoScroll = ChatScroll.VerticalOffset >= ChatScroll.ScrollableHeight - 4;
             else if (_autoScroll) ChatScroll.ScrollToVerticalOffset(ChatScroll.ExtentHeight);
+        }
+
+        /// <summary>
+        /// Scroll infinito hacia arriba: al llegar arriba (o si lo cargado no llena la vista) se añaden los 10 mensajes
+        /// anteriores, y al crecer la lista por arriba se corrige el desplazamiento para no mover lo que se estaba leyendo.
+        /// Devuelve true si ha gestionado el cambio.
+        /// </summary>
+        private static bool LoadOlderOnScroll(ScrollViewer scroll, MessageWindow? window, ScrollChangedEventArgs e, ref bool loading)
+        {
+            if (window == null) return false;
+            if (loading && e.ExtentHeightChange != 0)
+            {
+                loading = false;
+                scroll.ScrollToVerticalOffset(scroll.VerticalOffset + e.ExtentHeightChange);
+                return true;
+            }
+            bool atTop = scroll.ScrollableHeight <= 0 || (e.VerticalChange < 0 && scroll.VerticalOffset <= 4);
+            if (!atTop || !window.LoadOlder()) return false;
+            loading = scroll.ScrollableHeight > 0;
+            return true;
         }
 
         private void ScrollToEnd() => Dispatcher.BeginInvoke(() => { ChatScroll.ScrollToEnd(); TaskScroll.ScrollToEnd(); }, DispatcherPriority.Background);
@@ -912,6 +957,7 @@ namespace AgentManagerNotch.Views
         /// </summary>
         private void TaskScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
+            if (LoadOlderOnScroll(TaskScroll, _actionsWindow, e, ref _taskLoadingOlder)) return;
             if (e.ExtentHeightChange == 0) _taskAutoScroll = TaskScroll.VerticalOffset >= TaskScroll.ScrollableHeight - 2;
             else if (_taskAutoScroll) TaskScroll.ScrollToVerticalOffset(TaskScroll.ExtentHeight);
 
