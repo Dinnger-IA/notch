@@ -1,0 +1,7 @@
+{
+  "_comentario": "Identidad del paquete de Microsoft Store. Cópiala de Partner Center → tu app → Administración del producto → Identidad del producto. Mientras sean los valores de ejemplo, el paquete solo sirve para probarlo en este equipo (crear-msix.ps1 -Probar).",
+  "Name": "AgentManagerNotch.Pruebas",
+  "Publisher": "CN=AgentManagerNotch-Pruebas",
+  "PublisherDisplayName": "Agent Manager Notch",
+  "DisplayName": "Agent Manager Notch"
+}

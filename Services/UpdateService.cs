@@ -60,6 +60,7 @@ namespace AgentManagerNotch.Services
 
         public void Start()
         {
+            if (AppIdentity.IsPackaged) { Log.Info("Actualizaciones: edición de Microsoft Store, las hace la Store"); return; }
             if (Branch is "" or "HEAD") { Log.Info("Actualizaciones: compilación sin información de git, no se comprueba"); return; }
             _timer.Start();
             // Primera comprobación al poco de arrancar, sin estorbar el inicio
@@ -70,7 +71,7 @@ namespace AgentManagerNotch.Services
 
         public async Task CheckAsync()
         {
-            if (Checking || Branch is "" or "HEAD") return;
+            if (Checking || Branch is "" or "HEAD" || AppIdentity.IsPackaged) return;
             Checking = true;
             Changed?.Invoke();
             try
@@ -140,6 +141,7 @@ namespace AgentManagerNotch.Services
         /// </summary>
         public async Task<string?> StartUpdateAsync()
         {
+            if (AppIdentity.IsPackaged) return "Esta copia es la de Microsoft Store: se actualiza desde la Store.";
             if (RepoDir == null) return $"Esta copia no está dentro del repositorio. Descarga la versión nueva desde {RepoUrl}.";
             var (bc, branch) = await Task.Run(() => Git(RepoDir, "rev-parse", "--abbrev-ref", "HEAD"));
             if (bc != 0) return "No se pudo leer el repositorio local.";

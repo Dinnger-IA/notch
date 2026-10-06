@@ -129,7 +129,7 @@ namespace AgentManagerNotch.Services
                 using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
                 if (k?.GetValue("Coucou" + "Win") == null) return;
                 k.DeleteValue("Coucou" + "Win", false);
-                k.SetValue("AgentManagerNotch", $"\"{Environment.ProcessPath}\"");
+                k.SetValue("AgentManagerNotch", $"\"{AppIdentity.SelfExe}\"");
             }
             catch (Exception ex) { Log.Error("Migrar inicio con Windows", ex); }
         }
@@ -142,7 +142,7 @@ namespace AgentManagerNotch.Services
         public static void SetStartup(bool on)
         {
             using var k = Registry.CurrentUser.CreateSubKey(RunKey);
-            if (on) k.SetValue("AgentManagerNotch", $"\"{Environment.ProcessPath}\"");
+            if (on) k.SetValue("AgentManagerNotch", $"\"{AppIdentity.SelfExe}\"");
             else k.DeleteValue("AgentManagerNotch", false);
         }
 

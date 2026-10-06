@@ -1117,12 +1117,14 @@ namespace AgentManagerNotch.Views
             var u = AppRef.Updates;
             SetVersion.Text = $"Agent Manager Notch {u.Version}" + (u.Branch is "" or "HEAD" ? "" : $" · {u.Branch}");
             SetUpdateStatus.Foreground = (Brush)FindResource(u.UpdateAvailable ? "TextPrimary" : "TextSecondary");
-            SetUpdateStatus.Text = u.Checking ? "Buscando actualizaciones…"
+            SetUpdateStatus.Text = AppIdentity.IsPackaged ? "Edición de Microsoft Store: las actualizaciones llegan por la Store."
+                : u.Checking ? "Buscando actualizaciones…"
                 : u.UpdateAvailable ? $"Hay una versión nueva: {u.RemoteVersionText}."
                 : u.LastError != null ? u.LastError
                 : u.LastCheck is DateTime when ? $"Al día · comprobado a las {when:HH:mm}. Se revisa cada 2 horas."
                 : "Se revisa cada 2 horas.";
             SetCheckUpdates.IsEnabled = !u.Checking;
+            SetCheckUpdates.Visibility = AppIdentity.IsPackaged ? Visibility.Collapsed : Visibility.Visible;
             SetUpdateNow.Visibility = u.UpdateAvailable ? Visibility.Visible : Visibility.Collapsed;
             if (_mode == Mode.Settings) Resize();
         }
@@ -1140,7 +1142,7 @@ namespace AgentManagerNotch.Views
                 case var c when c == SetCodexNotify:
                     try
                     {
-                        if (SetCodexNotify.IsChecked == true) CodexNotify.Install(Environment.ProcessPath ?? "AgentManagerNotch.exe");
+                        if (SetCodexNotify.IsChecked == true) CodexNotify.Install(AppIdentity.SelfExe);
                         else CodexNotify.Uninstall();
                     }
                     catch (Exception ex) { Log.Error("Avisos de Codex", ex); }

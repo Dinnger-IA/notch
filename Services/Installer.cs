@@ -30,8 +30,9 @@ namespace AgentManagerNotch.Services
 
         /// <summary>Se abrió como instalador: con <c>--instalar</c> o con el nombre del archivo de instalación.</summary>
         public static bool IsSetupLaunch(string[] args) =>
-            args.FirstOrDefault() == "--instalar" ||
-            Path.GetFileName(Environment.ProcessPath ?? "").StartsWith("AgentManagerNotch-Setup", StringComparison.OrdinalIgnoreCase);
+            !AppIdentity.IsPackaged && // la edición de la Store la instala y desinstala Windows
+            (args.FirstOrDefault() == "--instalar" ||
+             Path.GetFileName(Environment.ProcessPath ?? "").StartsWith("AgentManagerNotch-Setup", StringComparison.OrdinalIgnoreCase));
 
         public static bool IsInstalled => File.Exists(InstalledExe);
 

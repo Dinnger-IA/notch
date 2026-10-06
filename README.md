@@ -49,6 +49,35 @@ con la opción de borrar también los datos. Para instalar desde un script: `Age
 No se comprime a propósito: comprimido ocupa la mitad, pero tarda ~0,9 s en cada arranque (Claude Code lo lanza en
 cada herramienta) frente a ~0,2 s.
 
+## Microsoft Store
+
+```powershell
+.\crear-msix.ps1            # genera .\instalador\AgentManagerNotch-X.Y.Z.0.msix para subirlo a Partner Center
+.\crear-msix.ps1 -Probar    # además lo registra en este equipo para probarlo (modo de desarrollador)
+```
+
+La edición de la Store es el mismo programa empaquetado como MSIX (plantilla en `store\AppxManifest.xml`, logotipos
+en `store\Assets`). La Store firma el paquete, así que no hace falta certificado, y Windows deja de mostrar el aviso
+de *editor desconocido*. Al detectar que corre empaquetado (`Services/AppIdentity.cs`):
+
+- No busca ni instala actualizaciones (las hace la Store) ni usa su instalador propio.
+- Los hooks de Claude Code, el aviso de Codex y el inicio con Windows lo lanzan por su alias
+  `%LOCALAPPDATA%\Microsoft\WindowsApps\AgentManagerNotch.exe`: la carpeta del paquete no es ejecutable desde fuera.
+- Sin virtualización de archivos ni de registro (capacidad restringida `unvirtualizedResources`): los datos siguen en
+  `%APPDATA%\AgentManagerNotch`, donde los leen Claude Code y Codex, y comparte agentes e historial con la versión de
+  escritorio.
+
+Para publicarlo:
+
+1. Crea una cuenta de desarrollador en [Partner Center](https://partner.microsoft.com/dashboard) (gratis para
+   cuentas individuales) y reserva el nombre de la app.
+2. En *Administración del producto → Identidad del producto*, copia `Package/Identity/Name`,
+   `Package/Identity/Publisher` y `Package/Properties/PublisherDisplayName` en `store\identidad.json`.
+3. Ejecuta `.\crear-msix.ps1` y sube el `.msix` en un envío nuevo. Las capacidades restringidas `runFullTrust` y
+   `unvirtualizedResources` piden una justificación: el notch lanza los CLI de agentes (Claude Code, Codex, Gemini)
+   y comparte con ellos sus archivos de configuración en `%APPDATA%` y `~\.claude`.
+4. Cada versión nueva: crea su `versiones\X.Y.Z.md`, vuelve a ejecutar el script y sube el paquete en otro envío.
+
 ## Tipos de agente
 
 | Tipo | Qué hace | Al abrirlo |
@@ -278,6 +307,7 @@ Services/CliSetup.cs       instalador: detecta e instala Claude Code y Codex y c
 Services/WorkspaceMentions.cs menciones @workspace del chat: lista, resolución y acceso del CLI a esas carpetas
 Services/ClaudeTranscript.cs lee la sesión de Claude Code de la terminal (JSONL) para mostrarla en una pestaña
 Services/Installer.cs      instalar/desinstalar por usuario (accesos, registro, inicio con Windows)
+Services/AppIdentity.cs    edición de Microsoft Store: detecta el paquete MSIX y la ruta del alias
 Views/InstallerWindow.*    ventana del instalador
 Views/NotchWindow.*        el notch: píldora, aviso, vista general (tarjeta + chips) y chat con pestañas
 Views/AgentEditorWindow.*  crear/editar agentes con vista previa animada

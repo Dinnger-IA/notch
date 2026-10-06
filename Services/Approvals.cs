@@ -214,7 +214,7 @@ namespace AgentManagerNotch.Services
         /// <summary>Escribe el settings.json que se pasa a Claude Code con --settings.</summary>
         public static string WriteClaudeHookSettings()
         {
-            var exe = (Environment.ProcessPath ?? "AgentManagerNotch.exe").Replace('\\', '/');
+            var exe = AppIdentity.SelfExe.Replace('\\', '/');
             var settings = new
             {
                 hooks = new

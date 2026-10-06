@@ -30,7 +30,7 @@ namespace AgentManagerNotch
             }
 
             // Instalador: el mismo ejecutable autónomo (AgentManagerNotch-Setup-X.Y.Z.exe) instala o desinstala
-            bool uninstall = args.Length > 0 && args[0] == "--desinstalar";
+            bool uninstall = args.Length > 0 && args[0] == "--desinstalar" && !AppIdentity.IsPackaged;
             if (uninstall || Installer.IsSetupLaunch(args))
             {
                 // --silencioso: sin ventana, para instalar desde un script (--sin-inicio-windows, --escritorio, --abrir)

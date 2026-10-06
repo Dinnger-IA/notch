@@ -137,7 +137,7 @@ namespace AgentManagerNotch.Services
         private static string ClaudeSettingsPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "settings.json");
 
-        private static string HookCommand(string? exe) => $"\"{(exe ?? Environment.ProcessPath ?? "AgentManagerNotch.exe").Replace('\\', '/')}\" --claude-event";
+        private static string HookCommand(string? exe) => $"\"{(exe ?? AppIdentity.SelfExe).Replace('\\', '/')}\" --claude-event";
 
         /// <summary>Si los hooks globales apuntan a otro ejecutable (p. ej. el nombre anterior), los actualiza.</summary>
         public static void RefreshClaudeIntegrationPath()
@@ -146,7 +146,7 @@ namespace AgentManagerNotch.Services
             {
                 if (!IsClaudeIntegrationInstalled()) return;
                 var text = File.ReadAllText(ClaudeSettingsPath);
-                var exe = (Environment.ProcessPath ?? "").Replace('\\', '/');
+                var exe = AppIdentity.SelfExe.Replace('\\', '/');
                 // También si falta algún evento nuevo (UserPromptSubmit se añadió después)
                 if ((exe != "" && !text.Contains(exe)) || !HasAllEvents(text)) SetClaudeIntegration(true);
             }
