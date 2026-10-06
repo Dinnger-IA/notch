@@ -225,6 +225,9 @@ namespace AgentManagerNotch.Services
             var provider = ProviderFactory.Create(p.Provider);
             var spec = provider.Build(p, prompt, null, new RunContext { AgentId = p.Id, AgentName = p.Name });
             var psi = spec.Psi;
+            // Marca la ejecución como del notch: sin esto, los hooks globales de Claude Code (y el aviso de Codex) la
+            // toman por una sesión de la terminal y el prompt y el mensaje del commit aparecen en el chat
+            psi.Environment["COUCOU_AGENT_ID"] = $"{p.Id}:git-commit";
 
             using var proc = new Process { StartInfo = psi };
             var stderr = new StringBuilder();
