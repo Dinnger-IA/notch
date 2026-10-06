@@ -576,7 +576,11 @@ namespace AgentManagerNotch.Services
                 // Cada pestaña usa el perfil del agente con su propia carpeta
                 var runProfile = Profile;
                 if (Workspace != null) { runProfile = Profile.Clone(); runProfile.WorkingDirectory = Workspace.Folder; }
-                var spec = provider.Build(runProfile, text, SessionId, ctx);
+                // Workspaces citados con @: acceso a sus carpetas y su ruta delante del mensaje (en el chat se ve tal cual)
+                var refs = WorkspaceMentions.Resolve(text, IsCode ? WorkDir : null);
+                ctx.ExtraDirs = refs.Select(r => r.Folder).ToList();
+                if (refs.Count > 0) Log.Info($"[{Profile.Name}] workspaces citados: {string.Join(", ", refs.Select(r => r.Name))}");
+                var spec = provider.Build(runProfile, WorkspaceMentions.Augment(text, refs), SessionId, ctx);
                 var psi = spec.Psi;
                 psi.Environment["COUCOU_PIPE"] = ctx.PipeName;
                 psi.Environment["COUCOU_AGENT_ID"] = Key;

@@ -736,8 +736,43 @@
                                 <Grid Margin="6,0">
                                     <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
                                              Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
-                                    <TextBlock x:Name="Placeholder" Text="Continuar…" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
+                                    <TextBlock x:Name="Placeholder" Text="Continuar… (@ para citar otro workspace)" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
                                                Foreground="#6E6E7C" FontSize="13.5"/>
+                                    <!-- @workspace: lista de los otros workspaces para citarlos como contexto -->
+                                    <Popup x:Name="MentionPopup" PlacementTarget="{Binding ElementName=Input}" Placement="Bottom" VerticalOffset="8"
+                                           AllowsTransparency="True" StaysOpen="False" Focusable="False" PopupAnimation="Fade">
+                                        <Border Background="{StaticResource PaneBg}" BorderBrush="#2AFFFFFF" BorderThickness="1" CornerRadius="12"
+                                                Padding="4" MinWidth="240" MaxWidth="420">
+                                            <StackPanel>
+                                                <TextBlock Text="CITAR WORKSPACE" FontSize="10" FontWeight="SemiBold" Foreground="#6E6E7C" Margin="8,4,8,4"/>
+                                                <ItemsControl x:Name="MentionList">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border x:Name="Row" CornerRadius="8" Padding="8,5" Background="Transparent" Cursor="Hand"
+                                                                    MouseLeftButtonDown="MentionItem_MouseDown">
+                                                                <StackPanel>
+                                                                    <TextBlock Foreground="#ECECF1" FontSize="12.5">
+                                                                        <Run Text="@" Foreground="#8A8A98"/><Run Text="{Binding Name, Mode=OneWay}"/>
+                                                                    </TextBlock>
+                                                                    <TextBlock Text="{Binding Folder}" Foreground="#6E6E7C" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <DataTemplate.Triggers>
+                                                                <DataTrigger Binding="{Binding Selected}" Value="True">
+                                                                    <Setter TargetName="Row" Property="Background" Value="#26FFFFFF"/>
+                                                                </DataTrigger>
+                                                                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="Row" Property="Background" Value="#1AFFFFFF"/>
+                                                                </Trigger>
+                                                            </DataTemplate.Triggers>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock x:Name="MentionEmpty" Text="No hay otros workspaces abiertos" Foreground="#6E6E7C" FontSize="12"
+                                                           Margin="8,4,8,6" Visibility="Collapsed"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
                                 </Grid>
                                 <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Detener" Click="Stop_Click"
                                         Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"

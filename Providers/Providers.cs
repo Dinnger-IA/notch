@@ -31,6 +31,8 @@ namespace AgentManagerNotch.Providers
         /// <summary>System prompt del agente + instrucciones de Agent Manager Notch (fecha, recordatorios).</summary>
         public string FullSystemPrompt { get; init; } = "";
         public IReadOnlyList<ChatMessage> History { get; init; } = Array.Empty<ChatMessage>();
+        /// <summary>Carpetas de otros workspaces citados con @ en el mensaje: el CLI necesita acceso para leerlas.</summary>
+        public IReadOnlyList<string> ExtraDirs { get; set; } = Array.Empty<string>();
     }
 
     public class LaunchSpec
@@ -194,6 +196,7 @@ namespace AgentManagerNotch.Providers
             if (!string.IsNullOrWhiteSpace(ctx.FullSystemPrompt)) { a.Add("--append-system-prompt"); a.Add(ctx.FullSystemPrompt); }
             if (!string.IsNullOrWhiteSpace(p.Model)) { a.Add("--model"); a.Add(p.Model.Trim()); }
             if (!string.IsNullOrEmpty(sessionId)) { a.Add("--resume"); a.Add(sessionId); }
+            foreach (var dir in ctx.ExtraDirs) { a.Add("--add-dir"); a.Add(dir); }
 
             switch (p.Approval)
             {
@@ -462,6 +465,7 @@ namespace AgentManagerNotch.Providers
             a.Add("--output-format"); a.Add("stream-json");
             if (!string.IsNullOrWhiteSpace(p.Model)) { a.Add("-m"); a.Add(p.Model.Trim()); }
             if (!string.IsNullOrEmpty(sessionId)) { a.Add("--resume"); a.Add(sessionId); }
+            if (ctx.ExtraDirs.Count > 0) { a.Add("--include-directories"); a.Add(string.Join(",", ctx.ExtraDirs)); }
             switch (p.Approval)
             {
                 case ApprovalMode.Auto: a.Add("--yolo"); break;

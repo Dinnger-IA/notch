@@ -81,6 +81,7 @@ namespace AgentManagerNotch
         {
             base.OnStartup(e);
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            WorkspaceMentions.Sessions = () => Sessions;
             ThemeMode = ThemeMode.Dark; // Controles Fluent nativos de Windows 11
             Resources.MergedDictionaries.Add(new ResourceDictionary
             {

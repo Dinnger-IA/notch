@@ -26,7 +26,8 @@ namespace AgentManagerNotch.Views
             "acciones (las 5 últimas acciones de un agente de código, la más reciente arriba) · " +
             "editor-color (los colores del editor de agentes, en una sola fila) · " +
             "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva) · " +
-            "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push)";
+            "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push) · " +
+            "mencion (escribir @ en el chat para citar otro workspace como contexto)";
 
         private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -47,6 +48,7 @@ namespace AgentManagerNotch.Views
                 "editor-color" => await EditorColorAsync(path),
                 "sesion-ocupada" => await BusySessionAsync(path),
                 "git" => await GitPanelAsync(path),
+                "mencion" => await MentionAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -595,6 +597,109 @@ namespace AgentManagerNotch.Views
             win.Close();
             return n;
         }
+
+        /// <summary>Escribir «@» en el chat: la lista de los otros workspaces, elegir uno y el agente lo lee como contexto.</summary>
+        private static async Task<int> MentionAsync(string path)
+        {
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF1));
+            var dim = Frozen(Color.FromRgb(0x8A, 0x8A, 0x98));
+            var faint = Frozen(Color.FromRgb(0x6E, 0x6E, 0x7C));
+            var claude = Color.FromRgb(0xD9, 0x77, 0x57);
+            Border Pill(string t, Color bg) => new()
+            {
+                Background = Frozen(bg), CornerRadius = new CornerRadius(14), Padding = new Thickness(10, 4, 10, 4),
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0),
+                Child = new TextBlock { Text = t, FontSize = 12, Foreground = text }
+            };
+
+            var mochi = new Controls.MochiView { Width = 46, Height = 46, BodyColor = claude, Interactive = false, VerticalAlignment = VerticalAlignment.Top };
+            var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            top.Children.Add(new TextBlock { Text = "codi-claude", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            top.Children.Add(Pill("tienda-web", Color.FromRgb(0x2C, 0x2C, 0x33)));
+
+            var chat = new StackPanel { MinHeight = 150 };
+            var typed = new TextBlock { FontSize = 13.5, Foreground = text, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+            const string placeholder = "Continuar… (@ para citar otro workspace)";
+            var input = new Border { CornerRadius = new CornerRadius(20), Background = Frozen(Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF)), Padding = new Thickness(14, 8, 14, 8), Child = typed };
+
+            var workspaces = new[] { ("api-pagos", @"D:\Proyectos\api-pagos"), ("app-movil", @"D:\Proyectos\app-movil"), ("diseno-sistema", @"D:\Proyectos\diseno-sistema") };
+            var rows = new System.Collections.Generic.List<Border>();
+            var rowPanel = new StackPanel();
+            foreach (var (name, folder) in workspaces)
+            {
+                var label = new TextBlock { FontSize = 12.5, Foreground = text };
+                label.Inlines.Add(new System.Windows.Documents.Run("@") { Foreground = dim });
+                label.Inlines.Add(new System.Windows.Documents.Run(name));
+                var row = new Border
+                {
+                    CornerRadius = new CornerRadius(8), Padding = new Thickness(8, 5, 8, 5),
+                    Child = new StackPanel { Children = { label, new TextBlock { Text = folder, FontSize = 10.5, Foreground = faint } } }
+                };
+                rows.Add(row); rowPanel.Children.Add(row);
+            }
+            void Select(int i) { for (int k = 0; k < rows.Count; k++) rows[k].Background = k == i ? Frozen(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)) : Brushes.Transparent; }
+            var popup = new Border
+            {
+                Background = Frozen(Color.FromRgb(0x12, 0x12, 0x17)), BorderBrush = Frozen(Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF)), BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12), Padding = new Thickness(4), Width = 260, HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(60, 8, 0, 0), Visibility = Visibility.Hidden,
+                Child = new StackPanel { Children = { new TextBlock { Text = "CITAR WORKSPACE", FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = faint, Margin = new Thickness(8, 4, 8, 4) }, rowPanel } }
+            };
+
+            var stage = new Grid { Width = 600 };
+            stage.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+            stage.ColumnDefinitions.Add(new ColumnDefinition());
+            var right = new StackPanel { Children = { top, chat, input, popup } };
+            Grid.SetColumn(right, 1);
+            stage.Children.Add(mochi);
+            stage.Children.Add(right);
+            var host = new Border { Background = NotchBg, Padding = new Thickness(14, 12, 16, 14), Child = stage };
+
+            void Bubble(string t, bool user)
+            {
+                chat.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(user ? 80 : 0, 0, user ? 0 : 40, 8),
+                    HorizontalAlignment = user ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+                    Background = Frozen(user ? Color.FromRgb(0x2C, 0x2C, 0x36) : Color.FromRgb(0x1A, 0x1A, 0x21)),
+                    Child = new TextBlock { Text = t, FontSize = 13, Foreground = text, TextWrapping = TextWrapping.Wrap }
+                });
+            }
+            void Tool(string t) => chat.Children.Add(new TextBlock { Text = t, FontSize = 11.5, Foreground = dim, Margin = new Thickness(4, 0, 0, 8) });
+            void SetTyped(string t) { typed.Text = t == "" ? placeholder : t + "▏"; typed.Foreground = t == "" ? faint : text; }
+            SetTyped("");
+
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 630).RecordAsync(path, async () =>
+            {
+                await Task.Delay(900);
+                const string first = "Usa el mismo cliente de pagos que ";
+                for (int i = 2; i <= first.Length; i += 2) { SetTyped(first[..i]); await Task.Delay(35); }
+                SetTyped(first + "@"); popup.Visibility = Visibility.Visible; Select(0);
+                await Task.Delay(1000);
+                Select(1); await Task.Delay(500);
+                Select(0); await Task.Delay(700);
+                popup.Visibility = Visibility.Hidden;
+                const string withRef = first + "@api-pagos ";
+                SetTyped(withRef); await Task.Delay(700);
+                const string rest = "en el checkout";
+                for (int i = 2; i <= rest.Length; i += 2) { SetTyped(withRef + rest[..i]); await Task.Delay(35); }
+                SetTyped(withRef + rest); await Task.Delay(800);
+                SetTyped("");
+                Bubble(withRef + rest, user: true);
+                mochi.State = Controls.MochiState.Working;
+                await Task.Delay(700);
+                Tool(@"Read  D:\Proyectos\api-pagos\src\cliente-pagos.ts"); await Task.Delay(800);
+                Tool(@"Edit  src\checkout\pago.ts"); await Task.Delay(900);
+                mochi.State = Controls.MochiState.Done;
+                Bubble("Listo: el checkout usa ahora el ClientePagos de api-pagos, con sus mismos reintentos y tiempos de espera.", user: false);
+                await Task.Delay(2600);
+            });
+            win.Close();
+            return n;
+        }
+
 
         private const Models.ChatRole ChatRoleUser = Models.ChatRole.User, ChatRoleTool = Models.ChatRole.Tool;
 

@@ -93,7 +93,7 @@ namespace AgentManagerNotch.Views
             Deactivated += (_, _) =>
             {
                 if (ClickOutsideOnly) return;
-                if (IsPanel(_mode) && !_pinned && !_modalOpen && !Shell.IsMouseOver && _selected?.PendingApproval == null) Collapse();
+                if (IsPanel(_mode) && !_pinned && !_modalOpen && !Shell.IsMouseOver && !MentionPopup.IsMouseOver && _selected?.PendingApproval == null) Collapse();
             };
             SourceInitialized += OnSourceInitialized;
             Shell.MouseLeftButtonUp += (_, e) => { if (_mode == Mode.Collapsed && HideNotch && !e.Handled) Collapsed_Click(Shell, e); };
@@ -1314,6 +1314,7 @@ namespace AgentManagerNotch.Views
             if (_selected == null || !_selected.CanType) return;
             var text = Input.Text;
             if (string.IsNullOrWhiteSpace(text)) return;
+            CloseMentions();
             Input.Clear();
             _autoScroll = true;
             await _selected.SendAsync(text); // si está ocupado, queda en la cola
@@ -1321,6 +1322,7 @@ namespace AgentManagerNotch.Views
 
         private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (MentionPopup.IsOpen && HandleMentionKey(e.Key)) { e.Handled = true; return; }
             if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
             {
                 e.Handled = true;
@@ -1334,8 +1336,107 @@ namespace AgentManagerNotch.Views
             }
         }
 
-        private void Input_TextChanged(object sender, TextChangedEventArgs e) =>
+        private void Input_TextChanged(object sender, TextChangedEventArgs e)
+        {
             Placeholder.Visibility = Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UpdateMentions();
+        }
+
+        // =============================================================== @workspace
+        /// <summary>Un workspace en la lista de «@» (Selected: el que se elige con Intro).</summary>
+        private sealed class MentionItem : System.ComponentModel.INotifyPropertyChanged
+        {
+            private bool _selected;
+            public string Name { get; init; } = "";
+            public string Folder { get; init; } = "";
+            public bool Selected
+            {
+                get => _selected;
+                set { if (_selected != value) { _selected = value; PropertyChanged?.Invoke(this, new(nameof(Selected))); } }
+            }
+            public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        }
+
+        private List<MentionItem> _mentionItems = new();
+        private int _mentionStart = -1; // posición de la «@» que se está escribiendo
+        private int _mentionIndex;
+
+        /// <summary>
+        /// Si el cursor está justo detrás de «@algo» (la @ al principio o tras un espacio), muestra los otros workspaces
+        /// cuyo nombre contiene «algo»; si no, cierra la lista.
+        /// </summary>
+        private void UpdateMentions()
+        {
+            var text = Input.Text;
+            var caret = Math.Min(Input.CaretIndex, text.Length);
+            int at = -1;
+            for (int i = caret - 1; i >= 0 && caret - i <= 60; i--)
+            {
+                if (text[i] == '@') { at = i; break; }
+                if (text[i] is '\n' or '\r') break;
+            }
+            if (at < 0 || (at > 0 && !char.IsWhiteSpace(text[at - 1])) || _selected?.CanType != true) { CloseMentions(); return; }
+
+            var query = text[(at + 1)..caret];
+            var all = WorkspaceMentions.List(_selected.HasFolder ? _selected.WorkDir : null);
+            var matches = all.Where(r => r.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            // Con texto que no coincide con ninguno (p. ej. un correo o «@nombre » ya elegido), la lista no estorba
+            if (matches.Count == 0 && query.Length > 0) { CloseMentions(); return; }
+
+            _mentionStart = at;
+            _mentionItems = matches.Select(r => new MentionItem { Name = r.Name, Folder = r.Folder }).ToList();
+            _mentionIndex = 0;
+            if (_mentionItems.Count > 0) _mentionItems[0].Selected = true;
+            MentionList.ItemsSource = _mentionItems;
+            MentionEmpty.Visibility = _mentionItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            MentionPopup.IsOpen = true;
+        }
+
+        private void CloseMentions()
+        {
+            _mentionStart = -1;
+            if (MentionPopup.IsOpen) MentionPopup.IsOpen = false;
+        }
+
+        /// <summary>Flechas para moverse, Intro o Tab para elegir y Esc para cerrar. Devuelve true si consumió la tecla.</summary>
+        private bool HandleMentionKey(Key key)
+        {
+            switch (key)
+            {
+                case Key.Escape:
+                    CloseMentions();
+                    return true;
+                case Key.Down or Key.Up when _mentionItems.Count > 0:
+                    _mentionItems[_mentionIndex].Selected = false;
+                    _mentionIndex = (_mentionIndex + (key == Key.Down ? 1 : -1) + _mentionItems.Count) % _mentionItems.Count;
+                    _mentionItems[_mentionIndex].Selected = true;
+                    return true;
+                case Key.Enter or Key.Tab when _mentionItems.Count > 0:
+                    AcceptMention(_mentionItems[_mentionIndex]);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>Sustituye «@lo-escrito» por «@nombre » y deja el cursor detrás.</summary>
+        private void AcceptMention(MentionItem item)
+        {
+            var start = _mentionStart;
+            var caret = Math.Min(Input.CaretIndex, Input.Text.Length);
+            CloseMentions();
+            if (start < 0 || start > caret) return;
+            var insert = "@" + item.Name + " ";
+            Input.Text = Input.Text[..start] + insert + Input.Text[caret..];
+            Input.CaretIndex = start + insert.Length;
+            CloseMentions(); // el cambio de texto la habría vuelto a abrir
+            Input.Focus();
+        }
+
+        private void MentionItem_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is MentionItem item) { e.Handled = true; AcceptMention(item); }
+        }
 
         private void Stop_Click(object sender, RoutedEventArgs e) => _selected?.Cancel();
         private void NewChat_Click(object sender, RoutedEventArgs e) => _selected?.NewConversation();

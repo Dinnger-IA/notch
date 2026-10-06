@@ -42,6 +42,7 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 | `editor-color` | El editor de agentes eligiendo colores de la fila de muestras. |
 | `sesion-ocupada` | La sesión de Codex abierta en otro programa: el error y su botón para seguir en una sesión nueva. |
 | `git` | El panel de git de un workspace: se preparan cambios, el personaje escribe el commit, commit y push. |
+| `mencion` | Escribir `@` en el chat, elegir otro workspace de la lista y el agente leyéndolo como contexto. |
 
 Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
 ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo
