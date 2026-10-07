@@ -47,12 +47,16 @@ namespace AgentManagerNotch.Services
         private bool _isBox;
         public bool IsBox { get => _isBox; set => Set(ref _isBox, value); }
 
+        private bool _isSpeaking;
+        /// <summary>Está hablando (el personaje mueve la boca). Lo usan los plugins de voz.</summary>
+        public bool IsSpeaking { get => _isSpeaking; set => Set(ref _isSpeaking, value); }
+
         public bool IsCode => Profile.Kind == AgentKind.Code;
         public bool IsScheduled => Profile.Kind == AgentKind.Scheduled;
         public bool IsConversational => !IsScheduled;
         public bool HasNoTabs => IsCode && Tabs.Count == 0;
         public Color Color => AgentSession.ParseColor(Profile.ColorHex);
-        public string ProviderLabel => ProviderFactory.Label(Profile.Provider);
+        public string ProviderLabel => ProviderFactory.Label(Profile);
         public string Name => Profile.Name;
 
         /// <summary>Estado del personaje: el más llamativo de sus pestañas.</summary>

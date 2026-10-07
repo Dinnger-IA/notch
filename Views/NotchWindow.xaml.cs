@@ -28,7 +28,7 @@ namespace AgentManagerNotch.Views
     /// </summary>
     public partial class NotchWindow : Window
     {
-        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule, Settings, Update }
+        private enum Mode { Collapsed, Banner, Overview, Chat, Schedule, Settings, Gate, Update }
 
         private Mode _mode = Mode.Collapsed;
         private bool _pinned, _modalOpen, _autoScroll = true, _rebuildQueued, _scheduledExpanded;
@@ -49,7 +49,7 @@ namespace AgentManagerNotch.Views
         private static bool ClickOutsideOnly => App.Current.Store.Config.Settings.CloseOnClickOutsideOnly;
 
         private static App AppRef => App.Current;
-        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Settings or Mode.Update;
+        private bool IsPanel(Mode m) => m is Mode.Overview or Mode.Chat or Mode.Schedule or Mode.Settings or Mode.Gate or Mode.Update;
         private AgentEntry? Principal => AppRef.Agents.FirstOrDefault(a => a.IsDefault) ?? AppRef.Agents.FirstOrDefault();
 
         public NotchWindow()
@@ -63,6 +63,7 @@ namespace AgentManagerNotch.Views
             AppRef.Agents.CollectionChanged += Agents_CollectionChanged;
             foreach (var s in AppRef.Sessions) s.PropertyChanged += Session_PropertyChanged;
             AppRef.Sessions.CollectionChanged += Sessions_CollectionChanged;
+            InitPlugins();
 
             SetFocused(Principal);
             RebuildPill();
@@ -138,6 +139,7 @@ namespace AgentManagerNotch.Views
                     ScheduleContent.Measure(new Size(590, double.PositiveInfinity));
                     return new Size(640, Math.Clamp(ScheduleContent.DesiredSize.Height + 40 + 36, 200, 520));
                 case Mode.Banner: return new Size(450, 74);
+                case Mode.Gate: return new Size(560, _shownGate?.Height ?? 200);
                 case Mode.Update:
                     UpdateView.Measure(new Size(560, double.PositiveInfinity));
                     return new Size(580, Math.Clamp(UpdateView.DesiredSize.Height + 40 + 12, 210, 420));
@@ -168,12 +170,17 @@ namespace AgentManagerNotch.Views
                 ShowView(ChatView, m == Mode.Chat);
                 ShowView(ScheduleView, m == Mode.Schedule);
                 ShowView(SettingsView, m == Mode.Settings);
+                ShowView(GateView, m == Mode.Gate);
+                // Con la puerta de acceso cerrada, la barra superior solo deja la configuración (con «Salir»)
+                var nav = m == Mode.Gate ? Visibility.Collapsed : Visibility.Visible;
+                HomePill.Visibility = PinButton.Visibility = SchedulePill.Visibility = nav;
                 ShowView(UpdateView, m == Mode.Update);
                 // La barra superior marca dónde estás
                 HomePill.Background = new SolidColorBrush(m == Mode.Overview ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
                 SchedulePill.Background = new SolidColorBrush(m == Mode.Schedule ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
                 SettingsPill.Background = new SolidColorBrush(m == Mode.Settings ? Color.FromRgb(0x2C, 0x2C, 0x33) : Colors.Transparent);
-                TopTitle.Text = m == Mode.Schedule ? "Tareas programadas" : m == Mode.Settings ? "Configuración" : "";
+                TopTitle.Text = m == Mode.Schedule ? "Tareas programadas" : m == Mode.Settings ? "Configuración"
+                    : m == Mode.Gate ? _shownGate?.Title ?? "" : "";
             }
             var size = TargetSize(m);
             if (animate)
@@ -286,6 +293,7 @@ namespace AgentManagerNotch.Views
 
         private void ShowOverview()
         {
+            if (!Unlocked) { ShowGate(); return; }
             if (UpdatePending) { ShowUpdate(); return; }
             RefreshOverview();
             if (_mode != Mode.Overview) SetMode(Mode.Overview);
@@ -299,6 +307,7 @@ namespace AgentManagerNotch.Views
         public void Expand(bool focusInput, string? sessionKey = null)
         {
             _bannerTimer.Stop();
+            if (!Unlocked) { ShowGate(); if (focusInput) Activate(); return; }
             var s = sessionKey == null ? null
                 : AppRef.Sessions.FirstOrDefault(x => x.Key == sessionKey)
                   ?? AppRef.Agents.FirstOrDefault(a => a.Profile.Id == sessionKey)?.ActiveTab;
@@ -317,6 +326,7 @@ namespace AgentManagerNotch.Views
         /// <summary>Abre el chat de un agente (en la pestaña indicada o la activa).</summary>
         private void Open(AgentEntry entry, AgentSession? tab = null, bool focus = true)
         {
+            if (!Unlocked) { ShowGate(); return; }
             if (entry.IsScheduled) { SetFocused(entry); ShowOverview(); return; }
             _bannerTimer.Stop();
             _openEntry = entry;
@@ -338,6 +348,7 @@ namespace AgentManagerNotch.Views
             ChatMochi.SetBinding(MochiView.BodyColorProperty, new Binding(nameof(AgentEntry.Color)));
             ChatMochi.SetBinding(MochiView.StateProperty, new Binding(nameof(AgentEntry.State)));
             ChatMochi.SetBinding(MochiView.IsBoxProperty, new Binding(nameof(AgentEntry.IsBox)));
+            ChatMochi.SetBinding(MochiView.IsSpeakingProperty, new Binding(nameof(AgentEntry.IsSpeaking)));
         }
 
         private void FocusInput()
@@ -365,6 +376,7 @@ namespace AgentManagerNotch.Views
 
         public void ShowBannerRaw(Color color, MochiState state, string title, string body, string? sessionKey, bool sticky)
         {
+            if (!Unlocked) return;
             if (_mode is not (Mode.Collapsed or Mode.Banner)) { ShowPanelNotice(color, state, title, body, sessionKey, sticky); return; }
             if (HideNotch)
             {
@@ -440,7 +452,7 @@ namespace AgentManagerNotch.Views
 
         private void UpdateCollapsedSize()
         {
-            var busy = AppRef.Sessions.FirstOrDefault(s => s.PendingApproval != null)
+            var busy = !Unlocked ? null : AppRef.Sessions.FirstOrDefault(s => s.PendingApproval != null)
                        ?? AppRef.Sessions.FirstOrDefault(s => s.IsBusy);
             CollapsedStatus.Text = busy == null ? "" :
                 busy.PendingApproval != null ? $"{busy.DisplayName} necesita permiso" : $"{busy.DisplayName}: {busy.Activity}";
@@ -733,6 +745,12 @@ namespace AgentManagerNotch.Views
         private void RebuildPill()
         {
             CollapsedAgents.Children.Clear();
+            if (ClosedGate is { } gate)
+            {
+                BuildLockedPill(gate);
+                UpdateCollapsedSize();
+                return;
+            }
             if (UpdatePending)
             {
                 // Agente de actualización: aparece en la píldora mientras haya una versión nueva sin atender
@@ -789,6 +807,7 @@ namespace AgentManagerNotch.Views
             m.SetBinding(MochiView.BodyColorProperty, new Binding(nameof(AgentEntry.Color)) { Source = a });
             m.SetBinding(MochiView.StateProperty, new Binding(nameof(AgentEntry.State)) { Source = a });
             m.SetBinding(MochiView.IsBoxProperty, new Binding(nameof(AgentEntry.IsBox)) { Source = a });
+            m.SetBinding(MochiView.IsSpeakingProperty, new Binding(nameof(AgentEntry.IsSpeaking)) { Source = a });
             return m;
         }
 
@@ -1015,6 +1034,7 @@ namespace AgentManagerNotch.Views
 
         private void ScheduleView_Click(object sender, RoutedEventArgs e)
         {
+            if (!Unlocked) { ShowGate(); return; }
             if (_mode == Mode.Schedule) { ShowOverview(); return; }
             RefreshSchedule();
             SetMode(Mode.Schedule);
@@ -1081,6 +1101,7 @@ namespace AgentManagerNotch.Views
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
+            if (!Unlocked) { ShowLockedMenu(); return; }
             if (_mode == Mode.Settings) { ShowOverview(); return; }
             _settingsTarget = _mode == Mode.Chat ? _openEntry : _focused;
             RefreshSettings();
@@ -1108,6 +1129,7 @@ namespace AgentManagerNotch.Views
             SetCloseOutside.IsChecked = st.CloseOnClickOutsideOnly;
             SetCloseLeave.IsChecked = !st.CloseOnClickOutsideOnly;
             SetStartup.IsChecked = NotificationService.IsStartupEnabled();
+            RefreshPluginCards();
             RefreshUpdateInfo();
         }
 
@@ -1325,6 +1347,7 @@ namespace AgentManagerNotch.Views
         private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (MentionPopup.IsOpen && HandleMentionKey(e.Key)) { e.Handled = true; return; }
+            if (HandlePluginKey(e.Key)) { e.Handled = true; return; }
             if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
             {
                 e.Handled = true;
@@ -1340,7 +1363,7 @@ namespace AgentManagerNotch.Views
 
         private void Input_TextChanged(object sender, TextChangedEventArgs e)
         {
-            Placeholder.Visibility = Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UpdatePlaceholder();
             UpdateMentions();
         }
 
@@ -1509,7 +1532,7 @@ namespace AgentManagerNotch.Views
 
         private void Shell_DragEnter(object sender, DragEventArgs e)
         {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.None; return; }
+            if (!Unlocked || !e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.None; return; }
             e.Effects = DragDropEffects.Copy;
             if (_mode is Mode.Collapsed or Mode.Banner) ShowOverview();
             var target = _mode == Mode.Chat ? _openEntry : _focused;
@@ -1525,6 +1548,7 @@ namespace AgentManagerNotch.Views
         private void Shell_Drop(object sender, DragEventArgs e)
         {
             foreach (var a in AppRef.Agents) a.IsBox = false;
+            if (!Unlocked) return;
             var paths = DroppedPaths(e);
             var dirs = paths.Where(Directory.Exists).ToList();
             var files = paths.Where(File.Exists).ToList();
@@ -1599,6 +1623,7 @@ namespace AgentManagerNotch.Views
 
         public void OpenEditor(AgentEntry? entry, AgentKind kindForNew = AgentKind.Interactive)
         {
+            if (!Unlocked) { Expand(focusInput: true); return; }
             _modalOpen = true;
             Rect? placement = null;
             try
@@ -1663,6 +1688,7 @@ namespace AgentManagerNotch.Views
 
         public void OpenReminders()
         {
+            if (!Unlocked) { Expand(focusInput: true); return; }
             if (_reminders == null || !_reminders.IsLoaded)
             {
                 _reminders = new RemindersWindow();

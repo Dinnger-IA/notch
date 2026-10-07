@@ -33,7 +33,15 @@ namespace AgentManagerNotch.Controls
         public static readonly DependencyProperty InteractiveProperty = DependencyProperty.Register(
             nameof(Interactive), typeof(bool), typeof(MochiView), new FrameworkPropertyMetadata(true));
 
+        /// <summary>Está hablando: abre y cierra la boca al ritmo de <see cref="SpeechLevel"/> y saca ondas de sonido.</summary>
+        public static readonly DependencyProperty IsSpeakingProperty = DependencyProperty.Register(
+            nameof(IsSpeaking), typeof(bool), typeof(MochiView), new FrameworkPropertyMetadata(false));
+
+        /// <summary>Volumen de la voz que suena ahora (0..1); lo da el plugin de voz, si hay alguno.</summary>
+        public static Func<double>? SpeechLevel { get; set; }
+
         public Color BodyColor { get => (Color)GetValue(BodyColorProperty); set => SetValue(BodyColorProperty, value); }
+        public bool IsSpeaking { get => (bool)GetValue(IsSpeakingProperty); set => SetValue(IsSpeakingProperty, value); }
         public MochiState State { get => (MochiState)GetValue(StateProperty); set => SetValue(StateProperty, value); }
         public bool IsBox { get => (bool)GetValue(IsBoxProperty); set => SetValue(IsBoxProperty, value); }
         public bool Interactive { get => (bool)GetValue(InteractiveProperty); set => SetValue(InteractiveProperty, value); }
@@ -50,6 +58,7 @@ namespace AgentManagerNotch.Controls
         private readonly List<double> _clicks = new();
         private double _lookX, _lookY, _lookTX, _lookTY;
         private double _boxAmount;             // 0..1 transición a caja
+        private double _speakAmount, _mouth;   // 0..1 entrada/salida del modo hablar y apertura de la boca
         private double _lastCursorMove;
         private Point _lastCursor;
         private double _glanceUntil; private double _glanceX, _glanceY;
@@ -68,6 +77,7 @@ namespace AgentManagerNotch.Controls
         private static readonly Brush AlertBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x20)));
         private static readonly Brush BoxBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xC8, 0x9B, 0x6D)));
         private static readonly Brush BoxDarkBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xA6, 0x7C, 0x52)));
+        private static readonly Brush TongueBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xE8, 0x6F, 0x86)));
         private static readonly Brush TapeBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x90, 0xF2, 0xE2, 0xC4)));
 
         private record struct Particle(double X, double Y, double VX, double VY, double Life, double Max, Color C, double Rot);
@@ -204,6 +214,11 @@ namespace AgentManagerNotch.Controls
             double boxTarget = IsBox ? 1 : 0;
             _boxAmount += (boxTarget - _boxAmount) * (1 - Math.Exp(-dt * 10));
 
+            // Hablar: la boca sigue el volumen (abre rápido, cierra algo más despacio)
+            _speakAmount += ((IsSpeaking ? 1 : 0) - _speakAmount) * (1 - Math.Exp(-dt * 8));
+            double level = IsSpeaking ? Math.Clamp(SpeechLevel?.Invoke() ?? 0, 0, 1) : 0;
+            _mouth += (level - _mouth) * (1 - Math.Exp(-dt * (level > _mouth ? 30 : 14)));
+
             // Partículas
             for (int i = _particles.Count - 1; i >= 0; i--)
             {
@@ -283,7 +298,8 @@ namespace AgentManagerNotch.Controls
         {
             var s = State;
             // Se duerme si está ocioso y nadie toca el teclado ni el ratón durante 2 minutos
-            if (s == MochiState.Idle && SystemIdleSeconds() > 120) return MochiState.Sleeping;
+            // (mientras habla no: quien lo escucha no suele tocar nada)
+            if (s == MochiState.Idle && !IsSpeaking && SystemIdleSeconds() > 120) return MochiState.Sleeping;
             return s;
         }
 
@@ -336,8 +352,10 @@ namespace AgentManagerNotch.Controls
             }
             else if (st == MochiState.Sleeping) rot = 6;
 
-            double sx = 1 + breathe + sq - stretch * 0.6;
-            double sy = 1 - breathe - sq + stretch;
+            // al hablar el cuerpo se estira un poco con cada sílaba
+            double talk = _mouth * _speakAmount;
+            double sx = 1 + breathe + sq - stretch * 0.6 - talk * 0.025;
+            double sy = 1 - breathe - sq + stretch + talk * 0.05;
 
             double bodyW = size * 0.84 * sx;
             double bodyH = size * 0.74 * sy;
@@ -438,7 +456,16 @@ namespace AgentManagerNotch.Controls
             // --- boca (solo en algunos estados; en reposo es "sin boca" como el original)
             double my = eyeY + bodyH * 0.2;
             var mouthPen = new Pen(EyeBrush, Math.Max(1.2, size * 0.028)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-            if (st == MochiState.Done || (_t - _jumpStart) < 0.8)
+            if (_speakAmount > 0.05 && (_t - _jumpStart) >= 0.8 && !dizzy)
+            {
+                // hablando: boca ovalada que se abre con el volumen (y lengua cuando está bien abierta)
+                double mw = size * (0.045 + 0.022 * _mouth) * (0.6 + 0.4 * _speakAmount);
+                double mh = size * (0.012 + 0.075 * _mouth) * _speakAmount;
+                dc.DrawEllipse(EyeBrush, null, new Point(bcx + lx, my), mw, Math.Max(mh, size * 0.008));
+                if (mh > size * 0.035)
+                    dc.DrawEllipse(TongueBrush, null, new Point(bcx + lx, my + mh * 0.5), mw * 0.6, mh * 0.35);
+            }
+            else if (st == MochiState.Done || (_t - _jumpStart) < 0.8)
             {
                 // boca abierta feliz (D)
                 var g = new StreamGeometry();
@@ -482,6 +509,7 @@ namespace AgentManagerNotch.Controls
                 case MochiState.Sleeping: DrawZzz(dc, bcx + bodyW * 0.35, headY + size * 0.1, size); break;
             }
             if (dizzy) DrawStars(dc, bcx, headY + size * 0.02, size);
+            if (_speakAmount > 0.05) DrawSoundWaves(dc, bcx + bodyW * 0.56, bcy - bodyH * 0.05, size);
 
             // confeti
             foreach (var p in _particles)
@@ -668,6 +696,31 @@ namespace AgentManagerNotch.Controls
                 byte alpha = (byte)(255 * Math.Sin(u * Math.PI));
                 var b = new SolidColorBrush(Color.FromArgb(alpha, 0xE8, 0xE8, 0xF0));
                 DrawText(dc, "z", x + u * size * 0.25, y - u * size * 0.35, size * (0.12 + u * 0.1), b, bold: true);
+            }
+        }
+
+        /// <summary>Ondas de sonido al lado de la cara mientras habla: laten con el volumen.</summary>
+        private void DrawSoundWaves(DrawingContext dc, double x, double y, double size)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                double pulse = 0.5 + 0.5 * Math.Sin(_t * 9 - i * 1.1);
+                double alpha = _speakAmount * (0.25 + 0.75 * _mouth) * (0.45 + 0.55 * pulse) * (1 - i * 0.22);
+                if (alpha < 0.03) continue;
+                double r = size * (0.07 + i * 0.065 + 0.015 * _mouth);
+                var pen = new Pen(new SolidColorBrush(Color.FromArgb((byte)(255 * alpha), 0xF4, 0xF4, 0xF7)), Math.Max(1.1, size * 0.03))
+                {
+                    StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round
+                };
+                const double a = 0.75; // medio ángulo del arco (rad)
+                var g = new StreamGeometry();
+                using (var ctx = g.Open())
+                {
+                    ctx.BeginFigure(new Point(x - size * 0.06 + Math.Cos(-a) * r, y + Math.Sin(-a) * r), false, false);
+                    ctx.ArcTo(new Point(x - size * 0.06 + Math.Cos(a) * r, y + Math.Sin(a) * r), new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
+                }
+                g.Freeze();
+                dc.DrawGeometry(null, pen, g);
             }
         }
 

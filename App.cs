@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Threading;
 using AgentManagerNotch.Controls;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Plugins;
 using AgentManagerNotch.Providers;
 using AgentManagerNotch.Services;
 using AgentManagerNotch.Views;
@@ -22,6 +23,8 @@ namespace AgentManagerNotch
             if (args.Length > 0 && args[0] == "--hook") return HookBridge.Run();
             // Comandos de control: --notify, --ask, --claude-event
             if (ControlChannel.TryRunCli(args) is int code) return code;
+            // Modos de línea de comandos de los plugins (después de los anteriores, que se lanzan muy a menudo)
+            if (PluginHost.RunCommandLine(args) is int pluginCode) return pluginCode;
             // GIF para las notas de la versión: proceso aparte, sin datos del usuario ni instancia única
             if (args.Length > 0 && args[0] == "--grabar-gif")
             {
@@ -34,7 +37,12 @@ namespace AgentManagerNotch
             if (uninstall || Installer.IsSetupLaunch(args))
             {
                 // --silencioso: sin ventana, para instalar desde un script (--sin-inicio-windows, --escritorio, --abrir)
-                if (args.Contains("--silencioso")) return Installer.RunSilent(uninstall, args);
+                if (args.Contains("--silencioso"))
+                {
+                    // Los plugins pueden cancelar la instalación (p. ej. si falla una comprobación previa)
+                    if (!uninstall && PluginHost.BeforeSilentInstall(args) is int cancel) return cancel;
+                    return Installer.RunSilent(uninstall, args);
+                }
                 return new App { SetupRequest = uninstall ? App.SetupKind.Uninstall : App.SetupKind.Install }.Run();
             }
 
@@ -68,6 +76,8 @@ namespace AgentManagerNotch
         public ScheduleService Scheduler { get; private set; } = null!;
         public NotificationService Notifier { get; private set; } = null!;
         public NotchWindow Notch { get; private set; } = null!;
+        /// <summary>Lo que ven los plugins (ver <see cref="PluginHost"/>).</summary>
+        public NotchHost Plugins { get; private set; } = null!;
         public string HookSettingsPath { get; private set; } = "";
         private readonly CancellationTokenSource _cts = new();
         internal enum SetupKind { Install, Uninstall }
@@ -133,6 +143,8 @@ namespace AgentManagerNotch
             Reminders.Fired += OnReminderFired;
             Scheduler = new ScheduleService(() => Sessions, SaveAgents);
 
+            // Los plugins se preparan antes que el notch: sus puertas, tarjetas y botones se montan al crearlo
+            Plugins = PluginHost.Start(this);
             Notch = new NotchWindow();
             Notch.Show();
             Updates.Changed += Notch.RefreshUpdateInfo;
@@ -146,6 +158,7 @@ namespace AgentManagerNotch
             Reminders.Start();
             Scheduler.Start();
             ControlChannel.StartServer(msg => Dispatcher.BeginInvoke(() => HandleControl(msg)), _cts.Token);
+            Plugins.RaiseStarted();
             Log.Info("Agent Manager Notch iniciado");
         }
 
@@ -373,7 +386,7 @@ namespace AgentManagerNotch
                 SaveAgents();
                 return ne;
             }
-            bool providerChanged = e.Profile.Provider != p.Provider;
+            bool providerChanged = e.Profile.Provider != p.Provider || e.Profile.PluginProvider != p.PluginProvider;
             e.UpdateProfile(p);
             foreach (var s in e.Tabs)
             {
@@ -411,6 +424,7 @@ namespace AgentManagerNotch
             if (Store.Config.Settings.NotifyOnDone && (!userIsLooking || r.FromSchedule))
                 Notifier.Toast(title, body, s.Key);
             Notifier.Play(r.Success ? NotificationService.SoundKind.Done : NotificationService.SoundKind.Error);
+            Plugins.RaiseTurnFinished(s, r);
         }
 
         private void OnApprovalRequested(AgentSession s, ApprovalRequest req)
@@ -649,6 +663,7 @@ namespace AgentManagerNotch
             _cts.Cancel();
             Approvals.Stop();
             Notifier.Dispose();
+            PluginHost.Stop();
             Shutdown();
         }
 

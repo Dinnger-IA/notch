@@ -6,6 +6,13 @@ Guía para agentes (Claude Code, Codex, etc.) que trabajan en este repositorio. 
 
 Todo el trabajo va en `main`: commit con su versión (ver abajo) y push.
 
+## Plugins
+
+Lo que no es del notch en sí (integraciones con un servicio concreto, inicio de sesión, voz…) va en un **plugin**
+(`Plugins/<Nombre>/`, ver *Plugins* en `README.md`), no mezclado en los archivos comunes. Si un plugin necesita
+un punto de extensión que no existe, añádelo a la API (`Plugins/INotchPlugin.cs`, `Plugins/NotchHost.cs`) de
+forma genérica, sin nombrar al plugin, y comprueba que sin plugins todo sigue igual.
+
 ## Compilar, publicar y reiniciar
 
 - .NET 10 + WPF, sin dependencias externas (ni NuGet ni npm). Comprueba con `dotnet build -c Release`.

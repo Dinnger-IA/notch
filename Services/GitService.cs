@@ -222,7 +222,7 @@ namespace AgentManagerNotch.Services
                 "(si no hay, escríbelo en español). Formato: un título breve (máximo 72 caracteres), una línea en blanco y " +
                 "un cuerpo corto que explique el porqué. Responde SOLO con el mensaje, sin comillas, sin bloques de código " +
                 "y sin usar herramientas.\n\n" + context;
-            var provider = ProviderFactory.Create(p.Provider);
+            var provider = ProviderFactory.Create(p);
             var spec = provider.Build(p, prompt, null, new RunContext { AgentId = p.Id, AgentName = p.Name });
             var psi = spec.Psi;
             // Marca la ejecución como del notch: sin esto, los hooks globales de Claude Code (y el aviso de Codex) la

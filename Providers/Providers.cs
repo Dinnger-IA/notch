@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Plugins;
 using AgentManagerNotch.Services;
 
 namespace AgentManagerNotch.Providers
@@ -51,6 +52,15 @@ namespace AgentManagerNotch.Providers
 
     public static class ProviderFactory
     {
+        /// <summary>El proveedor de un agente (el de su plugin si usa uno).</summary>
+        public static ICliProvider Create(AgentProfile p) =>
+            p.Provider == ProviderKind.Plugin
+                ? PluginHost.Provider(p.PluginProvider)?.Create() ?? new PluginHost.MissingProvider(p.PluginProvider ?? "?")
+                : Create(p.Provider);
+
+        public static string Label(AgentProfile p) =>
+            p.Provider == ProviderKind.Plugin ? PluginHost.Provider(p.PluginProvider)?.Label ?? p.PluginProvider ?? "Plugin" : Label(p.Provider);
+
         public static ICliProvider Create(ProviderKind kind) => kind switch
         {
             ProviderKind.ClaudeCode => new ClaudeCodeProvider(),
@@ -64,6 +74,7 @@ namespace AgentManagerNotch.Providers
             ProviderKind.ClaudeCode => "Claude Code",
             ProviderKind.Codex => "Codex",
             ProviderKind.Gemini => "Gemini CLI",
+            ProviderKind.Plugin => "Plugin",
             _ => "Personalizado"
         };
 

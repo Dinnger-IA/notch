@@ -289,6 +289,34 @@ anterior en `%APPDATA%\AgentManagerNotch\codex-notify-anterior.txt` y le **reenv
 sigue funcionando; al quitarlo se restaura. Se activa en el instalador o en ⚙ Configuración → *Avisos de mis
 sesiones de Codex*. Gemini no tiene un mecanismo equivalente.
 
+## Plugins
+
+El notch se puede ampliar con **plugins** sin tocar sus archivos: una clase pública que implemente
+`Plugins.INotchPlugin` (con constructor sin parámetros), normalmente en su propia carpeta `Plugins/<Nombre>/`, se
+compila dentro del ejecutable y `PluginHost` la carga al arrancar. Todos sus métodos son opcionales y un fallo
+dentro de un plugin se registra sin detener el notch. Sin plugins, el notch funciona exactamente igual.
+
+| Método | Para qué |
+|---|---|
+| `Register(registry)` | Proveedores de agentes nuevos (`AddProvider`: salen en el editor junto a los CLI) y vistas de `--grabar-gif` (`AddGifDemo`). |
+| `RunCommandLine(args)` | Un modo de línea de comandos propio (devuelve el código de salida si lo atiende). |
+| `BeforeSilentInstall(args)` | Cancelar la instalación silenciosa (p. ej. si falla una comprobación). |
+| `ConfigureDefaultAgents(agents, settings)` | Cambiar los agentes iniciales de la primera configuración. |
+| `ConfigureInstaller(installer)` | Etapas extra al principio del instalador y pasos tras instalar (`IInstallerHost`). |
+| `Start(host)` | Arranque normal (`NotchHost`): puertas de acceso, tarjetas de ⚙ Configuración, botones y teclas del chat, acciones del menú de cada mensaje, avisos y el fin de cada turno. |
+| `Stop()` | Al salir. |
+
+- **Puerta de acceso** (`IAccessGate`, con `host.AddAccessGate`): mientras esté cerrada, el notch solo muestra su
+  vista (p. ej. un inicio de sesión) y la píldora un candado con su texto.
+- **Ajustes propios**: `host.Get`/`host.Set` los guardan en `config.json` dentro de `Settings`; se conservan aunque
+  se abra una compilación sin ese plugin.
+- **Proveedores**: un agente que usa el de un plugin se guarda como `"Provider": "Plugin"` con
+  `"PluginProvider": "<id>"`. Si el plugin falta, el agente sigue en la lista y al usarlo explica que no está
+  disponible. Una configuración antigua con `"Provider": "<id>"` se convierte sola.
+- **El personaje puede hablar**: `AgentEntry.IsSpeaking` y `MochiView.SpeechLevel` mueven su boca (para un plugin de voz).
+- **Actualizaciones**: el notch consulta el remoto que sigue su rama (`git config branch.<rama>.remote`), así que
+  una rama con plugins puede vivir en otro repositorio; un plugin puede cambiar `UpdateService.RepoUrl`.
+
 ## Estructura
 
 ```
@@ -318,6 +346,10 @@ Services/GifWriter.cs      graba en GIF un elemento de la interfaz (RenderTarget
 Views/GifDemos.cs          vistas de --grabar-gif para los GIF de las versiones
 Views/UpdateCard.*         tarjeta de versión nueva (en el notch y en los GIF)
 Views/Markdown.cs          Markdown ligero en las burbujas (seleccionable, tablas, bloques de código con copiar)
+Plugins/INotchPlugin.cs    la interfaz de los plugins, sus registros, la puerta de acceso y el instalador
+Plugins/NotchHost.cs       lo que ve un plugin al arrancar: ajustes, tarjetas, chat, avisos
+Plugins/PluginHost.cs      carga los plugins y les reparte las llamadas
+Views/NotchWindow.Plugins.cs lo que el notch monta de los plugins (puertas, tarjetas, botones del chat)
 ```
 
 ## Notas

@@ -13,11 +13,13 @@ namespace AgentManagerNotch.Views
     /// GIF de las notas de la versión: <c>AgentManagerNotch.exe --grabar-gif &lt;vista&gt; &lt;salida.gif&gt;</c>.
     /// Corre en un proceso aparte que no carga los datos del usuario ni toca el notch abierto: monta la vista en una
     /// ventana fuera de la pantalla, la graba con <see cref="GifWriter"/> y se cierra. Para un cambio visual nuevo,
-    /// añade aquí su vista.
+    /// añade aquí su vista (o, si es de un plugin, regístrala con <see cref="Plugins.PluginRegistry.AddGifDemo"/>).
     /// </summary>
     public static class GifDemos
     {
-        public const string Help =
+        public static string Help => BuiltInHelp + string.Concat(Plugins.PluginHost.GifDemos.Select(d => $" · {d.Name} ({d.Description})"));
+
+        private const string BuiltInHelp =
             "Vistas: notas[=X.Y.Z] (ventana de notas recorriendo las pestañas desde esa versión) · " +
             "actualizacion[=X.Y.Z] (tarjeta de versión nueva con las novedades de esa versión) · " +
             "tabla (respuesta del chat con tablas Markdown) · instalador (ventana del instalador) · " +
@@ -29,15 +31,16 @@ namespace AgentManagerNotch.Views
             "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push) · " +
             "mencion (escribir @ en el chat para citar otro workspace como contexto)";
 
-        private static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
-        private static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
+        internal static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
+        internal static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
 
         public static async Task<int> RunAsync(string view, string path)
         {
             var (name, arg) = view.Split('=', 2) is [var n, var a] ? (n, a) : (view, "");
             Version.TryParse(arg, out var version);
             path = Path.GetFullPath(path);
-            int frames = name switch
+            var plugin = Plugins.PluginHost.GifDemos.FirstOrDefault(d => d.Name == name);
+            int frames = plugin != null ? await plugin.Record(path) : name switch
             {
                 "notas" => await ReleaseNotesAsync(version, path),
                 "actualizacion" => await UpdateCardAsync(version, path),
@@ -155,6 +158,12 @@ namespace AgentManagerNotch.Views
             var click = System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
             var n = await new GifWriter(content, Frozen(Color.FromRgb(0x14, 0x14, 0x18)), 560).RecordAsync(path, async () =>
             {
+                // Etapas de los plugins (van primero): cada una hace su demostración y se pasa a la siguiente
+                foreach (var demo in win.PluginStageDemos)
+                {
+                    await demo();
+                    next.RaiseEvent(new RoutedEventArgs(click));
+                }
                 await Task.Delay(3200); // etapa Herramientas: estado real de Claude Code y Codex
                 next.RaiseEvent(new RoutedEventArgs(click)); // → Opciones (no instala nada)
                 await Task.Delay(1200);
@@ -713,7 +722,7 @@ namespace AgentManagerNotch.Views
             return box;
         }
 
-        private static async Task ShowOffscreenAsync(Window win)
+        internal static async Task ShowOffscreenAsync(Window win)
         {
             win.WindowStyle = WindowStyle.None;
             win.ShowInTaskbar = false;
@@ -725,6 +734,6 @@ namespace AgentManagerNotch.Views
             await Task.Delay(600); // carga, primer dibujo y animaciones en marcha
         }
 
-        private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+        internal static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
     }
 }

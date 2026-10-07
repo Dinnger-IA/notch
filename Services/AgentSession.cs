@@ -18,7 +18,8 @@ using AgentManagerNotch.Providers;
 
 namespace AgentManagerNotch.Services
 {
-    public record TurnResult(bool Success, bool Cancelled, string Summary, TimeSpan Duration, bool FromSchedule);
+    /// <param name="FinalText">Última respuesta completa del agente en el turno (para los plugins, p. ej. leerla en voz alta).</param>
+    public record TurnResult(bool Success, bool Cancelled, string Summary, TimeSpan Duration, bool FromSchedule, string FinalText = "");
 
     /// <summary>Estado vivo de un agente: conversación, proceso CLI, aprobaciones pendientes y animación.</summary>
     public class AgentSession : INotifyPropertyChanged
@@ -224,7 +225,7 @@ namespace AgentManagerNotch.Services
         public ApprovalRequest? PendingApproval { get => _pending; private set { if (Set(ref _pending, value)) RaiseOverview(); } }
 
         public Color Color => ParseColor(Profile.ColorHex);
-        public string ProviderLabel => ProviderFactory.Label(Profile.Provider);
+        public string ProviderLabel => ProviderFactory.Label(Profile);
         public string StatusLine => string.IsNullOrEmpty(Activity) ? ProviderLabel : Activity;
 
         // ---- rol
@@ -571,7 +572,7 @@ namespace AgentManagerNotch.Services
 
             try
             {
-                var provider = ProviderFactory.Create(Profile.Provider);
+                var provider = ProviderFactory.Create(Profile);
                 var ctx = _contextFactory();
                 // Cada pestaña usa el perfil del agente con su propia carpeta
                 var runProfile = Profile;
@@ -733,7 +734,7 @@ namespace AgentManagerNotch.Services
             LastActivity = DateTime.Now;
             RaiseOutputChanged();
             RaiseOverview();
-            TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule));
+            TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule, lastAgent));
 
             // Siguiente tarea de la cola
             if (!_queuePaused && PendingTasks.Count > 0)

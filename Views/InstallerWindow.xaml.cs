@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using AgentManagerNotch.Controls;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Plugins;
 using AgentManagerNotch.Providers;
 using AgentManagerNotch.Services;
 
@@ -16,19 +17,21 @@ namespace AgentManagerNotch.Views
     /// <summary>
     /// Instalador por etapas (ver <see cref="Installer"/>): Herramientas (CLI instalados, con botón para instalar los
     /// que falten, y sus avisos de la terminal) → Opciones → Instalación (programa, avisos y los pasos que añada cada
-    /// rama). Otras ediciones pueden añadir etapas y pasos con <see cref="ConfigureStages"/> en un archivo aparte,
-    /// sin tocar este. También desinstala.
+    /// plugin). Los plugins añaden etapas y pasos con <see cref="INotchPlugin.ConfigureInstaller"/> (ver
+    /// <see cref="IInstallerHost"/>), sin tocar este archivo. También desinstala.
     /// </summary>
-    public partial class InstallerWindow : Window
+    public partial class InstallerWindow : Window, IInstallerHost
     {
         /// <summary>Una etapa del asistente: su panel, si deja seguir y qué hacer al entrar.</summary>
-        private sealed record Stage(string Title, FrameworkElement View, Func<bool>? CanContinue = null, Action? OnEnter = null);
+        private sealed record Stage(string Title, FrameworkElement View, Func<bool>? CanContinue = null, Action? OnEnter = null, Func<Task>? GifDemo = null);
 
         private readonly bool _uninstall;
         private readonly string _version;
         private readonly List<Stage> _stages = new();
-        /// <summary>Pasos tras copiar el programa (los añade cada rama); devuelven false si hay que parar.</summary>
+        /// <summary>Pasos tras copiar el programa (los añaden los plugins); devuelven false si hay que parar.</summary>
         private readonly List<Func<Task<bool>>> _afterInstall = new();
+        /// <summary>Etapas de los plugins (van antes de las del instalador).</summary>
+        private int _pluginStages;
         private readonly Dictionary<ProviderKind, CliSetup.CliState> _cli = new();
         private int _stage;
         private bool _installing, _done;
@@ -37,9 +40,6 @@ namespace AgentManagerNotch.Views
         private static readonly Brush DimBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x9A, 0x9A, 0xA8)));
         private static readonly Brush TextBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xF2)));
         private Brush ErrorBrush => (Brush)FindResource("ErrorFg");
-
-        /// <summary>Punto de extensión: etapas extra (al principio) y pasos tras instalar.</summary>
-        partial void ConfigureStages();
 
         public InstallerWindow(bool uninstall, string version)
         {
@@ -71,9 +71,24 @@ namespace AgentManagerNotch.Views
 
             _stages.Add(new Stage("Herramientas", ToolsStage, OnEnter: () => _ = DetectClisAsync()));
             _stages.Add(new Stage("Opciones", OptionsStage));
-            ConfigureStages();
+            PluginHost.ConfigureInstaller(this);
             ShowStage(0);
         }
+
+        // =============================================================== plugins (IInstallerHost)
+        public void AddStage(string title, FrameworkElement view, Func<bool>? canContinue = null, Action? onEnter = null, Func<Task>? gifDemo = null)
+        {
+            view.Visibility = Visibility.Collapsed;
+            _stages.Insert(_pluginStages++, new Stage(title, view, canContinue, onEnter, gifDemo ?? (() => Task.Delay(1500))));
+        }
+
+        public void AddAfterInstall(Func<Task<bool>> step) => _afterInstall.Add(step);
+        IInstallStep IInstallerHost.AddStep(string name) => AddStep(name);
+        void IInstallerHost.RefreshNav() => RefreshNav();
+        public MochiState MochiState { get => Mochi.State; set => Mochi.State = value; }
+        Panel IInstallerHost.StageArea => StageArea;
+        /// <summary>Lo que hace cada etapa de los plugins al grabar el GIF del instalador.</summary>
+        internal IEnumerable<Func<Task>> PluginStageDemos => _stages.Take(_pluginStages).Select(s => s.GifDemo!).ToList();
 
         // =============================================================== navegación
         private void ShowStage(int i)
@@ -184,9 +199,10 @@ namespace AgentManagerNotch.Views
 
         // =============================================================== instalación
         /// <summary>Una fila de la etapa de instalación: icono de estado, nombre, detalle y, si hace falta, un botón.</summary>
-        private sealed class StepRow
+        private sealed class StepRow : IInstallStep
         {
             public readonly Grid Root = new() { Margin = new Thickness(0, 4, 0, 6) };
+            FrameworkElement IInstallStep.Root => Root;
             private readonly TextBlock _icon, _detail;
             private readonly InstallerWindow _w;
             public Button? Action { get; private set; }
@@ -274,7 +290,7 @@ namespace AgentManagerNotch.Views
                 }
             }
 
-            // 3. Los pasos extra (ver ConfigureStages)
+            // 3. Los pasos de los plugins (ver IInstallerHost.AddAfterInstall)
             foreach (var step in _afterInstall)
                 if (!await step()) { Fail("La instalación quedó a medias: completa el paso marcado y vuelve a abrir el instalador."); return; }
 

@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using AgentManagerNotch.Controls;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Plugins;
 using AgentManagerNotch.Providers;
 using AgentManagerNotch.Services;
 
@@ -125,7 +126,17 @@ namespace AgentManagerNotch.Views
             }
 
             foreach (ProviderKind k in Enum.GetValues<ProviderKind>())
-                ProviderBox.Items.Add(new ComboBoxItem { Content = ProviderFactory.Label(k), Tag = k });
+                if (k != ProviderKind.Plugin)
+                    ProviderBox.Items.Add(new ComboBoxItem { Content = ProviderFactory.Label(k), Tag = new ProviderChoice(k) });
+            // Proveedores de los plugins: los disponibles y, siempre, el que ya usa este agente
+            var current = ChoiceOf(_p.Provider, _p.PluginProvider);
+            foreach (var pp in PluginHost.Providers)
+            {
+                var choice = new ProviderChoice(ProviderKind.Plugin, pp.Id);
+                if (choice == current || pp.IsAvailable()) ProviderBox.Items.Add(new ComboBoxItem { Content = pp.Label, Tag = choice });
+            }
+            if (!ProviderBox.Items.Cast<ComboBoxItem>().Any(i => (ProviderChoice)i.Tag == current))
+                ProviderBox.Items.Add(new ComboBoxItem { Content = $"{_p.PluginProvider} (no disponible)", Tag = current });
             foreach (var (mode, label) in new[]
                      {
                          (ApprovalMode.Ask, "Preguntar en el notch antes de cambiar algo (recomendado)"),
@@ -140,7 +151,7 @@ namespace AgentManagerNotch.Views
 
             NameBox.Text = _p.Name;
             SetColor(_p.ColorHex);
-            ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderKind)i.Tag == _p.Provider);
+            ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderChoice)i.Tag == current);
             ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == _p.Approval);
             ModelBox.Text = _p.Model;
             DirBox.Text = _p.WorkingDirectory;
@@ -291,18 +302,25 @@ namespace AgentManagerNotch.Views
         {
             if (string.IsNullOrWhiteSpace(NameBox.Text) || NameBox.Text == "Nuevo agente") NameBox.Text = t.Name;
             SetColor(t.Color);
-            ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderKind)i.Tag == t.Provider);
+            ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderChoice)i.Tag == new ProviderChoice(t.Provider));
             ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == t.Approval);
             PromptBox.Text = t.Prompt;
             if (t.Provider == ProviderKind.Custom && string.IsNullOrWhiteSpace(CustomBox.Text)) CustomBox.Text = "ollama run llama3.2";
             Preview.Celebrate();
         }
 
-        private ProviderKind SelectedProvider => ProviderBox.SelectedItem is ComboBoxItem i ? (ProviderKind)i.Tag : ProviderKind.ClaudeCode;
+        /// <summary>Un CLI, o el proveedor de un plugin (Kind=Plugin con su id).</summary>
+        private sealed record ProviderChoice(ProviderKind Kind, string? PluginId = null);
+        private static ProviderChoice ChoiceOf(ProviderKind kind, string? pluginId) =>
+            new(kind, kind == ProviderKind.Plugin ? pluginId : null);
+
+        private ProviderChoice SelectedChoice => ProviderBox.SelectedItem is ComboBoxItem i ? (ProviderChoice)i.Tag : new ProviderChoice(ProviderKind.ClaudeCode);
+        private ProviderKind SelectedProvider => SelectedChoice.Kind;
 
         private void Provider_Changed(object sender, SelectionChangedEventArgs e)
         {
             var k = SelectedProvider;
+            var plugin = k == ProviderKind.Plugin ? PluginHost.Provider(SelectedChoice.PluginId) : null;
             CustomPanel.Visibility = k == ProviderKind.Custom ? Visibility.Visible : Visibility.Collapsed;
             var current = ModelBox.Text;
             ModelBox.Items.Clear();
@@ -311,12 +329,18 @@ namespace AgentManagerNotch.Views
                          ProviderKind.ClaudeCode => new[] { "", "opus", "sonnet", "haiku" },
                          ProviderKind.Codex => new[] { "" },
                          ProviderKind.Gemini => new[] { "", "gemini-2.5-pro", "gemini-2.5-flash" },
+                         ProviderKind.Plugin => plugin?.Models ?? new[] { "" },
                          _ => new[] { "" }
                      })
                 ModelBox.Items.Add(m);
             ModelBox.Text = current;
 
             if (k == ProviderKind.Custom) { ProviderStatus.Text = "Se ejecuta el comando que escribas abajo."; return; }
+            if (k == ProviderKind.Plugin)
+            {
+                ProviderStatus.Text = plugin == null ? "⚠ Este proveedor no está disponible en esta versión." : plugin.StatusText;
+                return;
+            }
             var exe = ProviderFactory.Executable(k);
             var found = CliResolver.Find(exe);
             ProviderStatus.Text = found != null ? $"✓ Encontrado: {found}" : $"⚠ No se encontró «{exe}» en el PATH";
@@ -385,7 +409,7 @@ namespace AgentManagerNotch.Views
         private string Snapshot() => string.Join("\u001F", new[]
         {
             NameBox.Text, _colorHex, ModelBox.Text, DirBox.Text, PromptBox.Text, ExtraBox.Text, CustomBox.Text,
-            SelectedKind.ToString(), SelectedProvider.ToString(), (ApprovalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
+            SelectedKind.ToString(), SelectedChoice.ToString(), (ApprovalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
             DefaultCheck.IsChecked.ToString(), InstructionBox.Text, ModeFixed.IsChecked.ToString(),
             (IntervalBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "", FromBox.Text, ToBox.Text, TimesBox.Text,
             string.Join(",", _dayChecks.Select(c => c.IsChecked)), KeepContextCheck.IsChecked.ToString(), PausedCheck.IsChecked.ToString()
@@ -459,6 +483,7 @@ namespace AgentManagerNotch.Views
             _p.Name = name;
             _p.ColorHex = _colorHex;
             _p.Provider = SelectedProvider;
+            _p.PluginProvider = SelectedChoice.PluginId;
             _p.Approval = ApprovalBox.SelectedItem is ComboBoxItem a ? (ApprovalMode)a.Tag : ApprovalMode.Ask;
             _p.Model = ModelBox.Text.Trim();
             if (kind == AgentKind.Code) _p.WorkingDirectory = "";

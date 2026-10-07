@@ -7,8 +7,8 @@ using System.Text.Json.Serialization;
 
 namespace AgentManagerNotch.Models
 {
-    /// <summary>CLI que ejecuta al agente por debajo.</summary>
-    public enum ProviderKind { ClaudeCode, Codex, Gemini, Custom }
+    /// <summary>CLI que ejecuta al agente por debajo (Plugin: lo aporta un plugin, ver <see cref="AgentProfile.PluginProvider"/>).</summary>
+    public enum ProviderKind { ClaudeCode, Codex, Gemini, Custom, Plugin }
 
     /// <summary>Cómo se manejan los permisos de herramientas.</summary>
     public enum ApprovalMode
@@ -38,6 +38,8 @@ namespace AgentManagerNotch.Models
         public AgentKind Kind { get; set; } = AgentKind.Interactive;
         public string SystemPrompt { get; set; } = "";
         public ProviderKind Provider { get; set; } = ProviderKind.ClaudeCode;
+        /// <summary>Con Provider=Plugin: el id del proveedor del plugin.</summary>
+        public string? PluginProvider { get; set; }
         public string Model { get; set; } = "";
         /// <summary>En agentes de código es la carpeta de trabajo y no se puede cambiar una vez fijada.</summary>
         public string WorkingDirectory { get; set; } = "";
@@ -352,6 +354,9 @@ namespace AgentManagerNotch.Models
         public bool SeededCodeAgent { get; set; }
         /// <summary>Última versión con la que se abrió: si al arrancar la versión es mayor, se muestran sus notas.</summary>
         public string? LastSeenVersion { get; set; }
+        /// <summary>Ajustes de los plugins (claves propias de «Settings»; se conservan aunque falte el plugin).</summary>
+        [JsonExtensionData]
+        public Dictionary<string, System.Text.Json.JsonElement>? Extra { get; set; }
     }
 
     public class AppConfig

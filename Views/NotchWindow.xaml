@@ -79,7 +79,7 @@
                     <RichTextBox x:Name="Md" Style="{StaticResource SelectableDoc}" FontSize="13.5"
                                  Foreground="#ECECF2" Block.LineHeight="20" v:Markdown.Text="{Binding Text}">
                         <RichTextBox.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu Opened="MessageMenu_Opened">
                                 <MenuItem Header="Copiar selección" Command="ApplicationCommands.Copy"/>
                                 <MenuItem Header="Copiar mensaje" Click="CopyMessage_Click"/>
                             </ContextMenu>
@@ -255,7 +255,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid Margin="8,0,0,0" VerticalAlignment="Center">
                         <c:MochiView Width="30" Height="30" Interactive="False"
-                                     BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                                     BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}" IsSpeaking="{Binding IsSpeaking}"/>
                         <!-- Insignias -->
                         <Border Width="14" Height="14" CornerRadius="7" Background="#E5484D" HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,-4,-5,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
@@ -408,6 +408,9 @@
 
                     <Grid Grid.Row="1">
 
+                <!-- ============ Puerta de acceso de un plugin (p. ej. inicio de sesión) antes de ver los agentes ============ -->
+                <ContentControl x:Name="GateView" Visibility="Collapsed" Opacity="0" Margin="10,2,10,10" Focusable="False"/>
+
                 <!-- ============ Versión nueva: el agente de actualización (antes de la vista general) ============ -->
                 <v:UpdateCard x:Name="UpdateView" Visibility="Collapsed" Opacity="0" Margin="10,2,10,10"/>
 
@@ -428,7 +431,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <c:MochiView x:Name="FocusMochi" Width="84" Height="84" VerticalAlignment="Center" Interactive="True"
-                                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}"/>
+                                         BodyColor="{Binding Color}" State="{Binding State}" IsBox="{Binding IsBox}" IsSpeaking="{Binding IsSpeaking}"/>
                             <StackPanel x:Name="FocusInfo" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
@@ -725,11 +728,14 @@
                         </Border>
 
                         <!-- Entrada -->
-                        <Border x:Name="InputBar" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="8,4" CornerRadius="20" Background="#1EFFFFFF"
+                        <!-- Borde de 1 px (transparente salvo que un plugin lo resalte) a costa del relleno: mismo tamaño -->
+                        <Border x:Name="InputBar" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="7,3" CornerRadius="20" Background="#1EFFFFFF"
+                                BorderThickness="1" BorderBrush="Transparent"
                                 Visibility="{Binding CanType, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
@@ -738,6 +744,8 @@
                                              Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
                                     <TextBlock x:Name="Placeholder" Text="Continuar… (@ para citar otro workspace)" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
                                                Foreground="#6E6E7C" FontSize="13.5"/>
+                                    <!-- Aviso de un plugin que tapa la caja de texto (p. ej. «Escuchando…») -->
+                                    <ContentPresenter x:Name="InputOverlay" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0" Visibility="Collapsed"/>
                                     <!-- @workspace: lista de los otros workspaces para citarlos como contexto -->
                                     <Popup x:Name="MentionPopup" PlacementTarget="{Binding ElementName=Input}" Placement="Bottom" VerticalOffset="8"
                                            AllowsTransparency="True" StaysOpen="False" Focusable="False" PopupAnimation="Fade">
@@ -778,6 +786,8 @@
                                         Foreground="{StaticResource ErrorFg}" VerticalAlignment="Bottom"
                                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"/>
                                 <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE723;" ToolTip="Adjuntar archivos" Click="Attach_Click" VerticalAlignment="Bottom"/>
+                                <!-- Botones de los plugins -->
+                                <StackPanel x:Name="InputExtras" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom"/>
                             </Grid>
                         </Border>
                     </Grid>
@@ -847,6 +857,9 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Tarjetas de los plugins (columna izquierda) -->
+                            <StackPanel x:Name="PluginSettingsLeft"/>
+
                             <!-- Notificaciones -->
                             <Border Style="{StaticResource SettingsCard}">
                                 <StackPanel>
@@ -873,6 +886,8 @@
                         </StackPanel>
 
                         <StackPanel x:Name="SettingsRight" Grid.Column="2">
+                            <!-- Tarjetas de los plugins (columna derecha) -->
+                            <StackPanel x:Name="PluginSettingsRight"/>
                             <!-- Panel (accesibilidad) -->
                             <Border Style="{StaticResource SettingsCard}">
                                 <StackPanel>

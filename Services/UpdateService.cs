@@ -20,7 +20,8 @@ namespace AgentManagerNotch.Services
     /// </summary>
     public sealed class UpdateService
     {
-        public const string RepoUrl = "https://github.com/Dinnger-IA/agent-manager-notch";
+        /// <summary>Repositorio de las copias sueltas (fuera de un clon). Un plugin puede apuntarlo a otro.</summary>
+        public static string RepoUrl { get; set; } = "https://github.com/Dinnger-IA/agent-manager-notch";
         private static readonly TimeSpan Interval = TimeSpan.FromHours(2);
 
         public string LocalCommit { get; } = Metadata("GitCommit");
@@ -104,9 +105,12 @@ namespace AgentManagerNotch.Services
                 string dir, rev;
                 if (RepoDir != null)
                 {
-                    var (fc, fo) = Git(RepoDir, "fetch", "--quiet", "origin", Branch);
+                    // El remoto que sigue la rama (cada rama puede vivir en un repositorio distinto); si no tiene, origin
+                    var (rc, ro) = Git(RepoDir, "config", "--get", $"branch.{Branch}.remote");
+                    var remote = rc == 0 && ro.Trim() is { Length: > 0 } r && r != "." ? r : "origin";
+                    var (fc, fo) = Git(RepoDir, "fetch", "--quiet", remote, Branch);
                     if (fc != 0) return (null, [], $"No se pudo consultar el repositorio (¿sin conexión o sin acceso?). {Tail(fo)}");
-                    (dir, rev) = (RepoDir, $"origin/{Branch}");
+                    (dir, rev) = (RepoDir, $"{remote}/{Branch}");
                 }
                 else
                 {

@@ -2,8 +2,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Plugins;
 
 namespace AgentManagerNotch.Services
 {
@@ -35,7 +37,11 @@ namespace AgentManagerNotch.Services
             try
             {
                 if (File.Exists(ConfigPath))
-                    Config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), Json) ?? new AppConfig();
+                {
+                    var node = JsonNode.Parse(File.ReadAllText(ConfigPath));
+                    MovePluginProviders(node);
+                    Config = node.Deserialize<AppConfig>(Json) ?? new AppConfig();
+                }
             }
             catch (Exception ex)
             {
@@ -44,7 +50,31 @@ namespace AgentManagerNotch.Services
                 try { File.Copy(ConfigPath, $"{ConfigPath}.{DateTime.Now:yyyyMMdd-HHmmss}.bak", false); } catch { }
                 Config = new AppConfig();
             }
-            if (Config.Agents.Count == 0) Config.Agents.AddRange(DefaultAgents());
+            if (Config.Agents.Count == 0)
+            {
+                // Primera configuración: los agentes iniciales (los plugins pueden cambiarlos)
+                var agents = DefaultAgents().ToList();
+                PluginHost.ConfigureDefaultAgents(agents, Config.Settings);
+                Config.Agents.AddRange(agents);
+                if (agents.Count > 0) Config.Settings.DefaultAgentId = agents[0].Id;
+                Config.Settings.SeededCodeAgent = true;
+            }
+        }
+
+        /// <summary>
+        /// Agentes guardados con un proveedor que no es un CLI conocido (p. ej. «"Provider": "MiPlugin"»): pasan a
+        /// Provider=Plugin con ese id, para que la configuración se lea aunque esta compilación no traiga el plugin.
+        /// </summary>
+        private static void MovePluginProviders(JsonNode? root)
+        {
+            if (root?["Agents"] is not JsonArray agents) return;
+            foreach (var a in agents.OfType<JsonObject>())
+            {
+                if (a["Provider"] is not JsonValue v || !v.TryGetValue<string>(out var name)) continue;
+                if (Enum.TryParse<ProviderKind>(name, true, out _)) continue;
+                a["PluginProvider"] = name;
+                a["Provider"] = nameof(ProviderKind.Plugin);
+            }
         }
 
         /// <summary>Copia los datos de la carpeta del nombre anterior (la original queda como respaldo).</summary>
