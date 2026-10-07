@@ -1,0 +1,2 @@
+# El hook de git es un script de sh: siempre con LF
+.githooks/* text eol=lf

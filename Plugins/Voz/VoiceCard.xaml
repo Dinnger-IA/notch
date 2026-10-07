@@ -1,0 +1,17 @@
+<Border x:Class="AgentManagerNotch.Plugins.Voz.VoiceCard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{DynamicResource SettingsCard}">
+    <!-- ⚙ Configuración → voz -->
+    <StackPanel>
+        <TextBlock Style="{DynamicResource SettingsTitle}" Text="VOZ"/>
+        <StackPanel Margin="0,4,0,8">
+            <TextBlock Text="Mantén pulsado el micrófono mientras hablas y suéltalo para enviar." FontSize="12.5" Foreground="#ECECF2" TextWrapping="Wrap"/>
+            <TextBlock Text="El agente responde en voz alta solo a lo que le pides hablando; lo que escribes lo responde por escrito."
+                       FontSize="10.5" Foreground="#6E6E7C" TextWrapping="Wrap" Margin="0,2,0,0"/>
+        </StackPanel>
+        <Button Style="{DynamicResource SettingsButton}" Click="Test_Click">
+            <TextBlock><Run Text="&#xE767;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Probar la voz"/></TextBlock>
+        </Button>
+    </StackPanel>
+</Border>

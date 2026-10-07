@@ -1,0 +1,20 @@
+<Border x:Class="AgentManagerNotch.Plugins.AgentManager.SessionCard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{DynamicResource SettingsCard}">
+    <!-- ⚙ Configuración → sesión de Agent Manager -->
+    <StackPanel>
+        <TextBlock Style="{DynamicResource SettingsTitle}" Text="SESIÓN · AGENT MANAGER"/>
+        <Grid Style="{DynamicResource SettingsRow}">
+            <TextBlock x:Name="SessionUser" Style="{DynamicResource SettingsLabel}"/>
+            <Button x:Name="LogoutButton" Style="{DynamicResource SettingsButton}" HorizontalAlignment="Right" Margin="0,4,0,4" Click="Logout_Click">
+                <TextBlock><Run Text="&#xF3B1;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Cerrar sesión"/></TextBlock>
+            </Button>
+            <!-- Instalado sin Agent Manager: se puede activar después -->
+            <Button x:Name="UseAmButton" Style="{DynamicResource SettingsButton}" HorizontalAlignment="Right" Margin="0,4,0,4"
+                    Click="UseAgentManager_Click" Visibility="Collapsed">
+                <TextBlock><Run Text="&#xE77B;" FontFamily="{StaticResource IconFont}" FontSize="10.5"/><Run Text="  Usar Agent Manager"/></TextBlock>
+            </Button>
+        </Grid>
+    </StackPanel>
+</Border>

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Solo main va a GitHub (repositorio público notch). agent-manager vive únicamente en Azure DevOps.
+url="$2"
+case "$url" in
+  *github.com*)
+    while read local_ref local_sha remote_ref remote_sha; do
+      if [ "$remote_ref" != "refs/heads/main" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
+        echo "pre-push: bloqueado subir '$remote_ref' a GitHub ($url). Solo main va allí; agent-manager va a Azure (origin)." >&2
+        exit 1
+      fi
+    done ;;
+esac
+exit 0

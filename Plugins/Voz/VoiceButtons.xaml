@@ -1,0 +1,19 @@
+<UserControl x:Class="AgentManagerNotch.Plugins.Voz.VoiceButtons"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             VerticalAlignment="Bottom">
+    <!-- Voz: callar al agente mientras habla (solo se ve entonces) y micrófono para hablar manteniéndolo pulsado -->
+    <StackPanel Orientation="Horizontal">
+        <Button x:Name="SpeakerButton" Style="{StaticResource IconButton}" Content="&#xE71A;" Click="Speaker_Click"
+                VerticalAlignment="Bottom" ToolTip="Dejar de hablar" Visibility="Collapsed"/>
+        <Grid VerticalAlignment="Bottom">
+            <Ellipse x:Name="MicPulse" Fill="{StaticResource ErrorFg}" Opacity="0" IsHitTestVisible="False"
+                     RenderTransformOrigin="0.5,0.5" Margin="2">
+                <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform>
+            </Ellipse>
+            <Button x:Name="MicButton" Style="{StaticResource IconButton}" Content="&#xE720;"
+                    PreviewMouseLeftButtonDown="Mic_Down" PreviewMouseLeftButtonUp="Mic_Up" PreviewMouseMove="Mic_Move" LostMouseCapture="Mic_LostCapture"
+                    ToolTip="Mantén pulsado para hablar y suelta para enviar. Aleja el cursor antes de soltar (o pulsa Esc) para cancelar."/>
+        </Grid>
+    </StackPanel>
+</UserControl>

@@ -352,6 +352,89 @@ Plugins/PluginHost.cs      carga los plugins y les reparte las llamadas
 Views/NotchWindow.Plugins.cs lo que el notch monta de los plugins (puertas, tarjetas, botones del chat)
 ```
 
+## Plugins de la rama agent-manager
+
+Esta rama es `main` más dos plugins (ver *Plugins*), que viven solo aquí y en Azure DevOps (nunca en GitHub):
+`Plugins/AgentManager/` (todo lo que depende de Agent Manager) y `Plugins/Voz/` (voz con el servidor interno).
+No tocan los archivos comunes: si necesitan algo nuevo, se añade a la API de plugins en `main`.
+
+### Agent Manager (`Plugins/AgentManager/`)
+
+Todo va detrás del ajuste `UseAgentManager` de `config.json` (por defecto `true`; se elige en el instalador y se
+activa después en ⚙ Configuración → *Sesión*). Con él en `false` el notch se comporta como el de `main`: no pide
+sesión, no instala el MCP, no crea a Doky, no ofrece el proveedor de Agent Manager ni llama a su servidor.
+
+**Instalador** (`InstallerStage.cs`): añade la primera etapa, *Agent Manager*. La opción *Usar Agent Manager* viene
+marcada y no deja seguir sin pulsar **Comprobar conexión** (`AgentManagerCheck.cs`): que se resuelve
+`agent-manager.distelsa.net` (red de la empresa o VPN), que responde por HTTPS con un certificado de confianza y que
+el puerto 5454 del inicio de sesión está libre. Si algo falla, muestra el motivo y no deja instalar. Sin marcarla se
+instala igual con `UseAgentManager = false`. En modo silencioso se hace la misma comprobación (código 3 si falla) y
+`--sin-agent-manager` instala sin él. Con Agent Manager, la etapa *Instalación* inicia sesión (o reutiliza la
+guardada) y añade el MCP de Agent Manager a Claude Code y Codex; en modo silencioso eso queda para cuando se inicie
+sesión en el notch.
+
+**Inicio de sesión** (`AuthService.cs`, `LoginView.*`, una puerta de acceso del notch): antes de ver los agentes hay
+que entrar con la cuenta de **Agent Manager**. Sin sesión, la píldora muestra un candado y el panel solo la tarjeta
+*Iniciar sesión* (los agentes programados y los recordatorios siguen funcionando en segundo plano, pero no se
+muestran avisos).
+
+1. *Iniciar sesión* abre en el navegador `https://agent-manager.distelsa.net/external/token?client=notch`.
+2. Agent Manager redirige a `http://localhost:5454/api/callback?token=…&state=…`. Ese puerto solo escucha
+   mientras se espera el login (máx. 5 min) y se rechaza cualquier `state` que no haya generado el notch.
+3. El token se valida con `GET /api/auth/me` y se guarda cifrado con DPAPI en
+   `%APPDATA%\AgentManagerNotch\auth.bin` (solo lo puede leer tu usuario de Windows).
+
+Al arrancar se revalida el token; si caducó, se vuelve a pedir el login (sin conexión se confía en el guardado).
+⚙ → *Sesión* → *Cerrar sesión* lo invalida en Agent Manager y lo borra.
+
+**MCP de Agent Manager en los CLI** (`McpSetup.cs`). Cada vez que se valida la sesión se revisan los CLI instalados
+(Claude Code, Codex, Gemini CLI). Si alguno no tiene un MCP llamado `agent-manager` (o que apunte a
+`https://agent-manager.distelsa.net/mcp`) en su configuración de usuario (`~/.claude.json`,
+`~/.codex/config.toml`, `~/.gemini/settings.json`), se instala con su propio comando
+(`claude mcp add --transport http --scope user …`, `codex mcp add … --url …`, `gemini mcp add …`) usando
+`https://agent-manager.distelsa.net/mcp?t=<token>`. Si ya existe con esa URL pero con otro token (cada inicio de
+sesión revoca el anterior), se reemplaza por el de la sesión actual; las entradas sin `?t=` (OAuth) no se tocan. El
+notch avisa si instaló algo o si falló, y el resultado queda en el registro (sin el token).
+
+**Chat con el LLM de Agent Manager** (`AgentManagerPlugin.cs` → `AgentManagerProvider`, `LlmBridge.cs`): un
+proveedor más en el editor de agentes, *Agent Manager*. Lanza `AgentManagerNotch.exe --llm` →
+`POST /api/notch/notch-agent` (ruteador de Agent Manager: `{"messages":[…], "stream": true}` → streaming SSE, o
+`data.response` si responde JSON entero) con `Authorization: Bearer <token>` de la sesión; cada petición queda en tu
+historial de chat de Agent Manager. Sin sesión en el servidor: se reenvía el historial reciente (30 mensajes) y el
+system prompt va como mensaje `system`; solo texto, sin herramientas. En `config.json` estos agentes se guardan
+como `"Provider": "Plugin", "PluginProvider": "AgentManager"` (los antiguos, `"Provider": "AgentManager"`, se
+convierten solos).
+
+**Primera configuración.** La primera vez (sin `config.json`) se crean los agentes según los CLI instalados:
+
+| ¿Hay algún CLI? | Agentes |
+|---|---|
+| Sí (el primero de Claude Code → Codex → Gemini) | **Codi** (código, con ese CLI, principal), **Doky** (chat, LLM de Agent Manager) y **Nube** (chat, con ese CLI) |
+| No | **Doky** y **Nube**, los dos con el LLM de Agent Manager |
+
+Sin Agent Manager no hay Doky y Nube usa el CLI (Claude Code si no hay ninguno).
+
+**Actualizaciones**: esta rama se actualiza desde Azure DevOps (remoto `origin`); las copias sueltas se descargan
+de allí.
+
+### Voz (`Plugins/Voz/`)
+
+Usa el servidor de voz interno (`https://10.6.100.60:8880`, compatible con la API de audio de OpenAI:
+`/v1/audio/speech` para leer y `/v1/audio/transcriptions` para dictar). El audio va por waveOut/waveIn de Windows.
+No depende de Agent Manager (funciona igual con `UseAgentManager = false`).
+
+- **Micrófono** (barra del chat): se **mantiene pulsado** mientras se habla y al soltarlo se transcribe y se envía.
+  Mientras escucha, la barra se marca en rojo, el micrófono late y dice «Escuchando… suelta para enviar». Para
+  cancelar, aleja el cursor antes de soltar («Suelta para cancelar») o pulsa Esc. Un clic corto no graba: la caja
+  recuerda que hay que mantenerlo pulsado.
+- **Solo se responde en voz alta lo que se pide hablando**; lo escrito se responde por escrito.
+- **Callar**: mientras el agente habla aparece un botón para callarlo. Clic derecho en un mensaje → *Escuchar*.
+- **Hablando**: el personaje abre la boca al ritmo del volumen de la voz y le salen ondas de sonido (no se duerme
+  mientras habla).
+- Antes de leer se quita el Markdown: las tablas se leen fila a fila y los bloques de código no se leen.
+- ⚙ Configuración → *Voz*: cómo se usa el micrófono y *Probar la voz*. La voz es siempre la femenina
+  (`es_MX-claude-high`). La dirección y la velocidad están en `config.json` (`VoiceUrl`, `VoiceSpeed`).
+
 ## Notas
 
 - El panel no roba el foco al aparecer por hover; solo al hacer clic o usar el atajo.

@@ -35,6 +35,8 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 | `actualizacion[=X.Y.Z]` | La tarjeta «Versión X.Y.Z disponible» con las novedades de esa versión. |
 | `notas[=X.Y.Z]` | La ventana de notas, recorriendo las pestañas desde esa versión (reproduce los GIF que ya haya). |
 | `tabla` | Una respuesta del chat con tablas Markdown. |
+| `voz` | El personaje leyendo su respuesta en voz alta (plugin de voz, solo en la rama `agent-manager`). |
+| `microfono` | Hablar manteniendo pulsado el micrófono: escuchar, cancelar, enviar y la respuesta en voz alta (plugin de voz, solo en `agent-manager`). |
 | `instalador` | La ventana del instalador cambiando sus opciones (no instala nada). |
 | `terminal` | El aviso de una sesión de Claude Code de la terminal y esa sesión en una pestaña de codi-claude. |
 | `aviso-panel` | El aviso de Claude Code de la terminal flotando sobre el panel abierto. |
