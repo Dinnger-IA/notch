@@ -76,8 +76,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <RichTextBox x:Name="Md" Style="{StaticResource SelectableDoc}" FontSize="13.5"
-                                 Foreground="#ECECF2" Block.LineHeight="20" v:Markdown.Text="{Binding Text}">
+                    <RichTextBox x:Name="Md" Style="{StaticResource SelectableDoc}" FontSize="12.5"
+                                 Foreground="#ECECF2" Block.LineHeight="18" v:Markdown.Text="{Binding Text}">
                         <RichTextBox.ContextMenu>
                             <ContextMenu Opened="MessageMenu_Opened">
                                 <MenuItem Header="Copiar selección" Command="ApplicationCommands.Copy"/>
@@ -86,7 +86,7 @@
                         </RichTextBox.ContextMenu>
                     </RichTextBox>
                     <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"
-                             FontSize="13.5" Visibility="Collapsed"/>
+                             FontSize="12.5" Visibility="Collapsed"/>
                     <!-- Error con salida: la sesión de Codex está ocupada en otro programa -->
                     <Button x:Name="NewSessionButton" Grid.Row="1" Content="Seguir en una sesión nueva" Style="{StaticResource SettingsButton}"
                             Margin="0,8,0,2" Visibility="Collapsed" Click="ContinueInNewSession_Click"/>
@@ -514,7 +514,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="125"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
@@ -531,7 +531,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock x:Name="ChatTitle" FontSize="14" FontWeight="SemiBold" Foreground="#ECECF2" VerticalAlignment="Center" Margin="2,0,8,0"/>
+                                <TextBlock x:Name="ChatTitle" FontSize="13" FontWeight="SemiBold" Foreground="#ECECF2" VerticalAlignment="Center" Margin="2,0,8,0"/>
                                 <Button x:Name="NewChatButton" Style="{StaticResource TopPill}" Content="&#xE710;" ToolTip="Nueva conversación" Click="NewChat_Click"/>
                             </StackPanel>
                             <!-- Pestañas de workspace (solo código) -->
@@ -740,10 +740,10 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid Margin="6,0">
-                                    <TextBox x:Name="Input" Style="{StaticResource ChatInput}" MinHeight="32" MaxHeight="130"
+                                    <TextBox x:Name="Input" Style="{StaticResource ChatInput}" FontSize="12.5" MinHeight="30" MaxHeight="130"
                                              Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
-                                    <TextBlock x:Name="Placeholder" Text="Continuar… (@ para citar otro workspace)" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
-                                               Foreground="#6E6E7C" FontSize="13.5"/>
+                                    <TextBlock x:Name="Placeholder" Text="Continuar… (@ para citar)" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
+                                               Foreground="#6E6E7C" FontSize="12.5"/>
                                     <!-- Aviso de un plugin que tapa la caja de texto (p. ej. «Escuchando…») -->
                                     <ContentPresenter x:Name="InputOverlay" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0" Visibility="Collapsed"/>
                                     <!-- @workspace: lista de los otros workspaces para citarlos como contexto -->

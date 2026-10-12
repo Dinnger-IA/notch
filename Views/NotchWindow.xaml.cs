@@ -134,7 +134,7 @@ namespace AgentManagerNotch.Views
         {
             switch (m)
             {
-                case Mode.Chat: return new Size(800, 610);
+                case Mode.Chat: return new Size(700, 520);
                 case Mode.Schedule:
                     ScheduleContent.Measure(new Size(590, double.PositiveInfinity));
                     return new Size(640, Math.Clamp(ScheduleContent.DesiredSize.Height + 40 + 36, 200, 520));

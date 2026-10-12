@@ -144,7 +144,7 @@ a la derecha**.
   nombre del agente + nueva conversación (o pestañas de workspace en código), píldora de contexto
   (no en los agentes de código: su carpeta ya se ve en la pestaña),
   tus mensajes en burbuja a la derecha, las respuestas como texto suelto, fondo oscuro con halo violeta y el
-  personaje asomando abajo a la izquierda. Entrada «Continuar…».
+  personaje asomando abajo a la izquierda. Entrada «Continuar…». El panel abierto mide 700 × 520 unidades de WPF, con texto de 12,5 y una columna de acciones compacta.
 - **Código**: en lugar de «+» aparecen las **pestañas de workspace** (carpeta + estado: ▶ activa, ✓ terminó,
   ✗ falló, ! permiso) y el botón **Nuevo workspace**. La carpeta de una pestaña **no se puede cambiar**: se cierra
   (×) y se abre otra. Arrastrar una carpeta sobre el notch abre un workspace nuevo. Desde un script:
