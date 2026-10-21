@@ -23,11 +23,10 @@ namespace AgentManagerNotch.Views
         /// <summary>Se pueden ver y usar los agentes (ninguna puerta de acceso cerrada).</summary>
         private static bool Unlocked => ClosedGate == null;
         private IAccessGate? _shownGate;
-        private string _defaultPlaceholder = "";
+        private string? _placeholderOverride; // el que pone un plugin (p. ej. mientras escucha)
 
         private void InitPlugins()
         {
-            _defaultPlaceholder = Placeholder.Text;
             var host = PluginHostRef;
             if (host == null) return;
             foreach (var g in host.Gates) g.Changed += () => Dispatcher.BeginInvoke(OnGateChanged);
@@ -139,7 +138,11 @@ namespace AgentManagerNotch.Views
             UpdatePlaceholder();
         }
 
-        void IComposerView.SetPlaceholder(string? text) => Placeholder.Text = text ?? _defaultPlaceholder;
+        void IComposerView.SetPlaceholder(string? text) { _placeholderOverride = text; ApplyPlaceholder(); }
+
+        /// <summary>El texto de la entrada vacía: el del plugin si puso uno; la pista de «@» solo en los agentes de código.</summary>
+        private void ApplyPlaceholder() =>
+            Placeholder.Text = _placeholderOverride ?? (_selected?.IsCode == true ? "Continuar… (@ para citar)" : "Continuar…");
         void IComposerView.SetHighlight(Brush? brush) => InputBar.BorderBrush = brush ?? Brushes.Transparent;
 
         private void UpdatePlaceholder() =>

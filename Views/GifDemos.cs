@@ -125,12 +125,12 @@ namespace AgentManagerNotch.Views
             {
                 Background = Frozen(Color.FromRgb(0x2C, 0x2C, 0x33)), CornerRadius = new CornerRadius(16),
                 Padding = new Thickness(14, 7, 14, 7), HorizontalAlignment = HorizontalAlignment.Right,
-                Child = new TextBlock { Text = "¿Cómo van los agentes?", FontSize = 13.5, Foreground = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2)) }
+                Child = new TextBlock { Text = "¿Cómo van los agentes?", FontSize = 12.5, Foreground = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2)) }
             };
-            var answer = new RichTextBox { FontSize = 13.5, MaxWidth = 500, HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Hidden };
+            var answer = new RichTextBox { FontSize = 12.5, MaxWidth = 500, HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Hidden };
             if (Application.Current.TryFindResource("SelectableDoc") is Style st) answer.Style = st;
             answer.Foreground = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
-            System.Windows.Documents.Block.SetLineHeight(answer, 20);
+            System.Windows.Documents.Block.SetLineHeight(answer, 18);
             Markdown.SetText(answer, md);
             question.Margin = answer.Margin = new Thickness(0, 6, 0, 6);
             var host = new Border { Background = NotchBg, Padding = new Thickness(16, 10, 16, 10), Width = 560, Child = new StackPanel { Children = { question, answer } } };
