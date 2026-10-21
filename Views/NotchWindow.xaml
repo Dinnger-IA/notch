@@ -774,9 +774,16 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                                 <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                                <!-- La × solo se ve con el ratón encima del chip (ocupa su sitio para que no salte) -->
-                                                <Button x:Name="Remove" Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0" Visibility="Hidden"
-                                                        Style="{StaticResource IconButton}" ToolTip="Quitar" Click="RemoveAttachment_Click"/>
+                                                <!-- La × solo se ve con el ratón encima del chip (ocupa su sitio para que no salte).
+                                                     Oculta desde el estilo: un valor local no lo cambiaría el trigger -->
+                                                <Button x:Name="Remove" Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0"
+                                                        ToolTip="Quitar" Click="RemoveAttachment_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                            <Setter Property="Visibility" Value="Hidden"/>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
                                             </StackPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
