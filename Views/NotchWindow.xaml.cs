@@ -815,6 +815,7 @@ namespace AgentManagerNotch.Views
         private void Select(AgentSession? s)
         {
             if (_selected != null) _selected.Messages.CollectionChanged -= Messages_CollectionChanged;
+            if (_selected != s) ClearAttachments(); // los adjuntos son del chat en el que se eligieron
             _selected = s;
             ChatView.DataContext = s;
             ApplyPlaceholder();
@@ -1337,10 +1338,13 @@ namespace AgentManagerNotch.Views
         private async System.Threading.Tasks.Task SendCurrent()
         {
             if (_selected == null || !_selected.CanType) return;
-            var text = Input.Text;
-            if (string.IsNullOrWhiteSpace(text)) return;
+            var text = Input.Text.Trim();
+            if (text == "" && _attachments.Count == 0) return;
+            // Los adjuntos van al final del mensaje en el bloque «Archivos:» (en el chat se ven como chips)
+            if (_attachments.Count > 0) text = (text + "\n\n" + ChatAttachments.Block(_attachments)).Trim();
             CloseMentions();
             Input.Clear();
+            ClearAttachments();
             _autoScroll = true;
             await _selected.SendAsync(text); // si está ocupado, queda en la cola
         }
@@ -1491,14 +1495,36 @@ namespace AgentManagerNotch.Views
             finally { _modalOpen = false; }
         }
 
+        /// <summary>Archivos por adjuntar al próximo mensaje (chips encima de la entrada).</summary>
+        private readonly System.Collections.ObjectModel.ObservableCollection<string> _attachments = new();
+
         private void AppendFiles(IReadOnlyCollection<string> files)
         {
             if (files.Count == 0 || _selected?.CanType != true || _mode != Mode.Chat) return;
-            var block = ChatAttachments.Block(files);
-            Input.Text = string.IsNullOrWhiteSpace(Input.Text) ? block + "\n\n" : Input.Text.TrimEnd() + "\n\n" + block + "\n\n";
-            Input.CaretIndex = Input.Text.Length;
+            foreach (var f in files)
+                if (!_attachments.Contains(f, StringComparer.OrdinalIgnoreCase)) _attachments.Add(f);
+            UpdateAttachments();
             Activate();
             Input.Focus();
+        }
+
+        private void RemoveAttachment_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is string f) _attachments.Remove(f);
+            UpdateAttachments();
+            Input.Focus();
+        }
+
+        private void ClearAttachments()
+        {
+            _attachments.Clear();
+            UpdateAttachments();
+        }
+
+        private void UpdateAttachments()
+        {
+            AttachList.ItemsSource ??= _attachments;
+            AttachList.Visibility = _attachments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // =============================================================== agentes programados

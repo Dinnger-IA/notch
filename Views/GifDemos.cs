@@ -29,7 +29,8 @@ namespace AgentManagerNotch.Views
             "editor-color (los colores del editor de agentes, en una sola fila) · " +
             "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva) · " +
             "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push) · " +
-            "mencion (escribir @ en el chat para citar otro workspace como contexto)";
+            "mencion (escribir @ en el chat para citar otro workspace como contexto) · " +
+            "adjuntos (archivos adjuntos como chips en la entrada: se quitan con × y se envían con el mensaje)";
 
         internal static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         internal static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -52,6 +53,7 @@ namespace AgentManagerNotch.Views
                 "sesion-ocupada" => await BusySessionAsync(path),
                 "git" => await GitPanelAsync(path),
                 "mencion" => await MentionAsync(path),
+                "adjuntos" => await AttachmentsAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -709,6 +711,98 @@ namespace AgentManagerNotch.Views
             return n;
         }
 
+
+        /// <summary>Archivos que se sueltan sobre el chat: chips en la entrada, uno se quita con × y el resto va con el mensaje.</summary>
+        private static async Task<int> AttachmentsAsync(string path)
+        {
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            var dim = Frozen(Color.FromRgb(0xA8, 0xA8, 0xB6));
+            var faint = Frozen(Color.FromRgb(0x6E, 0x6E, 0x7C));
+            var chipBg = Frozen(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+            var icons = new FontFamily("Segoe MDL2 Assets");
+            Border Chip(string name, bool removable, out TextBlock? x)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                row.Children.Add(new TextBlock { Text = "", FontFamily = icons, FontSize = 11, Foreground = dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
+                row.Children.Add(new TextBlock { Text = name, FontSize = 11.5, Foreground = text, VerticalAlignment = VerticalAlignment.Center });
+                x = removable ? new TextBlock { Text = "", FontFamily = icons, FontSize = 8, Foreground = dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 2, 0) } : null;
+                if (x != null) row.Children.Add(x);
+                return new Border { Background = chipBg, CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 3, 6, 3), Margin = new Thickness(0, 0, 5, 5), Child = row };
+            }
+
+            var mochi = new Controls.MochiView { Width = 46, Height = 46, BodyColor = Color.FromRgb(0x64, 0xB5, 0xF6), Interactive = false, VerticalAlignment = VerticalAlignment.Top };
+            var top = new TextBlock { Text = "Doky", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = text, Margin = new Thickness(0, 10, 0, 10) };
+            var chat = new StackPanel();
+            var chips = new WrapPanel { Margin = new Thickness(6, 5, 0, 0), Visibility = Visibility.Collapsed };
+            var typed = new TextBlock { FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 7, 10, 7) };
+            void SetTyped(string t) { typed.Text = t == "" ? "Continuar…" : t + "▏"; typed.Foreground = t == "" ? faint : text; }
+            SetTyped("");
+            var input = new Border
+            {
+                CornerRadius = new CornerRadius(20), Background = Frozen(Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF)), Padding = new Thickness(7, 3, 7, 3),
+                Child = new StackPanel { Children = { chips, typed } }
+            };
+
+            // Alto fijo: los chips hacen crecer la entrada y todos los fotogramas tienen que medir lo mismo
+            var stage = new Grid { Width = 600, Height = 270 };
+            stage.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+            stage.ColumnDefinitions.Add(new ColumnDefinition());
+            var right = new DockPanel { LastChildFill = true };
+            DockPanel.SetDock(top, Dock.Top);
+            DockPanel.SetDock(input, Dock.Bottom);
+            right.Children.Add(top);
+            right.Children.Add(input);
+            right.Children.Add(chat);
+            Grid.SetColumn(right, 1);
+            stage.Children.Add(mochi);
+            stage.Children.Add(right);
+            var host = new Border { Background = NotchBg, Padding = new Thickness(14, 12, 16, 14), Child = stage };
+
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            var n = await new GifWriter(host, NotchBg, 630).RecordAsync(path, async () =>
+            {
+                await Task.Delay(900);
+                // Se sueltan tres archivos sobre el notch
+                mochi.IsBox = true;
+                await Task.Delay(700);
+                mochi.IsBox = false;
+                var dropped = new[] { "ventas-2026.xlsx", "informe-trimestral.pdf", "notas.txt" };
+                var removers = new System.Collections.Generic.List<TextBlock?>();
+                chips.Visibility = Visibility.Visible;
+                foreach (var f in dropped) { chips.Children.Add(Chip(f, true, out var x)); removers.Add(x); await Task.Delay(300); }
+                await Task.Delay(900);
+                // Se quita el que sobra con ×
+                removers[2]!.Foreground = text;
+                await Task.Delay(500);
+                chips.Children.RemoveAt(2);
+                await Task.Delay(700);
+                const string msg = "Resume las ventas por mes y dime cuál fue el mejor";
+                for (int i = 2; i <= msg.Length; i += 2) { SetTyped(msg[..i]); await Task.Delay(35); }
+                SetTyped(msg); await Task.Delay(700);
+                // Enviado: los archivos van como chips encima del mensaje
+                SetTyped(""); chips.Children.Clear(); chips.Visibility = Visibility.Collapsed;
+                var sent = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
+                foreach (var f in dropped.Take(2)) sent.Children.Add(Chip(f, false, out _));
+                chat.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(80, 0, 0, 8),
+                    HorizontalAlignment = HorizontalAlignment.Right, Background = Frozen(Color.FromRgb(0x2C, 0x2C, 0x33)),
+                    Child = new StackPanel { Children = { sent, new TextBlock { Text = msg, FontSize = 12.5, Foreground = text, TextWrapping = TextWrapping.Wrap } } }
+                });
+                mochi.State = Controls.MochiState.Thinking;
+                await Task.Delay(1400);
+                mochi.State = Controls.MochiState.Done;
+                chat.Children.Add(new TextBlock
+                {
+                    Text = "El mejor mes fue marzo, con Q 1.24 M en ventas (un 18 % más que febrero). El informe lo atribuye a la campaña de temporada.",
+                    FontSize = 12.5, Foreground = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 40, 8)
+                });
+                await Task.Delay(2600);
+            });
+            win.Close();
+            return n;
+        }
 
         private const Models.ChatRole ChatRoleUser = Models.ChatRole.User, ChatRoleTool = Models.ChatRole.Tool;
 

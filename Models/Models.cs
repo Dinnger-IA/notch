@@ -377,8 +377,29 @@ namespace AgentManagerNotch.Models
         public string Text
         {
             get => _text;
-            set { if (_text != value) { _text = value; OnChanged(); } }
+            set
+            {
+                if (_text == value) return;
+                _text = value;
+                OnChanged(); OnChanged(nameof(BodyText)); OnChanged(nameof(Files)); OnChanged(nameof(HasFiles));
+            }
         }
+
+        // Archivos adjuntos de un mensaje del usuario: el bloque «Archivos:» se ve como chips, no como texto
+        private string? _splitFor;
+        private string _body = "";
+        private List<string> _files = new();
+        private void EnsureSplit()
+        {
+            if (_splitFor == _text) return;
+            _splitFor = _text;
+            if (Role == ChatRole.User) _body = Services.ChatAttachments.Split(_text, out _files);
+            else { _body = _text; _files = new(); }
+        }
+        /// <summary>El texto sin el bloque de archivos adjuntos.</summary>
+        [JsonIgnore] public string BodyText { get { EnsureSplit(); return _body; } }
+        [JsonIgnore] public List<string> Files { get { EnsureSplit(); return _files; } }
+        [JsonIgnore] public bool HasFiles => Files.Count > 0;
 
         /// <summary>Solo en Permission: Allow, AllowAlways o Deny.</summary>
         public string? Decision { get; set; }

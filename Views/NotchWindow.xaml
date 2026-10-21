@@ -14,6 +14,7 @@
         <v:NullToVisibilityConverter x:Key="NullToVis"/>
         <v:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <v:BoolToVisibilityConverter x:Key="InvBoolToVis" Invert="True"/>
+        <v:FileNameConverter x:Key="FileName"/>
         <v:ColorToBrushConverter x:Key="ColorBrush"/>
         <v:EmptyToVisibilityConverter x:Key="EmptyToVis"/>
 
@@ -63,6 +64,23 @@
         </Style>
 
         <!-- Mensajes estilo coucou -->
+        <!-- Archivo adjunto como chip (DataContext = ruta). El de la entrada lleva × para quitarlo -->
+        <Style x:Key="FileChip" TargetType="Border">
+            <Setter Property="Background" Value="#33FFFFFF"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="8,3,6,3"/>
+            <Setter Property="Margin" Value="0,0,5,5"/>
+            <Setter Property="MaxWidth" Value="200"/>
+            <Setter Property="ToolTip" Value="{Binding}"/>
+        </Style>
+        <DataTemplate x:Key="SentFileChip">
+            <Border Style="{StaticResource FileChip}" Padding="8,3">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
         <DataTemplate x:Key="Message" DataType="{x:Type m:ChatMessage}">
             <Border x:Name="Bubble" Margin="0,6" Padding="0" CornerRadius="16" MaxWidth="500"
                     HorizontalAlignment="Left" Background="Transparent">
@@ -75,8 +93,14 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <RichTextBox x:Name="Md" Style="{StaticResource SelectableDoc}" FontSize="12.5"
+                    <!-- Archivos adjuntos del mensaje -->
+                    <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource SentFileChip}" Margin="0,2,-5,0"
+                                  Visibility="{Binding HasFiles, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <RichTextBox x:Name="Md" Grid.Row="1" Style="{StaticResource SelectableDoc}" FontSize="12.5"
                                  Foreground="#ECECF2" Block.LineHeight="18" v:Markdown.Text="{Binding Text}">
                         <RichTextBox.ContextMenu>
                             <ContextMenu Opened="MessageMenu_Opened">
@@ -85,10 +109,10 @@
                             </ContextMenu>
                         </RichTextBox.ContextMenu>
                     </RichTextBox>
-                    <TextBox x:Name="Txt" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"
+                    <TextBox x:Name="Txt" Grid.Row="1" Style="{StaticResource SelectableText}" Text="{Binding BodyText, Mode=OneWay}"
                              FontSize="12.5" Visibility="Collapsed"/>
                     <!-- Error con salida: la sesión de Codex está ocupada en otro programa -->
-                    <Button x:Name="NewSessionButton" Grid.Row="1" Content="Seguir en una sesión nueva" Style="{StaticResource SettingsButton}"
+                    <Button x:Name="NewSessionButton" Grid.Row="2" Content="Seguir en una sesión nueva" Style="{StaticResource SettingsButton}"
                             Margin="0,8,0,2" Visibility="Collapsed" Click="ContinueInNewSession_Click"/>
                 </Grid>
             </Border>
@@ -101,6 +125,14 @@
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
+                <!-- Mensaje que solo lleva archivos: sin línea de texto vacía -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Role}" Value="{x:Static m:ChatRole.User}"/>
+                        <Condition Binding="{Binding BodyText}" Value=""/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Txt" Property="Visibility" Value="Collapsed"/>
+                </MultiDataTrigger>
                 <DataTrigger Binding="{Binding Role}" Value="{x:Static m:ChatRole.Tool}">
                     <Setter TargetName="Md" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="Txt" Property="Visibility" Value="Visible"/>
@@ -732,6 +764,23 @@
                         <Border x:Name="InputBar" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Padding="7,3" CornerRadius="20" Background="#1EFFFFFF"
                                 BorderThickness="1" BorderBrush="Transparent"
                                 Visibility="{Binding CanType, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                            <DockPanel>
+                            <!-- Archivos por adjuntar: se mandan con el mensaje; × los quita -->
+                            <ItemsControl x:Name="AttachList" DockPanel.Dock="Top" Margin="6,5,0,0" Visibility="Collapsed">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource FileChip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                <Button Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0"
+                                                        Style="{StaticResource IconButton}" ToolTip="Quitar" Click="RemoveAttachment_Click"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -789,6 +838,7 @@
                                 <!-- Botones de los plugins -->
                                 <StackPanel x:Name="InputExtras" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom"/>
                             </Grid>
+                            </DockPanel>
                         </Border>
                     </Grid>
                 </Border>

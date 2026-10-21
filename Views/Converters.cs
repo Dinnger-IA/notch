@@ -22,6 +22,14 @@ namespace AgentManagerNotch.Views
         public object ConvertBack(object? value, Type t, object? p, CultureInfo c) => throw new NotSupportedException();
     }
 
+    /// <summary>Ruta → nombre del archivo (chips de los adjuntos).</summary>
+    public class FileNameConverter : IValueConverter
+    {
+        public object Convert(object? value, Type t, object? p, CultureInfo c)
+            => value is string path ? System.IO.Path.GetFileName(path) : "";
+        public object ConvertBack(object? value, Type t, object? p, CultureInfo c) => throw new NotSupportedException();
+    }
+
     /// <summary>Texto vacío o null → Collapsed.</summary>
     public class EmptyToVisibilityConverter : IValueConverter
     {
