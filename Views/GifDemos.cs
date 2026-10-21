@@ -30,7 +30,7 @@ namespace AgentManagerNotch.Views
             "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva) · " +
             "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push) · " +
             "mencion (escribir @ en el chat para citar otro workspace como contexto) · " +
-            "adjuntos (archivos adjuntos como chips en la entrada: se quitan con × y se envían con el mensaje)";
+            "adjuntos (archivos adjuntos como chips en la entrada: con el ratón encima aparece la × para quitarlos)";
 
         internal static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         internal static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -725,7 +725,7 @@ namespace AgentManagerNotch.Views
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
                 row.Children.Add(new TextBlock { Text = "", FontFamily = icons, FontSize = 11, Foreground = dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
                 row.Children.Add(new TextBlock { Text = name, FontSize = 11.5, Foreground = text, VerticalAlignment = VerticalAlignment.Center });
-                x = removable ? new TextBlock { Text = "", FontFamily = icons, FontSize = 8, Foreground = dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 2, 0) } : null;
+                x = removable ? new TextBlock { Text = "", FontFamily = icons, FontSize = 8, Foreground = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 2, 0), Visibility = Visibility.Hidden } : null;
                 if (x != null) row.Children.Add(x);
                 return new Border { Background = chipBg, CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 3, 6, 3), Margin = new Thickness(0, 0, 5, 5), Child = row };
             }
@@ -772,9 +772,10 @@ namespace AgentManagerNotch.Views
                 chips.Visibility = Visibility.Visible;
                 foreach (var f in dropped) { chips.Children.Add(Chip(f, true, out var x)); removers.Add(x); await Task.Delay(300); }
                 await Task.Delay(900);
-                // Se quita el que sobra con ×
-                removers[2]!.Foreground = text;
-                await Task.Delay(500);
+                // Con el ratón encima del que sobra aparece la ×, y se quita
+                ((Border)chips.Children[2]).Background = Frozen(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF));
+                removers[2]!.Visibility = Visibility.Visible;
+                await Task.Delay(900);
                 chips.Children.RemoveAt(2);
                 await Task.Delay(700);
                 const string msg = "Resume las ventas por mes y dime cuál fue el mejor";

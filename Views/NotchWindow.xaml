@@ -770,14 +770,21 @@
                                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource FileChip}">
+                                        <Border x:Name="Chip" Style="{StaticResource FileChip}">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                                 <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                                <Button Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0"
+                                                <!-- La × solo se ve con el ratón encima del chip (ocupa su sitio para que no salte) -->
+                                                <Button x:Name="Remove" Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0" Visibility="Hidden"
                                                         Style="{StaticResource IconButton}" ToolTip="Quitar" Click="RemoveAttachment_Click"/>
                                             </StackPanel>
                                         </Border>
+                                        <DataTemplate.Triggers>
+                                            <Trigger SourceName="Chip" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Remove" Property="Visibility" Value="Visible"/>
+                                                <Setter TargetName="Chip" Property="Background" Value="#44FFFFFF"/>
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
