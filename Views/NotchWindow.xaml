@@ -70,15 +70,16 @@
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="8,3,6,3"/>
             <Setter Property="Margin" Value="0,0,5,5"/>
-            <Setter Property="MaxWidth" Value="200"/>
+            <Setter Property="MaxWidth" Value="240"/>
             <Setter Property="ToolTip" Value="{Binding}"/>
         </Style>
         <DataTemplate x:Key="SentFileChip">
             <Border Style="{StaticResource FileChip}" Padding="8,3">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <!-- DockPanel (no StackPanel): así el nombre largo se recorta con «…» dentro del ancho máximo -->
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                </StackPanel>
+                </DockPanel>
             </Border>
         </DataTemplate>
         <DataTemplate x:Key="Message" DataType="{x:Type m:ChatMessage}">
@@ -771,12 +772,12 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border x:Name="Chip" Style="{StaticResource FileChip}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                                <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                            <!-- DockPanel: la × queda fija a la derecha y el nombre largo se recorta con «…» -->
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Left" Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#A8A8B6" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                                 <!-- La × solo se ve con el ratón encima del chip (ocupa su sitio para que no salte).
                                                      Oculta desde el estilo: un valor local no lo cambiaría el trigger -->
-                                                <Button x:Name="Remove" Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0"
+                                                <Button x:Name="Remove" DockPanel.Dock="Right" Content="&#xE711;" FontSize="8" Width="16" Height="16" Margin="4,0,0,0"
                                                         ToolTip="Quitar" Click="RemoveAttachment_Click">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
@@ -784,7 +785,8 @@
                                                         </Style>
                                                     </Button.Style>
                                                 </Button>
-                                            </StackPanel>
+                                                <TextBlock Text="{Binding Converter={StaticResource FileName}}" FontSize="11.5" Foreground="#ECECF2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                            </DockPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
                                             <Trigger SourceName="Chip" Property="IsMouseOver" Value="True">
