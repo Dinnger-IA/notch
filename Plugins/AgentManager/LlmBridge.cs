@@ -144,7 +144,7 @@ namespace AgentManagerNotch.Plugins.AgentManager
                 case "tool":
                     var tool = ToolLabel(Str(chunk, "name") ?? "herramienta");
                     toolNames[callId] = tool;
-                    return new { type = "tool", tool, detail = agent != "" ? "· " + agent : "" };
+                    return new { type = "tool", tool = agent != "" ? $"{agent} › {tool}" : tool, detail = "" };
                 case "tool_result" when Str(chunk, "status") is { } st && st != "completed":
                     return new { type = "tool", tool = toolNames.GetValueOrDefault(callId, "herramienta"), detail = "✗ " + (Str(chunk, "error") ?? st) };
                 default:
