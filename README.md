@@ -403,7 +403,10 @@ proveedor más en el editor de agentes, *Agent Manager*. Lanza `AgentManagerNotc
 `POST /api/notch/notch-agent` (ruteador de Agent Manager: `{"messages":[…], "stream": true}` → streaming SSE, o
 `data.response` si responde JSON entero) con `Authorization: Bearer <token>` de la sesión; cada petición queda en tu
 historial de chat de Agent Manager. Sin sesión en el servidor: se reenvía el historial reciente (30 mensajes) y el
-system prompt va como mensaje `system`; solo texto, sin herramientas. En `config.json` estos agentes se guardan
+system prompt va como mensaje `system`. Las **acciones** del ruteador llegan en el streaming (`tool`,
+`agent_start` y `tool_result` si falla) y se ven en el panel de acciones como las de los CLI: el nombre de la
+herramienta (`mcp__clarify-2__project_search` → `clarify-2 · project_search`, sin argumentos: el servidor no los
+manda), el agente en el que delega con su instrucción y, en las herramientas de ese agente, su nombre. En `config.json` estos agentes se guardan
 como `"Provider": "Plugin", "PluginProvider": "AgentManager"` (los antiguos, `"Provider": "AgentManager"`, se
 convierten solos).
 

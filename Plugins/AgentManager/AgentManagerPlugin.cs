@@ -225,6 +225,9 @@ namespace AgentManagerNotch.Plugins.AgentManager
                 case "delta":
                     yield return new DeltaEvent(ProviderFactory.Str(root, "text"));
                     break;
+                case "tool":
+                    yield return new ToolEvent(ProviderFactory.Str(root, "tool"), ProviderFactory.Str(root, "detail"));
+                    break;
                 case "result":
                     var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == JsonValueKind.True;
                     var err = ProviderFactory.Str(root, "error");

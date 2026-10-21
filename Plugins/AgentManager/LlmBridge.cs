@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -18,7 +19,8 @@ namespace AgentManagerNotch.Plugins.AgentManager
     /// completa final (data.response) sin duplicar lo ya recibido.
     /// stdin: {"messages":[{role,content}…], "attachments":[{name,data}…]} (attachments, opcional: archivos en base64,
     /// ver AgentManagerProvider). stdout: una línea JSON por evento:
-    /// {"type":"delta","text":…} y al final {"type":"result","ok":true|false,"error":…}.
+    /// {"type":"delta","text":…}, {"type":"tool","tool":…,"detail":…} (las acciones del ruteador y de los agentes en los
+    /// que delega, para el panel de acciones) y al final {"type":"result","ok":true|false,"error":…}.
     /// Usa el token de la sesión guardada (DPAPI), así funciona igual que los demás CLI: un proceso que se puede detener.
     /// </summary>
     public static class LlmBridge
@@ -79,6 +81,8 @@ namespace AgentManagerNotch.Plugins.AgentManager
 
                 // Streaming SSE
                 var received = new StringBuilder();
+                var toolNames = new Dictionary<string, string>(); // callId → herramienta, para avisar si falla
+                var agentNames = new Dictionary<string, string>(); // agentId → nombre del agente en el que delegó
                 void Append(string? text)
                 {
                     if (string.IsNullOrEmpty(text)) return;
@@ -96,6 +100,8 @@ namespace AgentManagerNotch.Plugins.AgentManager
                     try { chunk = JsonNode.Parse(data); }
                     catch (JsonException) { Append(data); continue; } // texto plano
                     if (chunk is not JsonObject) { Append(chunk?.ToString()); continue; }
+                    if (Action(chunk, toolNames, agentNames) is { } action) { Emit(action); continue; }
+                    if (Str(chunk, "type") is "tool_result" or "agent_end" or "title") continue;
                     if (chunk["success"]?.GetValueKind() == JsonValueKind.False || chunk["error"] is JsonNode)
                     {
                         var err = chunk["error"];
@@ -118,6 +124,40 @@ namespace AgentManagerNotch.Plugins.AgentManager
             {
                 return Fail(ex is HttpRequestException ? "No se pudo conectar con Agent Manager: " + ex.Message : ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Acciones del ruteador (eventos tool, agent_start y tool_result fallido) como evento «tool» del notch. Las
+        /// herramientas no traen sus argumentos: se muestra el nombre y, si es de un agente en el que delegó, cuál.
+        /// </summary>
+        private static object? Action(JsonNode chunk, Dictionary<string, string> toolNames, Dictionary<string, string> agentNames)
+        {
+            var callId = Str(chunk, "callId") ?? "";
+            var agent = Str(chunk, "agentId") is { } id && agentNames.TryGetValue(id, out var n) ? n : "";
+            switch (Str(chunk, "type"))
+            {
+                case "agent_start":
+                    var name = Str(chunk, "name") ?? Str(chunk, "slug") ?? "agente";
+                    if (Str(chunk, "agentId") is { } aid) agentNames[aid] = name;
+                    var instr = (Str(chunk, "instruction") ?? "").ReplaceLineEndings(" ");
+                    return new { type = "tool", tool = "Agente " + name, detail = instr.Length > 140 ? instr[..140] + "…" : instr };
+                case "tool":
+                    var tool = ToolLabel(Str(chunk, "name") ?? "herramienta");
+                    toolNames[callId] = tool;
+                    return new { type = "tool", tool, detail = agent != "" ? "· " + agent : "" };
+                case "tool_result" when Str(chunk, "status") is { } st && st != "completed":
+                    return new { type = "tool", tool = toolNames.GetValueOrDefault(callId, "herramienta"), detail = "✗ " + (Str(chunk, "error") ?? st) };
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>«mcp__clarify-2__project_search» → «clarify-2 · project_search».</summary>
+        private static string ToolLabel(string name)
+        {
+            if (!name.StartsWith("mcp__")) return name;
+            var parts = name[5..].Split("__", 2);
+            return parts.Length == 2 ? $"{parts[0]} · {parts[1]}" : parts[0];
         }
 
         /// <summary>Propiedad de texto (solo si es string).</summary>
