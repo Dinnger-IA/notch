@@ -817,6 +817,7 @@ namespace AgentManagerNotch.Views
             if (_selected != null) _selected.Messages.CollectionChanged -= Messages_CollectionChanged;
             _selected = s;
             ChatView.DataContext = s;
+            ApplyPlaceholder();
             // Mismo historial, dos vistas: la conversación sin las acciones, y las acciones en el panel izquierdo
             // Solo los últimos 10 de cada vista; los anteriores se cargan al desplazarse
             _chatWindow?.Detach();
@@ -1387,8 +1388,8 @@ namespace AgentManagerNotch.Views
         private int _mentionIndex;
 
         /// <summary>
-        /// Si el cursor está justo detrás de «@algo» (la @ al principio o tras un espacio), muestra los otros workspaces
-        /// cuyo nombre contiene «algo»; si no, cierra la lista.
+        /// En un agente de código, si el cursor está justo detrás de «@algo» (la @ al principio o tras un espacio),
+        /// muestra los otros workspaces cuyo nombre contiene «algo»; si no, cierra la lista.
         /// </summary>
         private void UpdateMentions()
         {
@@ -1400,7 +1401,8 @@ namespace AgentManagerNotch.Views
                 if (text[i] == '@') { at = i; break; }
                 if (text[i] is '\n' or '\r') break;
             }
-            if (at < 0 || (at > 0 && !char.IsWhiteSpace(text[at - 1])) || _selected?.CanType != true) { CloseMentions(); return; }
+            // Solo los agentes de código citan workspaces: en los de chat la @ es texto normal
+            if (at < 0 || (at > 0 && !char.IsWhiteSpace(text[at - 1])) || _selected?.CanType != true || !_selected.IsCode) { CloseMentions(); return; }
 
             var query = text[(at + 1)..caret];
             var all = WorkspaceMentions.List(_selected.HasFolder ? _selected.WorkDir : null);
@@ -1492,7 +1494,7 @@ namespace AgentManagerNotch.Views
         private void AppendFiles(IReadOnlyCollection<string> files)
         {
             if (files.Count == 0 || _selected?.CanType != true || _mode != Mode.Chat) return;
-            var block = "Archivos:\n" + string.Join("\n", files.Select(f => "- " + f));
+            var block = ChatAttachments.Block(files);
             Input.Text = string.IsNullOrWhiteSpace(Input.Text) ? block + "\n\n" : Input.Text.TrimEnd() + "\n\n" + block + "\n\n";
             Input.CaretIndex = Input.Text.Length;
             Activate();

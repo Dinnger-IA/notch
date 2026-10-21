@@ -742,7 +742,7 @@
                                 <Grid Margin="6,0">
                                     <TextBox x:Name="Input" Style="{StaticResource ChatInput}" FontSize="12.5" MinHeight="30" MaxHeight="130"
                                              Padding="2,7" PreviewKeyDown="Input_PreviewKeyDown" TextChanged="Input_TextChanged"/>
-                                    <TextBlock x:Name="Placeholder" Text="Continuar… (@ para citar)" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
+                                    <TextBlock x:Name="Placeholder" Text="Continuar…" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0"
                                                Foreground="#6E6E7C" FontSize="12.5"/>
                                     <!-- Aviso de un plugin que tapa la caja de texto (p. ej. «Escuchando…») -->
                                     <ContentPresenter x:Name="InputOverlay" IsHitTestVisible="False" VerticalAlignment="Center" Margin="4,0" Visibility="Collapsed"/>

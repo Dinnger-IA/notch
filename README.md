@@ -149,7 +149,8 @@ a la derecha**.
   ✗ falló, ! permiso) y el botón **Nuevo workspace**. La carpeta de una pestaña **no se puede cambiar**: se cierra
   (×) y se abre otra. Arrastrar una carpeta sobre el notch abre un workspace nuevo. Desde un script:
   `AgentManagerNotch.exe --code D:\mi\proyecto` (si ya hay una pestaña para esa carpeta, la abre).
-- **Citar otro workspace con @**: al escribir `@` en el chat se abre la lista de los otros workspaces abiertos
+- **Citar otro workspace con @** (solo en los agentes de código; en los de chat la `@` es texto normal): al
+  escribir `@` en el chat se abre la lista de los otros workspaces abiertos
   (↑/↓ para moverse, Intro o Tab para elegir, Esc para cerrar). `@api-pagos` en el mensaje le da al agente la
   ruta de ese proyecto y acceso para leerlo como contexto: Claude Code con `--add-dir`, Gemini con
   `--include-directories` y Codex sin nada más (ya puede leer fuera de su carpeta). En el chat el mensaje se ve tal
@@ -203,8 +204,8 @@ Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 | Abrir un agente | clic en su chip (pasa a la tarjeta grande) y clic en la tarjeta para el chat; clic derecho = menú |
 | Crear | chip **+ Nuevo** → workspace de código / chat / programado; o arrastra una carpeta |
 | Enviar | **Enter** (Shift+Enter = salto de línea); si está ocupado, se encola. Botón rojo = detener |
-| Adjuntar archivos | arrastrarlos sobre el notch (el personaje se convierte en caja 📦) o con el clip |
-| Citar otro workspace | escribe **@** en el chat y elige el proyecto: el agente lo lee como contexto |
+| Adjuntar archivos | arrastrarlos sobre el notch (el personaje se convierte en caja 📦) o con el clip: el mensaje lleva su ruta (`Services/ChatAttachments.cs`) |
+| Citar otro workspace | en un agente de código, escribe **@** en el chat y elige el proyecto: el agente lo lee como contexto |
 | Fijar el panel abierto | chincheta; **Esc** lo cierra |
 | Permisos | tarjeta naranja: *Permitir*, *Permitir siempre* (en la sesión) o *Denegar* |
 | Recordatorios | botón ⏰, comando `/recordar 10m texto`, o pídeselo al agente en lenguaje natural |
@@ -332,6 +333,7 @@ Services/ControlChannel.cs --notify / --ask / --claude-event e integración opci
 Services/Notifications.cs  bandeja del sistema, toasts, sonidos, inicio con Windows, servicio de recordatorios
 Services/CliResolver.cs    búsqueda en el PATH y resolución de shims de npm
 Services/CliSetup.cs       instalador: detecta e instala Claude Code y Codex y conecta sus avisos (CodexNotify)
+Services/ChatAttachments.cs  bloque «Archivos:» de los adjuntos del chat (lo leen los proveedores que suben archivos)
 Services/WorkspaceMentions.cs menciones @workspace del chat: lista, resolución y acceso del CLI a esas carpetas
 Services/ClaudeTranscript.cs lee la sesión de Claude Code de la terminal (JSONL) para mostrarla en una pestaña
 Services/Installer.cs      instalar/desinstalar por usuario (accesos, registro, inicio con Windows)
