@@ -16,7 +16,8 @@ namespace AgentManagerNotch.Plugins.AgentManager
     /// responde JSON entero ({success, data:{conversationId, response}}) también lo entiende. El lector SSE acepta
     /// fragmentos estilo OpenAI (choices[0].delta.content) o campos delta/text/content/token, y una respuesta
     /// completa final (data.response) sin duplicar lo ya recibido.
-    /// stdin: {"messages":[{role,content}…]}. stdout: una línea JSON por evento:
+    /// stdin: {"messages":[{role,content}…], "attachments":[{name,data}…]} (attachments, opcional: archivos en base64,
+    /// ver AgentManagerProvider). stdout: una línea JSON por evento:
     /// {"type":"delta","text":…} y al final {"type":"result","ok":true|false,"error":…}.
     /// Usa el token de la sesión guardada (DPAPI), así funciona igual que los demás CLI: un proceso que se puede detener.
     /// </summary>

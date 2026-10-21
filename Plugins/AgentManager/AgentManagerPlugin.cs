@@ -162,6 +162,10 @@ namespace AgentManagerNotch.Plugins.AgentManager
     // =====================================================================
     public class AgentManagerProvider : ICliProvider
     {
+        // Límites del ruteador de Agent Manager para los archivos adjuntos
+        private const int MaxFiles = 5;
+        private const long MaxFileBytes = 10L * 1024 * 1024, MaxTotalBytes = 30L * 1024 * 1024;
+
         public bool PlainText => false;
 
         public LaunchSpec Build(AgentProfile p, string prompt, string? sessionId, RunContext ctx)
@@ -172,13 +176,43 @@ namespace AgentManagerNotch.Plugins.AgentManager
             var hist = ctx.History.Where(m => m.Role is ChatRole.User or ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text)).TakeLast(30).ToList();
             // El último mensaje del historial es el que se está enviando: va con el texto real del prompt
             foreach (var m in hist.Take(Math.Max(0, hist.Count - 1)))
-                messages.Add(new { role = m.Role == ChatRole.User ? "user" : "assistant", content = m.Text });
-            messages.Add(new { role = "user", content = prompt });
+                messages.Add(new { role = m.Role == ChatRole.User ? "user" : "assistant", content = m.Role == ChatRole.User ? WithoutPaths(m.Text) : m.Text });
+
+            // El servidor no ve el disco: los archivos adjuntos del mensaje se suben en «attachments»
+            var text = ChatAttachments.Split(prompt, out var files);
+            messages.Add(new { role = "user", content = text != "" ? text : "Revisa los archivos adjuntos." });
+            var attachments = ReadAttachments(files);
+            if (attachments.Count > 0) Log.Info($"Agent Manager: {attachments.Count} archivo(s) adjunto(s)");
 
             var exe = Environment.ProcessPath ?? throw new InvalidOperationException("No se encontró el ejecutable de Agent Manager Notch.");
             var psi = ProviderFactory.NewPsi(exe, p);
             psi.ArgumentList.Add("--llm");
-            return new LaunchSpec { Psi = psi, StdinText = JsonSerializer.Serialize(new { model = p.Model, messages }) };
+            object body = attachments.Count > 0 ? new { model = p.Model, messages, attachments } : new { model = p.Model, messages };
+            return new LaunchSpec { Psi = psi, StdinText = JsonSerializer.Serialize(body) };
+        }
+
+        /// <summary>Mensajes anteriores: los archivos que ya se subieron quedan solo por su nombre (sin la ruta local).</summary>
+        private static string WithoutPaths(string text)
+        {
+            var rest = ChatAttachments.Split(text, out var files);
+            if (files.Count == 0) return text;
+            var names = "(adjuntó: " + string.Join(", ", files.Select(System.IO.Path.GetFileName)) + ")";
+            return rest == "" ? names : rest + "\n" + names;
+        }
+
+        /// <summary>Los archivos en base64 con su nombre, comprobando antes los límites del servidor.</summary>
+        private static List<object> ReadAttachments(List<string> files)
+        {
+            if (files.Count > MaxFiles)
+                throw new InvalidOperationException($"Agent Manager admite hasta {MaxFiles} archivos por mensaje (adjuntaste {files.Count}).");
+            var sizes = files.Select(f => new System.IO.FileInfo(f)).ToList();
+            if (sizes.FirstOrDefault(f => f.Length > MaxFileBytes) is { } big)
+                throw new InvalidOperationException($"«{big.Name}» pesa más de 10 MB, el máximo por archivo en Agent Manager.");
+            if (sizes.Sum(f => f.Length) > MaxTotalBytes)
+                throw new InvalidOperationException("Los archivos adjuntos pasan de 30 MB en total, el máximo de Agent Manager.");
+            if (sizes.FirstOrDefault(f => f.Extension.ToLowerInvariant() is ".doc" or ".ppt") is { } old)
+                throw new InvalidOperationException($"Agent Manager no lee «{old.Name}» (formato antiguo): guárdalo como .docx o .pptx y vuelve a adjuntarlo.");
+            return sizes.Select(f => (object)new { name = f.Name, data = Convert.ToBase64String(System.IO.File.ReadAllBytes(f.FullName)) }).ToList();
         }
 
         public IEnumerable<AgentEvent> Parse(string line)

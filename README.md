@@ -407,6 +407,14 @@ system prompt va como mensaje `system`; solo texto, sin herramientas. En `config
 como `"Provider": "Plugin", "PluginProvider": "AgentManager"` (los antiguos, `"Provider": "AgentManager"`, se
 convierten solos).
 
+**Archivos adjuntos.** Los archivos que se arrastran sobre el notch o se eligen con el clip en un agente con este
+proveedor se **suben** con el mensaje (el servidor no ve el disco): `AgentManagerProvider` saca el bloque «Archivos:»
+del mensaje (`ChatAttachments.Split`) y los manda en `attachments` (`[{name, data}]`, en base64). Límites del
+ruteador, que se comprueban antes de enviar: hasta 5 archivos, 10 MB cada uno y 30 MB en total. Lee imágenes,
+PDF, Word y PowerPoint (`.docx`, `.pptx`; no los `.doc`/`.ppt` antiguos), hojas de cálculo y archivos de texto o
+código; si no puede leer uno, el chat muestra el motivo. En los mensajes anteriores que se reenvían, los archivos
+quedan solo por su nombre.
+
 **Primera configuración.** La primera vez (sin `config.json`) se crean los agentes según los CLI instalados:
 
 | ¿Hay algún CLI? | Agentes |
