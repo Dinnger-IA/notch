@@ -638,7 +638,62 @@
                             </Border>
 
                             <ScrollViewer x:Name="ChatScroll" Grid.Row="1" Style="{StaticResource ThinScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                                <ItemsControl x:Name="ChatList" ItemTemplate="{StaticResource Message}"/>
+                                <StackPanel>
+                                    <ItemsControl x:Name="ChatList" ItemTemplate="{StaticResource Message}"/>
+                                    <!-- Mientras trabaja: puntos animados y lo último que está haciendo («Pensando…», una herramienta…) -->
+                                    <StackPanel Orientation="Horizontal" Margin="2,4,0,6"
+                                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                                            <Ellipse Width="5" Height="5" Fill="#9A9AA8" Margin="0,0,3,0" Opacity="0.25">
+                                                <Ellipse.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever" Duration="0:0:1.2">
+                                                                <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity" BeginTime="0:0:0">
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.25"/>
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="1"/>
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0.6" Value="0.25"/>
+                                                                </DoubleAnimationUsingKeyFrames>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Ellipse.Triggers>
+                                            </Ellipse>
+                                            <Ellipse Width="5" Height="5" Fill="#9A9AA8" Margin="0,0,3,0" Opacity="0.25">
+                                                <Ellipse.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever" Duration="0:0:1.2">
+                                                                <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.2">
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.25"/>
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="1"/>
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0.6" Value="0.25"/>
+                                                                </DoubleAnimationUsingKeyFrames>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Ellipse.Triggers>
+                                            </Ellipse>
+                                            <Ellipse Width="5" Height="5" Fill="#9A9AA8" Margin="0,0,3,0" Opacity="0.25">
+                                                <Ellipse.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever" Duration="0:0:1.2">
+                                                                <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.4">
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.25"/>
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="1"/>
+                                                                    <LinearDoubleKeyFrame KeyTime="0:0:0.6" Value="0.25"/>
+                                                                </DoubleAnimationUsingKeyFrames>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Ellipse.Triggers>
+                                            </Ellipse>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Activity}" FontSize="11.5" Foreground="#8A8A98" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="460"/>
+                                    </StackPanel>
+                                </StackPanel>
                             </ScrollViewer>
 
                             <TextBlock x:Name="EmptyChat" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="13"
