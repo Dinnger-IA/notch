@@ -204,7 +204,7 @@ Ciudad de Guatemala… resúmelo en 2 líneas con una recomendación».
 | Abrir un agente | clic en su chip (pasa a la tarjeta grande) y clic en la tarjeta para el chat; clic derecho = menú |
 | Crear | chip **+ Nuevo** → workspace de código / chat / programado; o arrastra una carpeta |
 | Enviar | **Enter** (Shift+Enter = salto de línea); si está ocupado, se encola. Botón rojo = detener |
-| Adjuntar archivos | arrastrarlos sobre el notch (el personaje se convierte en caja 📦) o con el clip: aparecen como chips encima de la entrada (× para quitarlos) y al enviar el mensaje lleva su ruta (`Services/ChatAttachments.cs`); en la conversación se ven como chips |
+| Adjuntar archivos | arrastrarlos sobre el notch (el personaje se convierte en caja 📦) o con el clip: aparecen como chips encima de la entrada (con el ratón encima aparece la × para quitarlos) y al enviar el mensaje lleva su ruta (`Services/ChatAttachments.cs`); en la conversación se ven como chips |
 | Citar otro workspace | en un agente de código, escribe **@** en el chat y elige el proyecto: el agente lo lee como contexto |
 | Fijar el panel abierto | chincheta; **Esc** lo cierra |
 | Permisos | tarjeta naranja: *Permitir*, *Permitir siempre* (en la sesión) o *Denegar* |
