@@ -636,7 +636,7 @@ namespace AgentManagerNotch.Services
                                 streaming = null;
                                 Messages.Add(new ChatMessage(ChatRole.Tool, $"{tool.Tool}  {tool.Detail}".Trim()));
                                 if (State != MochiState.Waiting) State = MochiState.Working;
-                                Activity = $"{tool.Tool}: {tool.Detail}";
+                                Activity = tool.Detail == "" ? tool.Tool : $"{tool.Tool}: {tool.Detail}";
                                 break;
                             case NoticeEvent n:
                                 streaming = null;

@@ -44,6 +44,7 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 | `git` | El panel de git de un workspace: se preparan cambios, el personaje escribe el commit, commit y push. |
 | `mencion` | Escribir `@` en el chat, elegir otro workspace de la lista y el agente leyéndolo como contexto. |
 | `adjuntos` | Archivos soltados sobre el chat como chips: con el ratón encima de uno aparece la ×, se quita y los demás se envían con el mensaje. |
+| `escribiendo` | La fila del final del chat mientras el agente trabaja: puntos animados y su última acción. |
 
 Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
 ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo

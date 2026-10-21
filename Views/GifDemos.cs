@@ -30,7 +30,8 @@ namespace AgentManagerNotch.Views
             "sesion-ocupada (sesión de Codex abierta en otro programa y el botón para seguir en una nueva) · " +
             "git (panel de git de un workspace: preparar, el personaje escribe el commit, commit y push) · " +
             "mencion (escribir @ en el chat para citar otro workspace como contexto) · " +
-            "adjuntos (archivos adjuntos como chips en la entrada: con el ratón encima aparece la × para quitarlos)";
+            "adjuntos (archivos adjuntos como chips en la entrada: con el ratón encima aparece la × para quitarlos) · " +
+            "escribiendo (al final del chat, mientras trabaja, lo último que está haciendo el agente)";
 
         internal static readonly Brush NotchBg = Frozen(Color.FromRgb(0x0C, 0x0C, 0x0F));
         internal static readonly Brush WindowBg = Frozen(Color.FromRgb(0x20, 0x20, 0x20));
@@ -54,6 +55,7 @@ namespace AgentManagerNotch.Views
                 "git" => await GitPanelAsync(path),
                 "mencion" => await MentionAsync(path),
                 "adjuntos" => await AttachmentsAsync(path),
+                "escribiendo" => await TypingAsync(path),
                 "instalador" => await InstallerAsync(path),
                 _ => throw new ArgumentException($"Vista desconocida «{name}». {Help}")
             };
@@ -800,6 +802,73 @@ namespace AgentManagerNotch.Views
                     FontSize = 12.5, Foreground = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 40, 8)
                 });
                 await Task.Delay(2600);
+            });
+            win.Close();
+            return n;
+        }
+
+        /// <summary>La fila de «escribiendo» al final del chat: puntos animados y la última acción del agente.</summary>
+        private static async Task<int> TypingAsync(string path)
+        {
+            var text = Frozen(Color.FromRgb(0xEC, 0xEC, 0xF2));
+            var dim = Frozen(Color.FromRgb(0x8A, 0x8A, 0x98));
+            var mochi = new Controls.MochiView { Width = 46, Height = 46, BodyColor = Color.FromRgb(0x64, 0xB5, 0xF6), Interactive = false, VerticalAlignment = VerticalAlignment.Top };
+            var top = new TextBlock { Text = "Doky", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = text, Margin = new Thickness(0, 10, 0, 10) };
+            var chat = new StackPanel();
+            var dots = new[] { new System.Windows.Shapes.Ellipse(), new System.Windows.Shapes.Ellipse(), new System.Windows.Shapes.Ellipse() };
+            var dotRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+            foreach (var d in dots) { d.Width = d.Height = 5; d.Fill = Frozen(Color.FromRgb(0x9A, 0x9A, 0xA8)); d.Margin = new Thickness(0, 0, 3, 0); dotRow.Children.Add(d); }
+            var activity = new TextBlock { FontSize = 11.5, Foreground = dim, VerticalAlignment = VerticalAlignment.Center };
+            var typing = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 4, 0, 6), Children = { dotRow, activity } };
+
+            var stage = new Grid { Width = 600, Height = 250 };
+            stage.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+            stage.ColumnDefinitions.Add(new ColumnDefinition());
+            var right = new StackPanel { Children = { top, chat } };
+            Grid.SetColumn(right, 1);
+            stage.Children.Add(mochi);
+            stage.Children.Add(right);
+            var host = new Border { Background = NotchBg, Padding = new Thickness(14, 12, 16, 14), Child = stage };
+
+            const string ask = "¿En qué repositorios se menciona «notch»?";
+            chat.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(80, 0, 0, 8),
+                HorizontalAlignment = HorizontalAlignment.Right, Background = Frozen(Color.FromRgb(0x2C, 0x2C, 0x33)),
+                Child = new TextBlock { Text = ask, FontSize = 12.5, Foreground = text }
+            });
+            chat.Children.Add(typing);
+
+            var win = new Window { Content = host, SizeToContent = SizeToContent.WidthAndHeight };
+            await ShowOffscreenAsync(win);
+            int tick = 0;
+            async Task Show(string what, int ms)
+            {
+                activity.Text = what;
+                for (int t = 0; t < ms; t += 100, tick++)
+                {
+                    for (int i = 0; i < 3; i++) dots[i].Opacity = (tick + 3 - i) % 3 == 0 ? 1 : 0.3;
+                    await Task.Delay(100);
+                }
+            }
+            var n = await new GifWriter(host, NotchBg, 630).RecordAsync(path, async () =>
+            {
+                mochi.State = Controls.MochiState.Thinking;
+                await Show("Pensando…", 1200);
+                mochi.State = Controls.MochiState.Working;
+                await Show("Agente Documentación: busca el término «notch» en los repositorios", 1500);
+                await Show("Documentación › repos · search", 1300);
+                await Show("Documentación › repos · read_doc", 1300);
+                mochi.State = Controls.MochiState.Thinking;
+                await Show("Escribiendo…", 1000);
+                chat.Children.Remove(typing);
+                mochi.State = Controls.MochiState.Done;
+                chat.Children.Add(new TextBlock
+                {
+                    Text = "«notch» aparece en tienda-web y app-movil, en los prototipos que dibujan la muesca del teléfono.",
+                    FontSize = 12.5, Foreground = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 40, 8)
+                });
+                await Task.Delay(2400);
             });
             win.Close();
             return n;
