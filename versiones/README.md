@@ -43,6 +43,7 @@ dotnet build -c Release -o $env:TEMP\amn-gif
 | `sesion-ocupada` | La sesión de Codex abierta en otro programa: el error y su botón para seguir en una sesión nueva. |
 | `git` | El panel de git de un workspace: se preparan cambios, el personaje escribe el commit, commit y push. |
 | `mencion` | Escribir `@` en el chat, elegir otro workspace de la lista y el agente leyéndolo como contexto. |
+| `adjuntos` | Archivos soltados sobre el chat como chips: uno se quita con × y los demás se envían con el mensaje. |
 
 Para un cambio visual que no cubra ninguna vista, añade la suya en `Views/GifDemos.cs`: crea el control o la
 ventana con datos de ejemplo, muéstrala con `ShowOffscreenAsync` y grábala con `GifWriter.RecordAsync`, haciendo
