@@ -45,17 +45,23 @@ namespace AgentManagerNotch.Views
             {
                 // Mientras el chat de código está abierto, el estado se refresca solo (el agente edita archivos)
                 _gitTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-                _gitTimer.Tick += (_, _) => { if (_mode == Mode.Chat && GitDir != null && !_gitBusy) _ = RefreshGitAsync(); };
+                _gitTimer.Tick += (_, _) => { if (_mode == Mode.Chat && GitDir != null && !_gitBusy && !_gitRefreshing) _ = RefreshGitAsync(); };
                 _gitTimer.Start();
             }
             _ = RefreshGitAsync();
         }
 
+        /// <summary>Hay un git status en marcha: el temporizador no lanza otro (en repos grandes se acumularían).</summary>
+        private bool _gitRefreshing;
+
         private async Task RefreshGitAsync()
         {
             var dir = GitDir;
             int seq = ++_gitSeq;
-            var st = dir == null ? null : await GitService.StatusAsync(dir);
+            GitStatus? st;
+            _gitRefreshing = true;
+            try { st = dir == null ? null : await GitService.StatusAsync(dir); }
+            finally { _gitRefreshing = false; }
             if (seq != _gitSeq || dir != GitDir) return; // llegó tarde: ya se cambió de pestaña o hay otra consulta
             _git = st;
             UpdateGitUi();
@@ -91,14 +97,33 @@ namespace AgentManagerNotch.Views
             BuildGitList(st);
         }
 
+        /// <summary>
+        /// Tipos que el doble clic abre directamente: documentos, imágenes y texto cuyo programa por defecto los muestra
+        /// sin ejecutarlos. Lista blanca a propósito: una lista negra de extensiones peligrosas nunca está completa.
+        /// </summary>
+        private static readonly HashSet<string> SafeToOpen = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".txt", ".md", ".log", ".csv", ".json", ".xml", ".yml", ".yaml", ".toml", ".ini", ".config", ".editorconfig",
+            ".gitignore", ".gitattributes", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".svg", ".pdf",
+            ".docx", ".xlsx", ".pptx", ".cs", ".csproj", ".sln", ".xaml", ".ts", ".tsx", ".jsx", ".css", ".scss", ".sql",
+            ".java", ".kt", ".go", ".rs", ".c", ".h", ".cpp", ".hpp", ".swift", ".dart"
+        };
+
         private void BuildGitList(GitStatus st) => FillGitList(GitChanges, st,
             (c, staged) => _ = GitOpAsync(staged ? "Quitando…" : "Preparando…",
                 d => staged ? GitService.UnstageAsync(d, new[] { c.Path }) : GitService.StageAsync(d, new[] { c.Path })),
             c =>
             {
-                // Doble clic: abre el archivo con su programa
+                // Doble clic: abre el archivo con su programa (las rutas son relativas a la raíz del repo). Solo los
+                // tipos que se abren para leerlos; el resto (scripts, .py, .js, ejecutables…) se muestra en el Explorador
                 if (GitDir is not { } dir) return;
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(System.IO.Path.Combine(dir, c.Path)) { UseShellExecute = true }); }
+                var full = System.IO.Path.GetFullPath(System.IO.Path.Combine(_git?.Root is { Length: > 0 } root ? root : dir, c.Path));
+                try
+                {
+                    System.Diagnostics.Process.Start(SafeToOpen.Contains(System.IO.Path.GetExtension(full))
+                        ? new System.Diagnostics.ProcessStartInfo(full) { UseShellExecute = true }
+                        : new System.Diagnostics.ProcessStartInfo("explorer.exe") { ArgumentList = { "/select," + full } });
+                }
                 catch (Exception ex) { GitSay(ex.Message, error: true); }
             });
 
@@ -273,11 +298,14 @@ namespace AgentManagerNotch.Views
                 GitMessage.Focus();
                 return;
             }
-            // Sin nada preparado se confirma todo (como en VS Code)
-            bool all = !st.Changes.Any(c => c.IsStaged);
-            var ok = await GitOpAsync(all ? "Preparando todo y confirmando…" : "Confirmando…", async d =>
+            var ok = await GitOpAsync("Confirmando…", async d =>
             {
-                if (all)
+                // Con el estado de ahora (el de la lista puede tener 5 s): el agente pudo preparar o cambiar algo
+                var now = await GitService.StatusAsync(d) ?? st;
+                if (now.Changes.Any(c => c.IsConflict))
+                    return new GitResult(1, "", "Hay conflictos sin resolver: resuélvelos antes de confirmar.");
+                // Sin nada preparado se confirma todo (como en VS Code)
+                if (!now.Changes.Any(c => c.IsStaged))
                 {
                     var add = await GitService.StageAsync(d, new[] { "." });
                     if (!add.Ok) return add;

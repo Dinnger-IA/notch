@@ -119,6 +119,12 @@ namespace AgentManagerNotch.Plugins.AgentManager
                     }
 
                     var (check, user) = await ValidateAsync(token);
+                    // Mientras se validaba se canceló o empezó otro inicio de sesión: este ya no cuenta
+                    if (_loginCts != cts)
+                    {
+                        Respond(ctx, 409, "Inicio de sesión cancelado", "Se canceló o se empezó otro inicio de sesión. Vuelve al notch.");
+                        return null;
+                    }
                     if (check != Check.Valid)
                     {
                         var msg = check == Check.Rejected ? "Agent Manager rechazó el token." : "No se pudo verificar el token con Agent Manager.";
@@ -148,6 +154,20 @@ namespace AgentManagerNotch.Plugins.AgentManager
             var cts = _loginCts;
             _loginCts = null;
             try { cts?.Cancel(); } catch (ObjectDisposedException) { }
+        }
+
+        /// <summary>
+        /// El servidor rechazó el token a mitad de sesión (401/403): se olvida aquí y en disco para que la puerta vuelva
+        /// a pedir el inicio de sesión. No avisa al servidor (el token ya no vale).
+        /// </summary>
+        public void Invalidate()
+        {
+            if (_token == null) return;
+            _token = null;
+            UserName = null;
+            DeleteToken();
+            Log.Info("Sesión de Agent Manager rechazada por el servidor: hay que volver a iniciarla");
+            RaiseChanged();
         }
 
         // =============================================================== logout

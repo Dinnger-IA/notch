@@ -30,6 +30,8 @@ namespace AgentManagerNotch.Services
         public int Behind { get; init; }
         public bool Detached { get; init; }
         public List<GitChange> Changes { get; init; } = new();
+        /// <summary>Raíz del repositorio: las rutas de <see cref="Changes"/> son relativas a ella.</summary>
+        public string Root { get; set; } = "";
     }
 
     public record GitResult(int Code, string Output, string Error)
@@ -66,6 +68,10 @@ namespace AgentManagerNotch.Services
             psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
             psi.Environment["GIT_PAGER"] = "";
             psi.Environment["LC_ALL"] = "C";
+            // El refresco periódico (git status) no toma index.lock: no choca con el git add/commit del propio agente
+            psi.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+            // Las rutas son literales: un archivo llamado «:(top)x» o con [ ] no se toma por magia o comodín
+            psi.Environment["GIT_LITERAL_PATHSPECS"] = "1";
 
             using var p = new Process { StartInfo = psi };
             try { p.Start(); }
@@ -74,12 +80,35 @@ namespace AgentManagerNotch.Services
             var errTask = p.StandardError.ReadToEndAsync();
             if (stdin != null) await p.StandardInput.WriteAsync(stdin);
             p.StandardInput.Close();
-            try { await p.WaitForExitAsync(ct); }
-            catch (OperationCanceledException) { try { p.Kill(true); } catch { } throw; }
+            // Un push esperando credenciales o un hook colgado no deja los botones de git desactivados para siempre
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(Timeout);
+            try { await p.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(true); } catch { }
+                if (ct.IsCancellationRequested) throw;
+                return new GitResult(-1, "", $"git no terminó en {Timeout.TotalMinutes:0} minutos y se detuvo.");
+            }
             return new GitResult(p.ExitCode, await outTask, await errTask);
         }
 
         public static Task<GitResult> RunAsync(string dir, params string[] args) => RunAsync(dir, (IEnumerable<string>)args);
+
+        private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(5);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Roots = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Raíz del repositorio de <paramref name="dir"/>. Las rutas de git status son relativas a ella, así que
+        /// preparar, quitar o abrir archivos se hace desde ahí (el workspace puede ser una subcarpeta del repo).
+        /// </summary>
+        public static async Task<string> RootAsync(string dir)
+        {
+            if (Roots.TryGetValue(dir, out var root)) return root;
+            var r = await RunAsync(dir, "rev-parse", "--show-toplevel");
+            if (!r.Ok || r.Output.Trim() == "") return dir;
+            return Roots[dir] = Path.GetFullPath(r.Output.Trim());
+        }
 
         /// <summary>Estado del repositorio, o null si la carpeta no es un repositorio git (o no hay git).</summary>
         public static async Task<GitStatus?> StatusAsync(string dir)
@@ -87,7 +116,9 @@ namespace AgentManagerNotch.Services
             if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return null;
             var r = await RunAsync(dir, "status", "--porcelain=v1", "-b", "-z", "--untracked-files=all");
             if (!r.Ok) return null;
-            return ParseStatus(r.Output);
+            var st = ParseStatus(r.Output);
+            st.Root = await RootAsync(dir);
+            return st;
         }
 
         internal static GitStatus ParseStatus(string raw)
@@ -142,19 +173,24 @@ namespace AgentManagerNotch.Services
         public static async Task<List<string>> BranchesAsync(string dir)
         {
             var r = await RunAsync(dir, "branch", "--format=%(refname:short)");
-            return r.Ok ? r.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() : new();
+            // Sin «(HEAD detached at …)»: no es una rama a la que cambiar
+            return r.Ok ? r.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(b => !b.StartsWith('(')).ToList() : new();
         }
 
-        public static Task<GitResult> StageAsync(string dir, IEnumerable<string> paths)
-            => RunAsync(dir, new[] { "add", "-A", "--" }.Concat(paths));
+        /// <summary>Prepara rutas relativas a la raíz del repo («.» = todo el repo).</summary>
+        public static async Task<GitResult> StageAsync(string dir, IEnumerable<string> paths)
+            => await RunAsync(await RootAsync(dir), new[] { "add", "-A", "--" }.Concat(paths));
 
+        /// <summary>Quita del índice rutas relativas a la raíz del repo («.» = todo el repo).</summary>
         public static async Task<GitResult> UnstageAsync(string dir, IEnumerable<string> paths)
         {
+            var root = await RootAsync(dir);
             var list = paths.ToList();
-            var r = await RunAsync(dir, new[] { "restore", "--staged", "--" }.Concat(list));
-            // Sin ningún commit todavía no hay HEAD al que volver: se sacan del índice
-            if (!r.Ok) r = await RunAsync(dir, new[] { "rm", "--cached", "-r", "-q", "--" }.Concat(list));
-            return r;
+            // Sin ningún commit todavía no hay HEAD al que volver: se sacan del índice. Solo en ese caso: con HEAD,
+            // «rm --cached» tras un fallo cualquiera (index.lock…) dejaría preparado el borrado de los archivos.
+            if (!(await RunAsync(root, "rev-parse", "--verify", "-q", "HEAD")).Ok)
+                return await RunAsync(root, new[] { "rm", "--cached", "-r", "-q", "--" }.Concat(list));
+            return await RunAsync(root, new[] { "restore", "--staged", "--" }.Concat(list));
         }
 
         public static Task<GitResult> SwitchAsync(string dir, string branch, bool create = false)
@@ -195,8 +231,10 @@ namespace AgentManagerNotch.Services
                 {
                     try
                     {
-                        var full = Path.Combine(dir, c.Path);
-                        if (new FileInfo(full).Length > 200_000) continue;
+                        var full = Path.Combine(st.Root != "" ? st.Root : dir, c.Path);
+                        var info = new FileInfo(full);
+                        // Ni enlaces (podrían apuntar a un secreto fuera del repo) ni archivos grandes
+                        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint) || info.Length > 200_000) continue;
                         var content = await File.ReadAllTextAsync(full);
                         if (content.Contains('\0')) continue;
                         text += $"\n--- archivo nuevo: {c.Path}\n{(content.Length > 2000 ? content[..2000] + "\n…" : content)}\n";

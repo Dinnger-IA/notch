@@ -44,6 +44,9 @@ namespace AgentManagerNotch.Plugins
         public static PluginProvider? Provider(string? id) =>
             id == null ? null : Providers.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
 
+        /// <summary>El proveedor principal disponible ahora (ver <see cref="PluginProvider.IsPreferred"/>), o null.</summary>
+        public static PluginProvider? Preferred => Providers.FirstOrDefault(p => p.IsAvailable() && p.IsPreferred());
+
         /// <summary>Modos de línea de comandos de los plugins (el primero que lo atienda).</summary>
         public static int? RunCommandLine(string[] args)
         {

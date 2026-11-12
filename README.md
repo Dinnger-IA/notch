@@ -420,14 +420,20 @@ PDF, Word y PowerPoint (`.docx`, `.pptx`; no los `.doc`/`.ppt` antiguos), hojas 
 código; si no puede leer uno, el chat muestra el motivo. En los mensajes anteriores que se reenvían, los archivos
 quedan solo por su nombre.
 
-**Primera configuración.** La primera vez (sin `config.json`) se crean los agentes según los CLI instalados:
+**Agent Manager es el proveedor principal.** Con Agent Manager activo, su proveedor sale el primero en el editor
+(«Agent Manager (recomendado)») y es el que traen por defecto los agentes nuevos de chat y programados y las
+plantillas *Asistente* y *Escritor* (`PluginProvider.IsPreferred`, `PluginHost.Preferred`). Los CLI (Claude Code,
+Codex, Gemini) y los comandos personalizados quedan para los agentes de código, que necesitan trabajar en una
+carpeta; en el instalador su etapa es opcional.
+
+**Primera configuración.** La primera vez (sin `config.json`) se crean estos agentes; el primero es el principal:
 
 | ¿Hay algún CLI? | Agentes |
 |---|---|
-| Sí (el primero de Claude Code → Codex → Gemini) | **Codi** (código, con ese CLI, principal), **Doky** (chat, LLM de Agent Manager) y **Nube** (chat, con ese CLI) |
+| Sí (el primero de Claude Code → Codex → Gemini) | **Doky** (chat, LLM de Agent Manager, principal), **Codi** (código, con ese CLI) y **Nube** (chat, LLM de Agent Manager) |
 | No | **Doky** y **Nube**, los dos con el LLM de Agent Manager |
 
-Sin Agent Manager no hay Doky y Nube usa el CLI (Claude Code si no hay ninguno).
+Sin Agent Manager no hay Doky: Codi (si hay CLI) es el principal y Nube usa el CLI (Claude Code si no hay ninguno).
 
 **Actualizaciones**: esta rama se actualiza desde Azure DevOps (remoto `origin`); las copias sueltas se descargan
 de allí.

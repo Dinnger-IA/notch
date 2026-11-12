@@ -584,11 +584,6 @@ namespace AgentManagerNotch
         }
 
         /// <summary>
-        /// Pestaña para una sesión de Claude Code de la terminal: en un agente de código que use Claude Code (el que ya
-        /// tenga esa carpeta, el principal, el que se llame Codi… o el primero); si no hay ninguno se crea «codi-claude».
-        /// Devuelve null si el evento no trae carpeta o sesión.
-        /// </summary>
-        /// <summary>
         /// Turno terminado en una sesión de Codex de la terminal (opción notify): se añade lo pedido y la respuesta a
         /// su pestaña (en codi-codex si no hay agente de código de Codex) y se avisa.
         /// </summary>

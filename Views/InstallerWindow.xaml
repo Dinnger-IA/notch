@@ -44,7 +44,7 @@
             <Border x:Name="ToolsStage" Style="{StaticResource StageCard}" Padding="16,14,16,4">
                 <StackPanel>
                     <TextBlock Style="{StaticResource OptionHint}" Margin="0,0,0,10"
-                               Text="Los agentes de código trabajan con estos programas de línea de comandos (CLI). Instala los que vayas a usar; también puedes hacerlo después."/>
+                               Text="Opcional. Los agentes de código usan estos programas de línea de comandos (CLI); con Agent Manager, los de chat no los necesitan. Instala los que vayas a usar; también puedes hacerlo después."/>
                     <StackPanel x:Name="CliRows"/>
                     <Grid Style="{StaticResource OptionRow}" Margin="0,8,0,12">
                         <StackPanel Margin="0,0,56,0">

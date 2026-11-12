@@ -74,6 +74,11 @@ namespace AgentManagerNotch.Plugins
     {
         /// <summary>Si se ofrece en el editor para agentes nuevos (los que ya lo usan lo ven siempre).</summary>
         public Func<bool> IsAvailable { get; init; } = () => true;
+        /// <summary>
+        /// Proveedor principal: sale el primero en el editor y es el que usan por defecto los agentes nuevos de chat y
+        /// programados (los de código siguen con un CLI: necesitan trabajar en una carpeta).
+        /// </summary>
+        public Func<bool> IsPreferred { get; init; } = () => false;
         /// <summary>Texto bajo el selector del editor (en lugar de «Encontrado: …»).</summary>
         public string StatusText { get; init; } = "";
         /// <summary>Modelos que se sugieren en el editor ("" = el predeterminado).</summary>

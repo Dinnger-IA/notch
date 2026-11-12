@@ -47,7 +47,8 @@ namespace AgentManagerNotch.Views
         /// <summary>Color elegido (hex). Un agente antiguo puede tener uno que no está en la paleta: se conserva.</summary>
         private string _colorHex = "";
 
-        private record Preset(string Name, string Color, ProviderKind Provider, ApprovalMode Approval, string Prompt);
+        /// <param name="Provider">null: el proveedor principal (<see cref="PluginHost.Preferred"/>) o Claude Code si no hay.</param>
+        private record Preset(string Name, string Color, ProviderKind? Provider, ApprovalMode Approval, string Prompt);
         private static readonly Preset[] Presets =
         {
             new Preset("Revisor", "#64B5F6", ProviderKind.ClaudeCode, ApprovalMode.ReadOnly,
@@ -56,9 +57,9 @@ namespace AgentManagerNotch.Views
                 "Eres un ingeniero de software senior. Implementas cambios pequeños y verificables, ejecutas las pruebas y resumes lo que hiciste en 3 líneas."),
             new Preset("Investigador", "#BA68C8", ProviderKind.ClaudeCode, ApprovalMode.ReadOnly,
                 "Eres un investigador. Buscas en la web y en los archivos, contrastas fuentes y respondes con un resumen claro y enlaces."),
-            new Preset("Asistente", "#FFD54F", ProviderKind.ClaudeCode, ApprovalMode.ReadOnly,
+            new Preset("Asistente", "#FFD54F", null, ApprovalMode.ReadOnly,
                 "Eres un asistente personal. Ayudas a planificar el día, redactar mensajes y crear recordatorios. Respondes breve y amable."),
-            new Preset("Escritor", "#F06292", ProviderKind.ClaudeCode, ApprovalMode.ReadOnly,
+            new Preset("Escritor", "#F06292", null, ApprovalMode.ReadOnly,
                 "Eres un escritor y editor. Mejoras textos manteniendo la voz del autor, corriges ortografía y propones títulos."),
             new Preset("Local", "#B0BEC5", ProviderKind.Custom, ApprovalMode.ReadOnly,
                 "Eres un asistente útil y conciso.")
@@ -81,6 +82,12 @@ namespace AgentManagerNotch.Views
                 Approval = kindForNew == AgentKind.Scheduled ? ApprovalMode.ReadOnly : ApprovalMode.Ask,
                 SystemPrompt = kindForNew == AgentKind.Code ? ConfigStore.CodePrompt : ""
             };
+            // Agente nuevo de chat o programado: el proveedor principal (los de código necesitan un CLI)
+            if (profile == null && kindForNew != AgentKind.Code && PluginHost.Preferred is { } preferred)
+            {
+                _p.Provider = ProviderKind.Plugin;
+                _p.PluginProvider = preferred.Id;
+            }
             Title = isNew ? "Nuevo agente" : $"Editar · {_p.Name}";
             DefaultCheck.IsChecked = isDefault;
             DeleteButton.Visibility = isNew ? Visibility.Collapsed : Visibility.Visible;
@@ -125,16 +132,19 @@ namespace AgentManagerNotch.Views
                 Templates.Children.Add(b);
             }
 
+            // Proveedores de los plugins (los disponibles y, siempre, el que ya usa este agente): el principal va el
+            // primero, antes de los CLI
+            var current = ChoiceOf(_p.Provider, _p.PluginProvider);
+            var preferredId = PluginHost.Preferred?.Id;
+            foreach (var pp in PluginHost.Providers.OrderByDescending(pp => pp.Id == preferredId))
+            {
+                var choice = new ProviderChoice(ProviderKind.Plugin, pp.Id);
+                if (choice == current || pp.IsAvailable())
+                    ProviderBox.Items.Add(new ComboBoxItem { Content = pp.Id == preferredId ? $"{pp.Label} (recomendado)" : pp.Label, Tag = choice });
+            }
             foreach (ProviderKind k in Enum.GetValues<ProviderKind>())
                 if (k != ProviderKind.Plugin)
                     ProviderBox.Items.Add(new ComboBoxItem { Content = ProviderFactory.Label(k), Tag = new ProviderChoice(k) });
-            // Proveedores de los plugins: los disponibles y, siempre, el que ya usa este agente
-            var current = ChoiceOf(_p.Provider, _p.PluginProvider);
-            foreach (var pp in PluginHost.Providers)
-            {
-                var choice = new ProviderChoice(ProviderKind.Plugin, pp.Id);
-                if (choice == current || pp.IsAvailable()) ProviderBox.Items.Add(new ComboBoxItem { Content = pp.Label, Tag = choice });
-            }
             if (!ProviderBox.Items.Cast<ComboBoxItem>().Any(i => (ProviderChoice)i.Tag == current))
                 ProviderBox.Items.Add(new ComboBoxItem { Content = $"{_p.PluginProvider} (no disponible)", Tag = current });
             foreach (var (mode, label) in new[]
@@ -187,6 +197,9 @@ namespace AgentManagerNotch.Views
             if (SelectedKind == AgentKind.Scheduled && ApprovalBox.SelectedItem is ComboBoxItem a && (ApprovalMode)a.Tag == ApprovalMode.Ask)
                 ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == ApprovalMode.ReadOnly);
             if (SelectedKind == AgentKind.Code && string.IsNullOrWhiteSpace(PromptBox.Text)) PromptBox.Text = ConfigStore.CodePrompt;
+            // Un agente de código trabaja en una carpeta: necesita un CLI, no el proveedor principal (que no ve el disco)
+            if (_isNew && SelectedKind == AgentKind.Code && SelectedProvider == ProviderKind.Plugin)
+                ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderChoice)i.Tag == new ProviderChoice(ProviderKind.ClaudeCode));
             UpdateKindUi();
         }
 
@@ -302,7 +315,10 @@ namespace AgentManagerNotch.Views
         {
             if (string.IsNullOrWhiteSpace(NameBox.Text) || NameBox.Text == "Nuevo agente") NameBox.Text = t.Name;
             SetColor(t.Color);
-            ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderChoice)i.Tag == new ProviderChoice(t.Provider));
+            var want = t.Provider is ProviderKind k ? new ProviderChoice(k)
+                     : PluginHost.Preferred is { } pp ? new ProviderChoice(ProviderKind.Plugin, pp.Id)
+                     : new ProviderChoice(ProviderKind.ClaudeCode);
+            ProviderBox.SelectedItem = ProviderBox.Items.Cast<ComboBoxItem>().First(i => (ProviderChoice)i.Tag == want);
             ApprovalBox.SelectedItem = ApprovalBox.Items.Cast<ComboBoxItem>().First(i => (ApprovalMode)i.Tag == t.Approval);
             PromptBox.Text = t.Prompt;
             if (t.Provider == ProviderKind.Custom && string.IsNullOrWhiteSpace(CustomBox.Text)) CustomBox.Text = "ollama run llama3.2";

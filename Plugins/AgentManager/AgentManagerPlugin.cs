@@ -43,10 +43,12 @@ namespace AgentManagerNotch.Plugins.AgentManager
         {
             // Esta rama se actualiza desde Azure DevOps (las copias sueltas se descargan de allí)
             UpdateService.RepoUrl = RepoUrl;
-            registry.AddProvider(new PluginProvider(ProviderId, "Agent Manager", () => new AgentManagerProvider())
+            registry.AddProvider(new PluginProvider(ProviderId, "Agent Manager", () => new AgentManagerProvider(this))
             {
                 IsAvailable = () => PluginHost.Host?.Get(UseKey, true) ?? true,
-                StatusText = "✓ Usa el LLM de Agent Manager con tu sesión (no necesita CLI)."
+                // Con Agent Manager activo es el proveedor principal: los CLI quedan para los agentes de código
+                IsPreferred = () => true,
+                StatusText = "✓ Recomendado: usa el LLM de Agent Manager con tu sesión (no necesita CLI)."
             });
         }
 
@@ -76,21 +78,15 @@ namespace AgentManagerNotch.Plugins.AgentManager
 
         // =============================================================== primera configuración
         /// <summary>
-        /// Agentes iniciales. Con algún CLI instalado: Codi (código), Doky (chat con el LLM de Agent Manager) y
-        /// Nube (chat), Codi y Nube con ese CLI. Sin CLI: Doky y Nube, los dos con el LLM de Agent Manager.
-        /// Sin Agent Manager no hay Doky y Nube usa el CLI (Claude Code si no hay ninguno).
+        /// Agentes iniciales. Con Agent Manager: Doky (el principal) y Nube, los dos con el LLM de Agent Manager, y
+        /// Codi (código) con el primer CLI instalado si hay alguno. Sin Agent Manager: Codi (si hay CLI) y Nube con
+        /// el CLI (Claude Code si no hay ninguno). El primero de la lista queda como principal.
         /// </summary>
         public void ConfigureDefaultAgents(List<AgentProfile> agents, AppSettings settings)
         {
             bool useAm = EnabledIn(settings);
             var cli = FirstInstalledCli();
             agents.Clear();
-            if (cli is ProviderKind c)
-            {
-                var codi = ConfigStore.NewCodeAgent(null, "Codi", "#4DD0A1");
-                codi.Provider = c;
-                agents.Add(codi);
-            }
             if (useAm) agents.Add(new AgentProfile
             {
                 Name = "Doky", ColorHex = "#64B5F6", Kind = AgentKind.Interactive,
@@ -99,10 +95,16 @@ namespace AgentManagerNotch.Plugins.AgentManager
                 SystemPrompt = "Eres Doky, el asistente de Agent Manager. Respondes en español, de forma breve y clara. " +
                                "Ayudas con preguntas rápidas, redacción, ideas y recordatorios."
             });
+            if (cli is ProviderKind c)
+            {
+                var codi = ConfigStore.NewCodeAgent(null, "Codi", "#4DD0A1");
+                codi.Provider = c;
+                agents.Add(codi);
+            }
             var nube = new AgentProfile
             {
                 Name = "Nube", ColorHex = "#9C8CFF", Kind = AgentKind.Interactive,
-                Provider = cli ?? (useAm ? ProviderKind.Plugin : ProviderKind.ClaudeCode),
+                Provider = useAm ? ProviderKind.Plugin : cli ?? ProviderKind.ClaudeCode,
                 Approval = ApprovalMode.ReadOnly,
                 SystemPrompt = "Eres Nube, un asistente personal de planificación. Ayudas a organizar el día, dividir tareas grandes en pasos y creas recordatorios cuando el usuario lo pide."
             };
@@ -162,6 +164,9 @@ namespace AgentManagerNotch.Plugins.AgentManager
     // =====================================================================
     public class AgentManagerProvider : ICliProvider
     {
+        private readonly AgentManagerPlugin _plugin;
+        public AgentManagerProvider(AgentManagerPlugin plugin) => _plugin = plugin;
+
         // Límites del ruteador de Agent Manager para los archivos adjuntos
         private const int MaxFiles = 5;
         private const long MaxFileBytes = 10L * 1024 * 1024, MaxTotalBytes = 30L * 1024 * 1024;
@@ -170,6 +175,9 @@ namespace AgentManagerNotch.Plugins.AgentManager
 
         public LaunchSpec Build(AgentProfile p, string prompt, string? sessionId, RunContext ctx)
         {
+            // Sin Agent Manager (elegido en el instalador) un agente guardado con este proveedor no llama al servidor
+            if (!_plugin.Enabled)
+                throw new InvalidOperationException("Agent Manager está desactivado (⚙ Configuración → Sesión). Actívalo o cambia el proveedor de este agente.");
             // Sin sesión en el servidor: se manda la conversación reciente en cada petición.
             var messages = new List<object>();
             if (!string.IsNullOrWhiteSpace(ctx.FullSystemPrompt)) messages.Add(new { role = "system", content = ctx.FullSystemPrompt });
@@ -179,7 +187,7 @@ namespace AgentManagerNotch.Plugins.AgentManager
                 messages.Add(new { role = m.Role == ChatRole.User ? "user" : "assistant", content = m.Role == ChatRole.User ? WithoutPaths(m.Text) : m.Text });
 
             // El servidor no ve el disco: los archivos adjuntos del mensaje se suben en «attachments»
-            var text = ChatAttachments.Split(prompt, out var files);
+            var text = ChatAttachments.SplitForUpload(prompt, out var files);
             messages.Add(new { role = "user", content = text != "" ? text : "Revisa los archivos adjuntos." });
             var attachments = ReadAttachments(files);
             if (attachments.Count > 0) Log.Info($"Agent Manager: {attachments.Count} archivo(s) adjunto(s)");
@@ -231,6 +239,8 @@ namespace AgentManagerNotch.Plugins.AgentManager
                 case "result":
                     var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == JsonValueKind.True;
                     var err = ProviderFactory.Str(root, "error");
+                    // Token rechazado: se cierra la sesión del notch para que vuelva a pedirla
+                    if (!ok && root.TryGetProperty("auth", out var a) && a.ValueKind == JsonValueKind.True) _plugin.Auth.Invalidate();
                     yield return new ResultEvent(ok, ok ? null : (err != "" ? err : "Agent Manager no respondió."), null);
                     break;
             }

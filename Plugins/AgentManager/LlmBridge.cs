@@ -26,12 +26,13 @@ namespace AgentManagerNotch.Plugins.AgentManager
     public static class LlmBridge
     {
         public const string Endpoint = AuthService.BaseUrl + "/api/notch/notch-agent";
+        private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(5);
 
         public static int Run()
         {
             using var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
             void Emit(object o) => stdout.WriteLine(JsonSerializer.Serialize(o));
-            int Fail(string error) { Emit(new { type = "result", ok = false, error }); return 1; }
+            int Fail(string error, bool auth = false) { Emit(new { type = "result", ok = false, error, auth }); return 1; }
 
             try
             {
@@ -46,7 +47,9 @@ namespace AgentManagerNotch.Plugins.AgentManager
 
                 using var http = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
                 // AMN_LLM_ENDPOINT: solo para desarrollo (probar contra un servidor local)
-                var url = Environment.GetEnvironmentVariable("AMN_LLM_ENDPOINT") is { Length: > 0 } dev ? dev : Endpoint;
+                // (solo a localhost: no se manda el token a otro servidor por una variable de entorno)
+                var url = Environment.GetEnvironmentVariable("AMN_LLM_ENDPOINT") is { Length: > 0 } dev
+                          && Uri.TryCreate(dev, UriKind.Absolute, out var devUri) && devUri.IsLoopback ? dev : Endpoint;
                 using var req = new HttpRequestMessage(HttpMethod.Post, url)
                 {
                     Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
@@ -59,9 +62,9 @@ namespace AgentManagerNotch.Plugins.AgentManager
                 if (!res.IsSuccessStatusCode)
                 {
                     var detail = ReadError(res);
-                    return Fail(res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-                        ? "La sesión de Agent Manager no es válida. Vuelve a iniciar sesión en el notch."
-                        : $"Agent Manager respondió {(int)res.StatusCode}{(detail != "" ? ": " + detail : "")}");
+                    return res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                        ? Fail("La sesión de Agent Manager caducó o no es válida. Vuelve a iniciar sesión en el notch.", auth: true)
+                        : Fail($"Agent Manager respondió {(int)res.StatusCode}{(detail != "" ? ": " + detail : "")}");
                 }
 
                 using var stream = res.Content.ReadAsStream();
@@ -89,11 +92,20 @@ namespace AgentManagerNotch.Plugins.AgentManager
                     received.Append(text);
                     Emit(new { type = "delta", text });
                 }
+                // Sin nada del servidor en IdleTimeout se corta la conexión (si no, «Escribiendo…» para siempre)
+                // ponytail: 5 min por si una herramienta del ruteador tarda sin mandar nada; bajar si el servidor manda keep-alive
+                bool idle = false;
+                using var watchdog = new System.Threading.Timer(_ => { idle = true; try { res.Dispose(); } catch { } }, null, IdleTimeout, System.Threading.Timeout.InfiniteTimeSpan);
                 string? line;
-                while ((line = reader.ReadLine()) != null)
+                while (true)
                 {
+                    try { line = reader.ReadLine(); }
+                    catch (Exception) when (idle) { return Fail($"Agent Manager no respondió en {IdleTimeout.TotalMinutes:0} minutos."); }
+                    if (line == null) break;
+                    watchdog.Change(IdleTimeout, System.Threading.Timeout.InfiniteTimeSpan);
                     if (!line.StartsWith("data:")) continue;
-                    var data = line[5..].TrimStart();
+                    // SSE: se quita solo el espacio que sigue a «data:» (los demás son parte del texto)
+                    var data = line.StartsWith("data: ") ? line[6..] : line[5..];
                     if (data.Trim() == "[DONE]") break;
                     if (data.Trim() == "") continue;
                     JsonNode? chunk;

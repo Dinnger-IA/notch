@@ -354,7 +354,7 @@ namespace AgentManagerNotch.Providers
             return new LaunchSpec { Psi = psi, StdinText = prompt };
         }
 
-        private static string TomlString(string s)
+        internal static string TomlString(string s)
         {
             var sb = new StringBuilder("\"");
             foreach (var c in s)

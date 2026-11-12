@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AgentManagerNotch.Models;
 using AgentManagerNotch.Providers;
@@ -148,12 +150,8 @@ namespace AgentManagerNotch.Services
     }
 
     /// <summary>
-    /// La opción <c>notify</c> de Codex (~/.codex/config.toml): Codex ejecuta ese programa al terminar cada turno con un
-    /// JSON como último argumento. Solo admite uno, así que si ya lo usa otra aplicación (p. ej. la app de Codex) no se
-    /// toca.
-    /// </summary>
-    /// <summary>
-    /// La opción <c>notify</c> de ~/.codex/config.toml apuntando al notch. Si otra app ya la usaba, su valor se guarda
+    /// La opción <c>notify</c> de ~/.codex/config.toml apuntando al notch: Codex ejecuta ese programa al terminar cada
+    /// turno con un JSON como último argumento. Si otra app ya la usaba, su valor se guarda
     /// en <see cref="PreviousPath"/> y el notch le reenvía cada aviso (<see cref="ForwardToPrevious"/>); al quitarlo se
     /// restaura.
     /// </summary>
@@ -185,31 +183,86 @@ namespace AgentManagerNotch.Services
             return false;
         }
 
-        private static bool IsNotifyLine(string l) => l.TrimStart().StartsWith("notify", StringComparison.Ordinal) && l.Contains('=');
+        // La clave puede ir entre comillas ("notify" = …), pero no vale notify_algo
+        private static readonly Regex NotifyKey = new(@"^\s*([""']?)notify\1\s*=");
+
+        /// <summary>
+        /// Líneas que ocupa <c>notify = …</c> antes de la primera tabla. El array puede repartirse en varias líneas: se
+        /// busca su <c>]</c> de cierre saltando cadenas y comentarios. Start = -1 si no está; Count = -1 si el array
+        /// no se cierra antes de la primera tabla (entonces no se toca nada).
+        /// </summary>
+        private static (int Start, int Count) FindNotify(List<string> lines)
+        {
+            int top = lines.FindIndex(l => l.TrimStart().StartsWith('['));
+            if (top < 0) top = lines.Count;
+            int start = lines.FindIndex(0, top, NotifyKey.IsMatch);
+            if (start < 0) return (-1, 0);
+            int depth = 0;
+            for (int i = start; i < top; i++)
+            {
+                var l = lines[i];
+                int c = i == start ? l.IndexOf('=') + 1 : 0;
+                char q = '\0';
+                for (; c < l.Length; c++)
+                {
+                    char ch = l[c];
+                    if (q != '\0')
+                    {
+                        if (q == '"' && ch == '\\') c++;
+                        else if (ch == q) q = '\0';
+                    }
+                    else if (ch is '"' or '\'') q = ch;
+                    else if (ch == '#') break;
+                    else if (ch == '[') depth++;
+                    else if (ch == ']' && --depth == 0) return (start, i - start + 1);
+                    else if (depth == 0 && !char.IsWhiteSpace(ch)) return (start, 1); // no es un array: una línea
+                }
+            }
+            return depth == 0 ? (start, 1) : (start, -1);
+        }
+
+        /// <summary>El valor en una sola línea, sin comentarios (un # dentro de una cadena se respeta).</summary>
+        private static string Joined(List<string> lines, (int Start, int Count) at) =>
+            string.Join(" ", lines.GetRange(at.Start, at.Count).Select(l => WithoutComment(l).Trim()));
+
+        private static string WithoutComment(string l)
+        {
+            char q = '\0';
+            for (int c = 0; c < l.Length; c++)
+            {
+                char ch = l[c];
+                if (q != '\0') { if (q == '"' && ch == '\\') c++; else if (ch == q) q = '\0'; }
+                else if (ch is '"' or '\'') q = ch;
+                else if (ch == '#') return l[..c];
+            }
+            return l;
+        }
 
         public static (CliSetup.HookResult, string) Install(string exe)
         {
             var path = ConfigPath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : new();
-            int firstTable = lines.FindIndex(l => l.TrimStart().StartsWith('['));
-            int top = firstTable < 0 ? lines.Count : firstTable;
-            int notify = lines.FindIndex(0, top, IsNotifyLine);
-            // Cadena literal de TOML (comillas simples): sin escapar las barras de la ruta
-            var line = $"notify = ['{exe}', '{Arg}']";
+            var notify = FindNotify(lines);
+            if (notify.Count < 0)
+                return (CliSetup.HookResult.Failed, "No se tocó ~/.codex/config.toml: su opción «notify» no se puede leer (el array no se cierra).");
+            // Cadenas básicas de TOML (escapadas): una ruta con comilla simple rompería una literal
+            var line = $"notify = [{CodexProvider.TomlString(exe)}, {CodexProvider.TomlString(Arg)}]";
             string chained = "";
-            if (notify >= 0)
+            if (notify.Start >= 0)
             {
-                if (lines[notify] == line) return (CliSetup.HookResult.AlreadyConnected, "Avisos de la terminal ya conectados.");
-                if (!lines[notify].Contains(Arg))
+                var current = Joined(lines, notify);
+                if (current == line) return (CliSetup.HookResult.AlreadyConnected, "Avisos de la terminal ya conectados.");
+                if (!current.Contains(Arg))
                 {
                     // Otra app usa notify: se guarda para reenviarle los avisos
                     Directory.CreateDirectory(ConfigStore.Root);
-                    File.WriteAllText(PreviousPath, lines[notify].Trim());
+                    File.WriteAllText(PreviousPath, current);
                     chained = " Se siguen reenviando a la app que ya los usaba.";
                     Log.Info("Codex: notify encadenado con el anterior");
                 }
-                lines[notify] = line;
+                lines.RemoveRange(notify.Start, notify.Count);
+                lines.Insert(notify.Start, line);
             }
             else lines.Insert(0, line);
             if (File.Exists(path)) File.Copy(path, path + ".agent-manager-notch-backup", overwrite: true);
@@ -223,10 +276,11 @@ namespace AgentManagerNotch.Services
             var path = ConfigPath;
             if (!File.Exists(path)) return;
             var lines = File.ReadAllLines(path).ToList();
-            int i = lines.FindIndex(l => IsNotifyLine(l) && l.Contains(Arg));
-            if (i < 0) return;
+            var notify = FindNotify(lines);
+            if (notify.Start < 0 || notify.Count < 0 || !Joined(lines, notify).Contains(Arg)) return;
             var previous = File.Exists(PreviousPath) ? File.ReadAllText(PreviousPath).Trim() : "";
-            if (previous.Length > 0) lines[i] = previous; else lines.RemoveAt(i);
+            lines.RemoveRange(notify.Start, notify.Count);
+            if (previous.Length > 0) lines.Insert(notify.Start, previous);
             File.WriteAllLines(path, lines);
             try { File.Delete(PreviousPath); } catch { }
         }
@@ -241,8 +295,16 @@ namespace AgentManagerNotch.Services
                 if (!File.Exists(PreviousPath)) return;
                 var cmd = ParseArray(File.ReadAllText(PreviousPath));
                 if (cmd.Count == 0 || cmd[0].Contains(Arg)) return;
-                var psi = new ProcessStartInfo(cmd[0]) { UseShellExecute = false, CreateNoWindow = true };
-                foreach (var a in cmd.Skip(1)) psi.ArgumentList.Add(a);
+                // Como los CLI: .cmd de npm → node, .ps1 → powershell (con UseShellExecute=false solo arrancaría un .exe)
+                var r = CliResolver.Resolve(cmd[0]) ?? new CliResolver.Resolved(cmd[0], new());
+                // Nunca por cmd.exe: el JSON trae texto del usuario y del modelo, y cmd interpretaría " & | ^ %
+                if (string.Equals(Path.GetFileName(r.FileName), "cmd.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.Info("Codex: el notify anterior es un .cmd/.bat (no de npm); no se le reenvía el aviso por seguridad");
+                    return;
+                }
+                var psi = new ProcessStartInfo(r.FileName) { UseShellExecute = false, CreateNoWindow = true };
+                foreach (var a in r.PrefixArgs.Concat(cmd.Skip(1))) psi.ArgumentList.Add(a);
                 psi.ArgumentList.Add(json);
                 Process.Start(psi)?.Dispose();
             }
@@ -250,9 +312,9 @@ namespace AgentManagerNotch.Services
         }
 
         /// <summary>Cadenas del array TOML de <c>notify = [...]</c> (básicas con escapes o literales con comillas simples).</summary>
-        private static System.Collections.Generic.List<string> ParseArray(string line)
+        private static List<string> ParseArray(string line)
         {
-            var result = new System.Collections.Generic.List<string>();
+            var result = new List<string>();
             int i = line.IndexOf('[');
             if (i < 0) return result;
             while (++i < line.Length)

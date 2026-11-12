@@ -30,6 +30,8 @@ namespace AgentManagerNotch.Services
         private bool _cancelled;
         private readonly DispatcherTimer _settleTimer;
         private readonly List<ApprovalRequest> _approvals = new();
+        /// <summary>Turnos de la terminal que llegaron mientras la pestaña trabajaba: se añaden al terminar.</summary>
+        private readonly List<Action> _afterRun = new();
 
         public AgentProfile Profile { get; private set; }
         public ObservableCollection<ChatMessage> Messages { get; } = new();
@@ -413,11 +415,17 @@ namespace AgentManagerNotch.Services
 
         /// <summary>
         /// Un turno de una sesión de Codex de la terminal (su notify no trae la transcripción: solo lo pedido y la
-        /// respuesta): se añade a la pestaña y queda lista para continuar esa sesión desde el notch.
+        /// respuesta): se añade a la pestaña y queda lista para continuar esa sesión desde el notch. Si la pestaña está
+        /// trabajando, se añade al terminar.
         /// </summary>
-        public bool AppendTerminalTurn(string sessionId, IEnumerable<string> asked, string answer, string cli)
+        public void AppendTerminalTurn(string sessionId, IEnumerable<string> asked, string answer, string cli)
         {
-            if (IsBusy) return false;
+            if (IsBusy)
+            {
+                var list = asked.ToList();
+                _afterRun.Add(() => AppendTerminalTurn(sessionId, list, answer, cli));
+                return;
+            }
             if (SessionId != sessionId || !Messages.Any(IsTerminalNotice))
                 Messages.Add(new ChatMessage(ChatRole.Notice, TerminalNotice(cli)));
             SessionId = sessionId;
@@ -427,7 +435,6 @@ namespace AgentManagerNotch.Services
             SaveHistory();
             RaiseOutputChanged();
             RaiseOverview();
-            return true;
         }
 
         /// <summary>
@@ -736,6 +743,12 @@ namespace AgentManagerNotch.Services
             RaiseOutputChanged();
             RaiseOverview();
             TurnFinished?.Invoke(this, new TurnResult(success, _cancelled, Summarize(lastAgent), DateTime.Now - started, fromSchedule, lastAgent));
+
+            // Turnos de la terminal que llegaron mientras trabajaba (después del resumen de este turno)
+            var pending = _afterRun.ToList();
+            _afterRun.Clear();
+            foreach (var a in pending)
+                try { a(); } catch (Exception ex) { Log.Error("Añadir un turno de la terminal", ex); }
 
             // Siguiente tarea de la cola
             if (!_queuePaused && PendingTasks.Count > 0)
