@@ -354,6 +354,8 @@ namespace AgentManagerNotch.Models
         public bool SeededCodeAgent { get; set; }
         /// <summary>Última versión con la que se abrió: si al arrancar la versión es mayor, se muestran sus notas.</summary>
         public string? LastSeenVersion { get; set; }
+        /// <summary>Carpetas donde los agentes pueden editar archivos sin preguntar («Permitir en esta carpeta»).</summary>
+        public List<string> AllowedEditFolders { get; set; } = new();
         /// <summary>Ajustes de los plugins (claves propias de «Settings»; se conservan aunque falte el plugin).</summary>
         [JsonExtensionData]
         public Dictionary<string, System.Text.Json.JsonElement>? Extra { get; set; }

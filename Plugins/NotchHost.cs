@@ -65,6 +65,9 @@ namespace AgentManagerNotch.Plugins
         /// <summary>Pregunta Sí/No sin que el notch se cierre mientras tanto.</summary>
         public bool Confirm(string message) => _app.Notch?.Confirm(message) ?? false;
 
+        /// <summary>Abre un menú sin que el notch se cierre mientras está abierto.</summary>
+        public void OpenMenu(System.Windows.Controls.ContextMenu menu) => _app.Notch?.OpenMenu(menu);
+
         /// <summary>Vuelve a cargar la vista de configuración si está abierta.</summary>
         public void RefreshSettings() => _app.Notch?.RefreshPluginSettings();
 

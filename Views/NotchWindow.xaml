@@ -809,6 +809,9 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Style="{StaticResource PillButton}" Content="Denegar" Click="Deny_Click" Margin="0,0,6,0"/>
                                     <Button Style="{StaticResource PillButton}" Content="Permitir siempre" Click="AllowAlways_Click" Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource PillButton}" Content="Permitir en esta carpeta" Click="AllowFolder_Click" Margin="0,0,6,0"
+                                            ToolTip="{Binding PendingApproval.Folder, Mode=OneWay}"
+                                            Visibility="{Binding PendingApproval.Folder, Converter={StaticResource NullToVis}, FallbackValue=Collapsed}"/>
                                     <Button Style="{StaticResource PillButton}" Content="Permitir" Click="Allow_Click"
                                             Background="{StaticResource AlertBorder}" Foreground="#1A1300" FontWeight="SemiBold"/>
                                 </StackPanel>
@@ -1002,6 +1005,27 @@
                                                    ToolTip="Usa la opción notify de ~/.codex/config.toml; si ya la usaba otra app, se le siguen pasando los avisos"/>
                                         <CheckBox x:Name="SetCodexNotify" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="SettingToggle_Click"/>
                                     </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Carpetas donde los agentes editan sin preguntar -->
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingsTitle}" Text="EDICIÓN SIN PREGUNTAR"/>
+                                    <TextBlock x:Name="SetFoldersEmpty" FontSize="11.5" Foreground="#9A9AA8" TextWrapping="Wrap"
+                                               Text="Ninguna carpeta. Usa «Permitir en esta carpeta» cuando un agente pida editar un archivo."/>
+                                    <ItemsControl x:Name="SetFolders">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Style="{StaticResource SettingsRow}">
+                                                    <TextBlock Style="{StaticResource SettingsLabel}" Text="{Binding}" ToolTip="{Binding}"
+                                                               TextTrimming="CharacterEllipsis" Margin="0,0,70,0"/>
+                                                    <Button Style="{StaticResource SettingsButton}" Content="Quitar" HorizontalAlignment="Right"
+                                                            Tag="{Binding}" Click="SetFolderRemove_Click"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

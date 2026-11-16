@@ -697,7 +697,7 @@ namespace AgentManagerNotch.Views
         /// Abre un menú con la fuente normal (si no, hereda la de iconos del botón) y evita que el panel
         /// se recoja mientras está abierto.
         /// </summary>
-        private void OpenMenu(ContextMenu m)
+        internal void OpenMenu(ContextMenu m)
         {
             m.FontFamily = (FontFamily)FindResource("UiFont");
             m.FontSize = 13;
@@ -1131,6 +1131,8 @@ namespace AgentManagerNotch.Views
             SetCloseOutside.IsChecked = st.CloseOnClickOutsideOnly;
             SetCloseLeave.IsChecked = !st.CloseOnClickOutsideOnly;
             SetStartup.IsChecked = NotificationService.IsStartupEnabled();
+            SetFolders.ItemsSource = st.AllowedEditFolders.ToList();
+            SetFoldersEmpty.Visibility = st.AllowedEditFolders.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             RefreshPluginCards();
             RefreshUpdateInfo();
         }
@@ -1182,6 +1184,15 @@ namespace AgentManagerNotch.Views
                     break;
             }
             AppRef.Store.Save();
+        }
+
+        private void SetFolderRemove_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is not string folder) return;
+            AppRef.Store.Config.Settings.AllowedEditFolders.RemoveAll(f => string.Equals(f, folder, StringComparison.OrdinalIgnoreCase));
+            AppRef.Store.Save();
+            RefreshSettings();
+            Resize();
         }
 
         private void SetAgentEdit_Click(object sender, RoutedEventArgs e) { if (_settingsTarget != null) OpenEditor(_settingsTarget); }
@@ -1553,6 +1564,7 @@ namespace AgentManagerNotch.Views
         private void Allow_Click(object sender, RoutedEventArgs e) => _selected?.Decide(ApprovalDecision.Allow);
         private void AllowAlways_Click(object sender, RoutedEventArgs e) => _selected?.Decide(ApprovalDecision.AllowAlways);
         private void Deny_Click(object sender, RoutedEventArgs e) => _selected?.Decide(ApprovalDecision.Deny);
+        private void AllowFolder_Click(object sender, RoutedEventArgs e) => _selected?.Decide(ApprovalDecision.AllowFolder);
 
         // =============================================================== arrastrar carpetas y archivos
         private static string[] DroppedPaths(DragEventArgs e) =>

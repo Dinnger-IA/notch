@@ -358,7 +358,8 @@ Views/NotchWindow.Plugins.cs lo que el notch monta de los plugins (puertas, tarj
 ## Plugins de la rama agent-manager
 
 Esta rama es `main` más dos plugins (ver *Plugins*), que viven solo aquí y en Azure DevOps (nunca en GitHub):
-`Plugins/AgentManager/` (todo lo que depende de Agent Manager) y `Plugins/Voz/` (voz con el servidor interno).
+`Plugins/AgentManager/` (todo lo que depende de Agent Manager), `Plugins/Archivos/` (archivos del equipo para los
+agentes sin CLI) y `Plugins/Voz/` (voz con el servidor interno).
 No tocan los archivos comunes: si necesitan algo nuevo, se añade a la API de plugins en `main`.
 
 ### Agent Manager (`Plugins/AgentManager/`)
@@ -420,6 +421,23 @@ PDF, Word y PowerPoint (`.docx`, `.pptx`; no los `.doc`/`.ppt` antiguos), hojas 
 código; si no puede leer uno, el chat muestra el motivo. En los mensajes anteriores que se reenvían, los archivos
 quedan solo por su nombre.
 
+**Archivos del equipo.** Con el plugin *Archivos* activo (ver más abajo), el proveedor añade sus instrucciones al
+mensaje `system` y avisa al puente con `"archivos": true` en stdin (no se manda al servidor): el puente oculta los
+bloques del chat, los ejecuta y vuelve a preguntar al ruteador con el resultado en la misma conversación
+(`conversationId`), hasta 25 veces por mensaje.
+
+**Historial y agentes del servidor** (`ServerCatalog.cs`). Con la sesión del usuario, el notch lee del servidor:
+
+- **Historial**: el botón de reloj junto a «Adjuntar» lista las últimas 20 conversaciones del ruteador
+  (`GET /api/chat/conversations`) y, al elegir una, carga sus mensajes en la pestaña
+  (`GET /api/chat/conversations/:id`, `AgentSession.ResumeConversation`); el siguiente mensaje la continúa. No se
+  muestran los bloques de archivos ni los resultados que el notch devolvió al agente.
+- **Agentes**: ⚙ Configuración → *Agentes de Agent Manager* lista los agentes que permiten los roles del usuario
+  (`GET /api/agents/for-chat`). «Crear mochi» añade un agente de chat cuyas instrucciones piden al ruteador delegar
+  siempre en ese agente (`agent_<slug>`); el endpoint sigue siendo el del ruteador.
+
+Comprobación: `AgentManagerNotch.exe --probar-agent-manager`.
+
 **Agent Manager es el proveedor principal.** Con Agent Manager activo, su proveedor sale el primero en el editor
 («Agent Manager (recomendado)») y es el que traen por defecto los agentes nuevos de chat y programados y las
 plantillas *Asistente* y *Escritor* (`PluginProvider.IsPreferred`, `PluginHost.Preferred`). Los CLI (Claude Code,
@@ -437,6 +455,50 @@ Sin Agent Manager no hay Doky: Codi (si hay CLI) es el principal y Nube usa el C
 
 **Actualizaciones**: esta rama se actualiza desde Azure DevOps (remoto `origin`); las copias sueltas se descargan
 de allí.
+
+### Archivos del equipo (`Plugins/Archivos/`)
+
+Herramientas de archivos para los agentes que no tienen las de un CLI (hoy, los del LLM de Agent Manager, cuyo
+servidor no ve el disco). Es un plugin aparte que se **activa o desactiva** en ⚙ Configuración → *Archivos del
+equipo* (`Settings.UseLocalFiles`, activo por defecto): desactivado, el agente no recibe las instrucciones y no se
+ejecuta ningún bloque. Los agentes con Claude Code, Codex o Gemini usan las herramientas de su CLI.
+
+**Bloques** (`LocalFiles.cs`). El ruteador no admite herramientas del cliente, así que el agente las pide con
+bloques de texto en su respuesta:
+`[[leer: ruta]]`, `[[listar: carpeta]]`, `[[buscar: carpeta\**\*.xlsx]]` (por nombre, con `*`, `?` y `**`),
+`[[buscar_texto: carpeta | texto]]` (líneas que lo contienen), `[[abrir: ruta]]` (abre un documento con su
+programa: solo documentos, nunca programas ni scripts, y siempre con permiso), `[[escribir: ruta]]…[[/escribir]]` (archivo entero) y
+`[[editar: ruta]]…[[/editar]]` (pares `<<<<<<< BUSCAR` / `=======` / `>>>>>>> REEMPLAZAR`; el texto buscado debe
+aparecer una sola vez). El puente `--llm` oculta los bloques del chat, los ejecuta y vuelve a preguntar al ruteador
+con el resultado en la misma conversación (`conversationId`), hasta 25 veces por mensaje. Leer, listar y buscar dentro de
+la carpeta de trabajo del agente no preguntan; **escribir, editar y leer fuera de ella piden permiso** (lo leído
+viaja al servidor) por la misma tarjeta que los CLI
+(*Permitir* / *Permitir en esta carpeta* / *Denegar*). **Los cambios preguntan siempre**, en cualquier modo del
+agente (salvo lo que el usuario ya autorizó en la tarjeta con *Permitir siempre* o *Permitir en esta carpeta*);
+*Solo lectura* no deja modificar nada, y *Editar archivos solo* y *Automático* solo evitan la pregunta al leer.
+Los agentes de chat que estaban en *Solo lectura* pasan una vez a *Preguntar* al actualizar. Si el notch no
+responde, no se lee ni se cambia nada. La carpeta de datos del notch (`%APPDATA%\AgentManagerNotch`, salvo
+`workspace`) nunca se puede leer ni modificar. Texto: hasta 100 000 caracteres por lectura (sin BOM se asume UTF-8). `[[leer]]` de un PDF, `.pptx`, `.xls`,
+`.ods` o imagen lo sube como adjunto del siguiente mensaje (5 por respuesta, 10 MB cada uno).
+
+**Excel y Word sin subirlos** (`OfficeFiles.cs`, sin dependencias: son un ZIP con XML). `[[leer]]` de un `.xlsx`
+/`.xlsm` devuelve cada hoja como CSV con el número de fila delante (`12| a,b,c`; fechas como `yyyy-MM-dd`) y de
+un `.docx`, sus párrafos (títulos con `#`). `[[editar: libro.xlsx]]` cambia celdas, una por línea
+(`Hoja1!B2 = 150`, `Hoja1!C2 = =SUM(A2:B2)`, vacío borra): conserva el formato de la celda y el resto del libro, y
+Excel recalcula las fórmulas al abrirlo (hasta entonces se leen como fórmula). `[[editar: doc.docx]]` usa los
+pares BUSCAR/REEMPLAZAR dentro de un párrafo y conserva el formato de lo que no toca. `[[escribir]]` crea un
+libro (`## Hoja: Nombre` + CSV) o un documento (un párrafo por línea, `#` para títulos) nuevo, sin formato. No
+inserta ni borra filas u hojas, no da formato y no lee encabezados ni pies de Word.
+
+**Gráficas de Excel.** Una línea `grafica: tipo | título | Hoja1!A1:C8 | E2` dentro de `[[editar]]` (o dentro de
+una hoja al `[[escribir]]`) añade una gráfica de `columnas`, `barras`, `lineas` o `pastel`: encabezados en la
+primera fila del rango, categorías en la primera columna y una serie por cada columna siguiente; la celda final
+(opcional) es donde se coloca. Funciona también en libros que ya tienen gráficas.
+
+**Reportes como dashboard HTML.** Cuando se pide un reporte, informe o dashboard sin decir el formato, el agente
+crea un único `.html` autocontenido (CSS, JavaScript y gráficas SVG en línea, sin cargar nada de internet) en
+la carpeta que el usuario indique (si no la dijo, se la pregunta antes) y lo abre; si se pide en Excel, crea el `.xlsx` con los datos y sus gráficas.
+Comprobación: `AgentManagerNotch.exe --probar-archivos`.
 
 ### Voz (`Plugins/Voz/`)
 

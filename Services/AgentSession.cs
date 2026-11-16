@@ -381,6 +381,25 @@ namespace AgentManagerNotch.Services
             SaveHistory();
         }
 
+        /// <summary>
+        /// Carga en esta pestaña una conversación guardada por el proveedor (su historial) y la deja lista para
+        /// continuarla: el siguiente mensaje usa su id. No hace nada si el agente está trabajando.
+        /// </summary>
+        public bool ResumeConversation(string sessionId, IEnumerable<ChatMessage> messages, string notice)
+        {
+            if (IsBusy) return false;
+            SessionId = sessionId;
+            Messages.Clear();
+            AlwaysAllow.Clear();
+            Messages.Add(new ChatMessage(ChatRole.Notice, notice));
+            foreach (var m in messages) Messages.Add(m);
+            LastActivity = DateTime.Now;
+            SaveHistory();
+            RaiseOutputChanged();
+            RaiseOverview();
+            return true;
+        }
+
         private const string TerminalNoticePrefix = "💻 Sesión de ";
         public static string TerminalNotice(string cli = "Claude Code") =>
             $"{TerminalNoticePrefix}{cli} de tu terminal. Si escribes aquí, se continúa esa misma sesión.";
@@ -770,11 +789,13 @@ namespace AgentManagerNotch.Services
         /// <summary>Llamado desde el ApprovalServer (hilo UI). Devuelve la decisión cuando el usuario elige.</summary>
         public Task<ApprovalDecision> RequestApproval(ApprovalRequest req)
         {
-            if (AlwaysAllow.Contains(req.Tool))
+            var granted = _store.Config.Settings.AllowedEditFolders;
+            if (AlwaysAllow.Contains(req.Tool) || (req.Path != null && HookBridge.IsInGrantedFolder(req.Path, granted)))
             {
                 LogPermission(req, ApprovalDecision.AllowAlways);
                 return Task.FromResult(ApprovalDecision.Allow);
             }
+            req.Folder = FolderToGrant(req.Path);
             _approvals.Add(req);
             if (PendingApproval == null) ShowNextApproval();
             return req.Tcs.Task;
@@ -797,11 +818,37 @@ namespace AgentManagerNotch.Services
             }
         }
 
+        /// <summary>Carpeta que autoriza «Permitir en esta carpeta»: el workspace si el archivo está dentro; si no, la del archivo.</summary>
+        private string? FolderToGrant(string? file)
+        {
+            if (string.IsNullOrWhiteSpace(file)) return null;
+            try
+            {
+                var full = Path.GetFullPath(file);
+                if (!string.IsNullOrWhiteSpace(WorkDir) && HookBridge.IsInGrantedFolder(full, new[] { WorkDir }))
+                    return Path.TrimEndingDirectorySeparator(Path.GetFullPath(WorkDir));
+                return Path.GetDirectoryName(full);
+            }
+            catch { return null; }
+        }
+
         public void Decide(ApprovalDecision d)
         {
             var req = PendingApproval;
             if (req == null) return;
             if (d == ApprovalDecision.AllowAlways) AlwaysAllow.Add(req.Tool);
+            if (d == ApprovalDecision.AllowFolder)
+            {
+                if (req.Folder == null) d = ApprovalDecision.Allow;
+                else
+                {
+                    var granted = _store.Config.Settings.AllowedEditFolders;
+                    if (!granted.Contains(req.Folder, StringComparer.OrdinalIgnoreCase)) { granted.Add(req.Folder); _store.Save(); }
+                    // Libera las demás ediciones pendientes dentro de esa carpeta
+                    foreach (var other in _approvals.Where(a => a != req && a.Path != null && HookBridge.IsInGrantedFolder(a.Path, granted)).ToList())
+                    { _approvals.Remove(other); LogPermission(other, ApprovalDecision.AllowAlways); other.Resolve(ApprovalDecision.Allow); }
+                }
+            }
             _approvals.Remove(req);
             LogPermission(req, d);
             req.Resolve(d);
@@ -830,7 +877,7 @@ namespace AgentManagerNotch.Services
         {
             var detail = (req.Detail ?? "").Replace("\r", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l != "") ?? "";
             if (detail.Length > 200) detail = detail[..200] + "…";
-            Messages.Add(new ChatMessage(ChatRole.Permission, $"{req.Tool}  {detail}".Trim()) { Decision = d.ToString() });
+            Messages.Add(new ChatMessage(ChatRole.Permission, $"{req.Tool}  {detail}".Trim()) { Decision = (d == ApprovalDecision.AllowFolder ? ApprovalDecision.AllowAlways : d).ToString() });
         }
 
         // ---------------- Comandos de chat ----------------

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using AgentManagerNotch.Controls;
 using AgentManagerNotch.Models;
+using AgentManagerNotch.Plugins.Archivos;
 using AgentManagerNotch.Providers;
 using AgentManagerNotch.Services;
 
@@ -22,6 +23,7 @@ namespace AgentManagerNotch.Plugins.AgentManager
     {
         public const string ProviderId = "AgentManager";
         public const string UseKey = "UseAgentManager";
+        private const string AskMigratedKey = "AgentManagerAskMigrated";
         public const string RepoUrl = "https://dev.azure.com/grupodistelsa/innovation-sandbox/_git/agent-manager-notch";
         private static readonly Color McpColor = Color.FromRgb(0xD9, 0x77, 0x57);
 
@@ -53,7 +55,12 @@ namespace AgentManagerNotch.Plugins.AgentManager
         }
 
         /// <summary>Modo LLM: lo lanza un agente con proveedor Agent Manager (stdin = mensajes, stdout = eventos).</summary>
-        public int? RunCommandLine(string[] args) => args.Length > 0 && args[0] == "--llm" ? LlmBridge.Run() : null;
+        public int? RunCommandLine(string[] args) => args.FirstOrDefault() switch
+        {
+            "--llm" => LlmBridge.Run(),
+            "--probar-agent-manager" => ServerCatalog.SelfCheck(),
+            _ => null
+        };
 
         /// <summary>Con Agent Manager (salvo --sin-agent-manager) hay que pasar la comprobación, como en la ventana.</summary>
         public int? BeforeSilentInstall(string[] args)
@@ -91,7 +98,7 @@ namespace AgentManagerNotch.Plugins.AgentManager
             {
                 Name = "Doky", ColorHex = "#64B5F6", Kind = AgentKind.Interactive,
                 Provider = ProviderKind.Plugin, PluginProvider = ProviderId,
-                Approval = ApprovalMode.ReadOnly,
+                Approval = ApprovalMode.Ask, // edita archivos del equipo preguntando antes (LocalFiles)
                 SystemPrompt = "Eres Doky, el asistente de Agent Manager. Respondes en español, de forma breve y clara. " +
                                "Ayudas con preguntas rápidas, redacción, ideas y recordatorios."
             });
@@ -123,10 +130,27 @@ namespace AgentManagerNotch.Plugins.AgentManager
         public void Start(NotchHost host)
         {
             Host = host;
+            // Una sola vez: los agentes de chat con este proveedor venían en «Solo lectura» de cuando el modo no hacía
+            // nada; ahora decide si pueden editar archivos del equipo (LocalFiles), así que pasan a «Preguntar».
+            // Quien después elija «Solo lectura» lo conserva.
+            if (Enabled && !host.Get(AskMigratedKey, false))
+            {
+                foreach (var a in host.App.Store.Config.Agents.Where(a => a.Provider == ProviderKind.Plugin && a.PluginProvider == ProviderId
+                                                                          && a.Kind == AgentKind.Interactive && a.Approval == ApprovalMode.ReadOnly))
+                {
+                    a.Approval = ApprovalMode.Ask;
+                    Log.Info($"Agent Manager: {a.Name} pasa de «Solo lectura» a «Preguntar» (archivos del equipo)");
+                }
+                host.Set(AskMigratedKey, true);
+            }
             _gate = new LoginGate(Auth, () => Enabled);
             host.AddAccessGate(_gate);
             _card = new SessionCard(this);
             host.AddSettingsCard(_card, SettingsColumn.Right, _ => _card.Refresh());
+            // Del servidor: los agentes que permiten los roles del usuario y el historial de conversaciones
+            var (agentsCard, refreshAgents) = ServerCatalog.AgentsCard(this, host);
+            host.AddSettingsCard(agentsCard, SettingsColumn.Right, _ => refreshAgents());
+            host.Composer.AddInputButton(ServerCatalog.HistoryButton(this, host));
             Auth.Changed += () => { if (Auth.Token is string t && Enabled) _ = EnsureMcpAsync(t); };
             // Sin Agent Manager (elegido en el instalador) no se restaura la sesión ni se pide iniciarla
             host.Started += () => { if (Enabled) _ = Auth.RestoreAsync(); };
@@ -178,13 +202,22 @@ namespace AgentManagerNotch.Plugins.AgentManager
             // Sin Agent Manager (elegido en el instalador) un agente guardado con este proveedor no llama al servidor
             if (!_plugin.Enabled)
                 throw new InvalidOperationException("Agent Manager está desactivado (⚙ Configuración → Sesión). Actívalo o cambia el proveedor de este agente.");
-            // Sin sesión en el servidor: se manda la conversación reciente en cada petición.
             var messages = new List<object>();
-            if (!string.IsNullOrWhiteSpace(ctx.FullSystemPrompt)) messages.Add(new { role = "system", content = ctx.FullSystemPrompt });
-            var hist = ctx.History.Where(m => m.Role is ChatRole.User or ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text)).TakeLast(30).ToList();
-            // El último mensaje del historial es el que se está enviando: va con el texto real del prompt
-            foreach (var m in hist.Take(Math.Max(0, hist.Count - 1)))
-                messages.Add(new { role = m.Role == ChatRole.User ? "user" : "assistant", content = m.Role == ChatRole.User ? WithoutPaths(m.Text) : m.Text });
+            // El servidor no ve el disco: con el plugin «Archivos» activo, los archivos del equipo se leen y editan desde
+            // el puente (LocalFiles), que recibe el aviso en «archivos» (no se manda al servidor)
+            bool localFiles = FilesPlugin.Enabled;
+            var system = ctx.FullSystemPrompt;
+            if (localFiles) system += LocalFiles.Prompt(p.Approval != ApprovalMode.ReadOnly, ProviderFactory.ResolveWorkDir(p.WorkingDirectory));
+            if (!string.IsNullOrWhiteSpace(system)) messages.Add(new { role = "system", content = system.Trim() });
+            // Con conversación en el servidor (sessionId) solo va el mensaje nuevo: el historial ya está allí y el prefijo
+            // se mantiene (la caché del proveedor va por conversación). Sin ella, la conversación reciente.
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                var hist = ctx.History.Where(m => m.Role is ChatRole.User or ChatRole.Agent && !string.IsNullOrWhiteSpace(m.Text)).TakeLast(30).ToList();
+                // El último mensaje del historial es el que se está enviando: va con el texto real del prompt
+                foreach (var m in hist.Take(Math.Max(0, hist.Count - 1)))
+                    messages.Add(new { role = m.Role == ChatRole.User ? "user" : "assistant", content = m.Role == ChatRole.User ? WithoutPaths(m.Text) : m.Text });
+            }
 
             // El servidor no ve el disco: los archivos adjuntos del mensaje se suben en «attachments»
             var text = ChatAttachments.SplitForUpload(prompt, out var files);
@@ -195,7 +228,10 @@ namespace AgentManagerNotch.Plugins.AgentManager
             var exe = Environment.ProcessPath ?? throw new InvalidOperationException("No se encontró el ejecutable de Agent Manager Notch.");
             var psi = ProviderFactory.NewPsi(exe, p);
             psi.ArgumentList.Add("--llm");
-            object body = attachments.Count > 0 ? new { model = p.Model, messages, attachments } : new { model = p.Model, messages };
+            var body = new Dictionary<string, object?> { ["model"] = p.Model, ["messages"] = messages };
+            if (attachments.Count > 0) body["attachments"] = attachments;
+            if (localFiles) body["archivos"] = true;
+            if (!string.IsNullOrEmpty(sessionId)) body["conversationId"] = sessionId;
             return new LaunchSpec { Psi = psi, StdinText = JsonSerializer.Serialize(body) };
         }
 
@@ -232,6 +268,9 @@ namespace AgentManagerNotch.Plugins.AgentManager
             {
                 case "delta":
                     yield return new DeltaEvent(ProviderFactory.Str(root, "text"));
+                    break;
+                case "session":
+                    yield return new SessionEvent(ProviderFactory.Str(root, "id"));
                     break;
                 case "tool":
                     yield return new ToolEvent(ProviderFactory.Str(root, "tool"), ProviderFactory.Str(root, "detail"));

@@ -9,13 +9,17 @@ using System.Threading.Tasks;
 
 namespace AgentManagerNotch.Services
 {
-    public enum ApprovalDecision { Allow, Deny, AllowAlways }
+    public enum ApprovalDecision { Allow, Deny, AllowAlways, AllowFolder }
 
     public class ApprovalRequest
     {
         public string AgentId { get; init; } = "";
         public string Tool { get; init; } = "";
         public string Detail { get; init; } = "";
+        /// <summary>Archivo que se va a editar (solo herramientas de edición).</summary>
+        public string? Path { get; init; }
+        /// <summary>Carpeta que «Permitir en esta carpeta» autorizaría; null si no es una edición.</summary>
+        public string? Folder { get; set; }
         public DateTime Time { get; } = DateTime.Now;
         internal TaskCompletionSource<ApprovalDecision> Tcs { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public void Resolve(ApprovalDecision d) => Tcs.TrySetResult(d);
@@ -78,7 +82,8 @@ namespace AgentManagerNotch.Services
                     {
                         AgentId = r.GetProperty("agentId").GetString() ?? "",
                         Tool = r.GetProperty("tool").GetString() ?? "",
-                        Detail = r.TryGetProperty("detail", out var d) ? d.GetString() ?? "" : ""
+                        Detail = r.TryGetProperty("detail", out var d) ? d.GetString() ?? "" : "",
+                        Path = r.TryGetProperty("path", out var fp) && fp.ValueKind == JsonValueKind.String ? fp.GetString() : null
                     };
 
                     ApprovalDecision decision = ApprovalDecision.Deny;
@@ -140,33 +145,48 @@ namespace AgentManagerNotch.Services
                 if (mode == "AcceptEdits" && EditTools.Contains(tool)) return Emit("allow", "Edición aceptada automáticamente por Agent Manager Notch");
 
                 string detail = "";
+                string? path = null;
                 if (root.TryGetProperty("tool_input", out var ti))
                 {
                     detail = DescribeInput(tool, ti);
+                    if (EditTools.Contains(tool) && ti.ValueKind == JsonValueKind.Object)
+                        foreach (var k in new[] { "file_path", "notebook_path" })
+                            if (ti.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String) { path = v.GetString(); break; }
                 }
 
-                using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
-                try { client.Connect(1500); } catch { return 0; } // Agent Manager Notch no está: no bloqueamos
-
-                var req = JsonSerializer.Serialize(new { agentId, tool, detail }) + "\n";
-                var bytes = Encoding.UTF8.GetBytes(req);
-                client.Write(bytes, 0, bytes.Length);
-                client.Flush();
-
-                using var reader = new StreamReader(client, new UTF8Encoding(false));
-                var line = reader.ReadLine();
-                if (line == null) return 0;
-                using var resp = JsonDocument.Parse(line);
-                var decision = resp.RootElement.GetProperty("decision").GetString();
-                return decision == "allow"
-                    ? Emit("allow", "Aprobado por el usuario en Agent Manager Notch")
-                    : Emit("deny", "El usuario rechazó esta acción desde Agent Manager Notch. No la reintentes; pregunta qué prefiere hacer.");
+                return AskUser(pipeName, agentId, tool, detail, path) switch
+                {
+                    null => 0, // Agent Manager Notch no está: no bloqueamos
+                    true => Emit("allow", "Aprobado por el usuario en Agent Manager Notch"),
+                    false => Emit("deny", "El usuario rechazó esta acción desde Agent Manager Notch. No la reintentes; pregunta qué prefiere hacer.")
+                };
             }
             catch (Exception ex)
             {
                 Log.Error("Hook", ex);
                 return 0;
             }
+        }
+
+        /// <summary>
+        /// Pide al notch (por su pipe) que el usuario decida sobre una acción y espera la respuesta.
+        /// null: el notch no está o no respondió.
+        /// </summary>
+        public static bool? AskUser(string pipeName, string agentId, string tool, string detail, string? path)
+        {
+            using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+            try { client.Connect(1500); } catch { return null; }
+
+            var req = JsonSerializer.Serialize(new { agentId, tool, detail, path }) + "\n";
+            var bytes = Encoding.UTF8.GetBytes(req);
+            client.Write(bytes, 0, bytes.Length);
+            client.Flush();
+
+            using var reader = new StreamReader(client, new UTF8Encoding(false));
+            var line = reader.ReadLine();
+            if (line == null) return null;
+            using var resp = JsonDocument.Parse(line);
+            return resp.RootElement.GetProperty("decision").GetString() == "allow";
         }
 
         private static string DescribeInput(string tool, JsonElement ti)
@@ -209,6 +229,19 @@ namespace AgentManagerNotch.Services
             stdout.Write(b, 0, b.Length);
             stdout.Flush();
             return 0;
+        }
+
+        /// <summary>¿<paramref name="file"/> está dentro de alguna de las carpetas autorizadas (o en sus subcarpetas)?</summary>
+        public static bool IsInGrantedFolder(string file, IEnumerable<string> folders)
+        {
+            string full;
+            try { full = System.IO.Path.GetFullPath(file); } catch { return false; }
+            foreach (var f in folders)
+            {
+                var dir = System.IO.Path.TrimEndingDirectorySeparator(f) + System.IO.Path.DirectorySeparatorChar;
+                if (full.StartsWith(dir, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         /// <summary>Escribe el settings.json que se pasa a Claude Code con --settings.</summary>
